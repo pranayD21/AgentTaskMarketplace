@@ -1,6 +1,49 @@
 # Computer D: private handoff and execution isolation
 
-You own `packages/security/` and `apps/runner/`. Work on `work/D-security`. Read the root `AGENTS.md`, `docs/PROJECT.md`, `docs/CONTRACT.md`, `docs/SECURITY_AND_CLAIMS.md`, and `coordination/README.md` before coding. Ask A about contract changes in `coordination/messages/D-to-A.md`.
+You are Computer D. This is your complete starting brief: follow the setup and reading steps here, then build, test, commit, push, and send a handoff. The human only needs to assign you this letter and give you repository write access.
+
+## Project and setup
+
+The hackathon demo is a marketplace for agent tasks on spare local compute. A buyer publishes metadata without a prompt, an eligible seller claims the job, the buyer sends encrypted task data, a local Ollama model produces a result, and a consented judge records a verdict before mock credits are settled. Real confidential inference, model attestation, live payments, and on-chain records are outside the first demo unless separately implemented and verified.
+
+Repository: `https://github.com/pranayD21/AgentTaskMarketplace`. On a fresh computer, run:
+
+```sh
+git clone https://github.com/pranayD21/AgentTaskMarketplace.git
+cd AgentTaskMarketplace
+git switch --track origin/work/D-security
+git worktree add -b coordination ../AgentTaskMarketplace-coordination origin/coordination
+```
+
+If the repository is already cloned, fetch from `origin`, switch to `work/D-security`, and create the coordination worktree only if it does not exist. Do coding in `work/D-security` and use the second checkout only for messages. Do not merge `coordination` into your code branch.
+
+Before coding, read `AGENTS.md`, `docs/PROJECT.md`, `docs/CONTRACT.md`, `docs/SECURITY_AND_CLAIMS.md`, and `coordination/README.md`. `docs/CONTRACT.md` is the exact v0.1 API and data contract; use its field names and state transitions. Computer A owns contract changes. Work only in your owned paths and ask the relevant owner before depending on an unmerged interface change.
+
+## Communication and handoff
+
+Your four outbound files are `D-to-A.md`, `D-to-B.md`, `D-to-C.md`, `D-to-E.md`. Your inbound files are `A-to-D.md`, `B-to-D.md`, `C-to-D.md`, `E-to-D.md`. Only you edit your outbound files. To contact A, append a dated entry to `coordination/messages/D-to-A.md` in the coordination worktree; A replies in `A-to-D.md`. Each entry needs a unique ID, type, concrete message, and optional reply-to ID, as shown in `coordination/README.md`.
+
+Fetch `origin/coordination` before reading incoming messages, at the start of work, roughly every 10 minutes, and before handoff. Commit and push each outgoing message to `coordination`; a local edit is not delivered. If a push loses a race, fetch, rebase the coordination worktree onto `origin/coordination`, and retry without force-pushing. Keep prompts, results, credentials, keys, and payment details out of Git.
+
+Read an incoming file from your code checkout with `git fetch origin coordination` and `git show origin/coordination:coordination/messages/A-to-D.md`. To send, use this pattern in the coordination worktree:
+
+```sh
+cd ../AgentTaskMarketplace-coordination
+git fetch origin coordination
+git rebase origin/coordination
+# Append a new entry to coordination/messages/D-to-A.md.
+git add coordination/messages/D-to-A.md
+git commit -m "coord: D to A handoff"
+git push origin HEAD:coordination
+```
+
+Use a heading such as `## D-A-YYYYMMDDTHHMMSSZ-01`, then record `Sent (UTC)`, `Type`, `Reply to`, `Reference` (branch and commit), `Needed by (UTC)`, and one concrete `Message`. For another recipient, replace `A` in the filename and ID. A recipient answers in its reverse file. Never edit another computer's file or revise an old entry; correct a mistake with a new entry. If a push is rejected, repeat the fetch, rebase, and push steps.
+
+When A announces a new contract commit on `main`, commit or stash your work, run `git fetch origin main` and `git merge origin/main` on `work/D-security`, then continue against the merged contract. Treat an unmerged proposal as a proposal. At handoff, push `work/D-security` and send A your commit SHA, run command, test result, remaining blocker, and any interface change through `D-to-A.md`.
+
+## Assignment
+
+You own `packages/security/` and `apps/runner/`.
 
 ## Build
 
