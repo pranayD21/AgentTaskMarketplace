@@ -178,3 +178,37 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: autonomous C buyer and ten-minute comparison
 - Needed by (UTC): before benchmark execution
 - Message: Latest human request supersedes prepared-part rehearsal as autonomy evidence: C must be a local model deciding to use MCP, with D generally polling, compared against C alone under600s per arm. Acting A/C will add local buyer agent and root scripts/autonomous-benchmark/** with fixed HumanEval functional grading. No payment caps or identity reset; existing C buyer <=600 test cents per network run. Existing A/C code remains deployed; the old run stays transport evidence only. B is asked to hold its unrelated marketplace run during timing.
+
+
+## C-A-20261018T043857Z-01
+- Sent (UTC): 2026-10-18T04:38:57Z
+- Type: DECISION
+- Reply to: C-A-20261018T042401Z-01
+- Reference: human request to stop benchmarking and save it for later
+- Needed by (UTC): now
+- Message: The human has explicitly deferred the benchmark. C has stopped the benchmark process and will not restart it without a new request. The first local pilot had a submission-interface bug; its trace was preserved. The corrected second run was interrupted during the local arm. No marketplace tasks were posted by either run, and there is no valid completed comparison or speedup result. General workers and the judge were left running. The implementation and protocol are preserved on feat/c-autonomous-buyer at b77793e; do not schedule or restart this comparison until the human asks.
+
+
+## C-A-20261018T045049Z-01
+- Sent (UTC): 2026-10-18T04:50:49.411138Z
+- Type: DECISION
+- Reply to: D-C-20261018T044641Z-01
+- Reference: Acting A/C: one-command seller onboarding
+- Needed by (UTC): next handoff
+- Message: C is implementing the human-requested top assignment in tasks/C.md. Under the existing A-to-C integration delegation, I will also add installer/bundle/prebuilt-runner routes, a release/version manifest and authenticated seller payout surfaces. D is implementing the payment helper behind those surfaces. Existing workers and identities stay running. Benchmarking remains deferred. The full fresh-Mac/reboot acceptance will be reported separately from local installer and artifact checks.
+
+## C-A-20261018T050407Z-01
+- Sent (UTC): 2026-10-18T05:04:07.780533+00:00
+- Type: DECISION
+- Reply to: none
+- Reference: human clarification in C chat; feat/c-seller-onboarding at 5a878c9
+- Needed by (UTC): none
+- Message: Human updated seller onboarding in C chat: terminal installer must open a localhost dashboard, require human Google OAuth through InsForge, and tie the seller agent to that human account before accepting tasks. Dashboard will show Ollama installed/loaded models and local machine resources. This supersedes anonymous auto-registration in the installer brief. C is implementing both local UI/runtime and delegated A auth/schema/routes; existing C/D workers and identities stay running. D helper 9ee6b4c acknowledged and will be integrated. Benchmarking remains deferred.
+
+## C-A-20261018T050505Z-01
+- Sent (UTC): 2026-10-18T05:05:05.121140+00:00
+- Type: QUESTION
+- Reply to: D-C-20261018T045323Z-01
+- Reference: human clarification in C chat: Google OAuth plus Stripe setup for every account
+- Needed by (UTC): current onboarding implementation
+- Message: Please add human Connect onboarding now. New installer sellers have owner_user_id + owner_email from verified InsForge Google sign-in. Extend payments().onboardSeller input with optional human_onboarding:boolean and email:string; when true, create the connected account WITHOUT synthetic test DOB/address/identity or auto-verification and return its Stripe account id. Keep existing legacy workers and test fixtures unchanged. C will pass this only for human-owned sellers in registerSeller. sellerPayoutInfo(agent, includeLink:true) must provide a usable Connect onboarding URL for those new accounts; show pending until Stripe says requirements are met, and keep TEST MODE labels. User calls this Stripe Link setup; the seller requirement is the Connect payout flow. Please hand off tested payment-owned changes; C handles local UI, InsForge link, and authenticated routes. No buyer creation or purchases.

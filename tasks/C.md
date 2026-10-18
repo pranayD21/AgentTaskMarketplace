@@ -1,3 +1,128 @@
+# Computer C — seller onboarding: one command to become a seller (human request, 2026-10-18 04:55 UTC)
+
+**This section takes priority over everything below it.** The human wants a seller to join with one command on a fresh Mac — a friend's laptop — and then stay on the network as a general worker. You own the daemon and the runner, so you build this; D supplies the payout-onboarding link, A serves the static files. Spec written by D at the human's request; argue with D-to-C if something is wrong.
+
+## What the seller types
+
+```sh
+curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash
+```
+
+Nothing else. No display name, no prices (task-offer pricing), no model list. For now the script is only reachable by URL; publishing to Homebrew or npm comes later.
+
+## What `install.sh` must do, in order
+
+1. **Preflight.** macOS + Apple silicon for this build (Linux later). Install Homebrew if missing. `brew install node pnpm ollama wassette` (Node ≥ 22.22, pnpm 10, Wassette 0.8). `brew services start ollama`. Refuse clearly on unsupported hardware instead of half-installing.
+2. **Model.** If Ollama has no allowlisted model, `ollama pull qwen3:8b` (show the size and progress). Models are **auto-detected** from `GET /api/tags` with digests — the seller never names them. Say in the summary that detection is self-reported plus a liveness canary, not attestation.
+3. **Code.** Download the seller bundle from the hosted server (`GET /seller-bundle.tgz`, built from `main` by A/C — the repo is private, so no `git clone`), unpack to `~/.atm/app`, `pnpm install --frozen-lockfile --prod`. Download the **prebuilt** `runner.wasm` and its `.sha256` from the hosted server and verify the hash; do not build on the seller's machine.
+4. **Canary.** Run the existing `--canary-only` probe; stop with a readable error if it fails.
+5. **Identity.** First run registers the seller automatically (`register_agent` → `register_seller`), display name = hostname, state in `~/.atm/seller.json` (mode 600). Reuse it on every later start; never create a second identity.
+6. **Stripe payout onboarding.** Right after registration, ask the server for the seller's hosted Connect onboarding link and print it as a clickable URL ("Open this to set up payouts"); open it in the browser if possible; keep installing while the human completes it; poll `whoami` until payouts are active. Working without finishing it is allowed — transfers just stay `PENDING_ONBOARDING` until it is done. This is Stripe **Connect** for the seller; the Link wallet is the buyer's side and is not involved.
+7. **Persistence.** Install a launchd agent (`~/Library/LaunchAgents/dev.atm.seller.plist`, KeepAlive, RunAtLoad) that runs the daemon with `--runtime wassette --poll-ms 5000` against the hosted endpoint, logs to `~/.atm/logs/seller.log`, measurements to `~/.atm/measurements/`. Install a tiny CLI `atm-seller` with `status | logs | stop | start | uninstall`.
+8. **Summary.** Print seller id, models and digests detected, component hash, Wassette version, payout status, and "polling for tasks". That is the moment they are on the network.
+
+## Server-side pieces (not C's files; ask the owner)
+
+- A: `GET /install.sh`, `GET /seller-bundle.tgz`, `GET /runner.wasm` + `GET /runner.wasm.sha256` on the hosted server; a version endpoint so an old daemon refuses to claim after a contract change.
+- D: `register_seller` (or `whoami`) returns `payout_onboarding_url` and `payout_status` — `onboardingLink()` in `payments.ts` already creates the Stripe v2 Account Link; D wires it when A exposes the field.
+
+## Acceptance
+
+A Mac with nothing installed runs the one command and, with no other typing, appears in `list_sellers` with its hash and detected models, passes the canary, claims and completes a task posted by someone else, prints the payout link, survives a reboot (launchd), and `atm-seller status` shows it. Record the exact transcript (redacted) in `apps/agent-daemon/README.md`.
+
+## Implementation steps for C (do them in this order; time boxes from 05:10 UTC, demo at 17:00 UTC)
+
+You act for A as well, so the server pieces below are yours too. Commit on `feat/c-seller-install`, typecheck + tests green, push after each step, and post a HANDOFF to D and A after steps 3, 5 and 7. D answers within minutes.
+
+### Step 1 (by 06:00 UTC) — `scripts/install-seller.sh`, runnable from a local tarball
+
+Create `scripts/install-seller.sh` (A's path; you hold A's delegation). Skeleton to fill in, keep it POSIX-ish bash with `set -euo pipefail`:
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+ATM_URL="${ATM_MARKETPLACE_URL:-https://warm-cloud-4hh5i.run.mcp-use.com}"
+ATM_HOME="${ATM_HOME:-$HOME/.atm}"
+log() { printf '\033[1;34m[atm]\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m[atm] %s\033[0m\n' "$*" >&2; exit 1; }
+
+# 1 preflight
+[ "$(uname -s)" = Darwin ] || die "macOS only for now"
+[ "$(uname -m)" = arm64 ] || die "Apple silicon only for now"
+command -v brew >/dev/null || { log "installing Homebrew"; /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
+brew list node >/dev/null 2>&1 || brew install node
+brew list pnpm >/dev/null 2>&1 || brew install pnpm
+brew list ollama >/dev/null 2>&1 || brew install ollama
+brew list wassette >/dev/null 2>&1 || brew install wassette
+brew services list | grep -q 'ollama.*started' || brew services start ollama
+node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=22)?0:1)' || die "Node >= 22.22 required"
+
+# 2 model (auto-detected later; only pull when nothing allowlisted is installed)
+until curl -fsS http://localhost:11434/api/tags >/dev/null; do sleep 1; done
+curl -fsS http://localhost:11434/api/tags | grep -Eq '"name":"(qwen3:8b|qwen3:4b|qwen2\.5:7b|llama3\.1:8b|gemma3:4b|mistral:7b)' || ollama pull qwen3:8b
+
+# 3 code + prebuilt runner (hash-checked)
+mkdir -p "$ATM_HOME/app" "$ATM_HOME/logs" "$ATM_HOME/measurements"
+curl -fsSL "$ATM_URL/seller-bundle.tgz" | tar -xz -C "$ATM_HOME/app" --strip-components=1
+curl -fsSL "$ATM_URL/runner.wasm" -o "$ATM_HOME/app/packages/runner-wasm/dist/runner.wasm"
+curl -fsSL "$ATM_URL/runner.wasm.sha256" -o "$ATM_HOME/app/packages/runner-wasm/dist/runner.wasm.sha256"
+( cd "$ATM_HOME/app/packages/runner-wasm/dist" && shasum -a 256 -c <(printf '%s  runner.wasm\n' "$(cat runner.wasm.sha256)") ) || die "runner.wasm hash mismatch"
+( cd "$ATM_HOME/app" && pnpm install --frozen-lockfile --prod --silent )
+printf 'MARKETPLACE_URL=%s/mcp\nOLLAMA_URL=http://localhost:11434\nATM_RUNTIME=wassette\n' "$ATM_URL" > "$ATM_HOME/app/.env"
+
+# 4 canary
+( cd "$ATM_HOME/app" && pnpm daemon --role seller --runtime wassette --canary-only --model qwen3:8b --computer-id "$(hostname -s)" --measurement-file "$ATM_HOME/measurements/canary.jsonl" ) || die "canary failed; see above"
+
+# 5 identity + 6 payout link: first daemon start registers; it prints payout_onboarding_url when the server returns one
+# 7 persistence: launchd agent + atm-seller CLI (see step 3 below)
+# 8 summary: atm-seller status
+```
+
+Until step 2 exists, test it against a tarball you build locally: `git archive --format=tgz -o /tmp/seller-bundle.tgz HEAD` served by `python3 -m http.server`, with `ATM_MARKETPLACE_URL=http://localhost:8000` for the downloads only. Daemon changes you need in this step: `--state-dir` (default `~/.atm`, identity file `seller.json` mode 600, superseding `.atm-state`), display name defaulting to the hostname, and reading `MARKETPLACE_URL` from `$ATM_HOME/app/.env`.
+
+### Step 2 (by 06:45 UTC) — hosted static endpoints (A's server, in `apps/marketplace-mcp/src/routes.ts`)
+
+- `GET /install.sh` → the script above, `content-type: text/x-shellscript`.
+- `GET /seller-bundle.tgz` → a tarball built at deploy by a new `scripts/build-seller-bundle.sh`: root `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `apps/agent-daemon`, `packages/shared`, `packages/crypto`, `packages/runner-core`, `packages/runner-wasm/{package.json,policies,wit}`; never `.env`, `docs/`, `coordination/`, `apps/marketplace-mcp`. Commit the bundle under `apps/marketplace-mcp/public/` or serve from a build step — your call, say which.
+- `GET /runner.wasm` and `GET /runner.wasm.sha256` → the component the deployment was built with (same bytes C and D run).
+- `GET /version` → `{ contract: "0.3", component_sha256, min_daemon_version }`; the daemon fetches it at start and refuses to claim when its component hash differs.
+Redeploy to Manufact and confirm `curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | head -3`.
+
+### Step 3 (by 07:30 UTC) — launchd service + `atm-seller` CLI
+
+- `scripts/atm-seller` (installed to `/usr/local/bin/atm-seller` or `$ATM_HOME/bin`, on PATH via the shell rc): `start` (launchctl bootstrap), `stop`, `status` (pid, seller id and display name from the state file, last 3 log lines, `whoami` payout status via the MCP), `logs` (tail -f), `uninstall` (bootout + remove `$ATM_HOME`; keep `seller.json` unless `--purge`).
+- Plist `~/Library/LaunchAgents/dev.atm.seller.plist`: Label `dev.atm.seller`, ProgramArguments `[pnpm, daemon, --role, seller, --runtime, wassette, --poll-ms, 5000, --state-dir, ~/.atm, --computer-id, <hostname>, --measurement-file, ~/.atm/measurements/seller.jsonl]`, WorkingDirectory `~/.atm/app`, EnvironmentVariables PATH with Homebrew, KeepAlive true, RunAtLoad true, StandardOutPath/StandardErrorPath `~/.atm/logs/seller.log`. The installer writes it and bootstraps it; stop any foreground daemon first so one identity has one process.
+
+### Step 4 (by 08:00 UTC) — payout onboarding link (D + you)
+
+D adds to `payments.ts`: `sellerPayoutOnboarding(stripe, agent, baseUrl) → { payout_status: "active" | "pending" | "none", onboarding_url: string | null }` (Account Link v2, uses the existing `onboardingLink()`). You expose it in `register_seller`'s response and in `whoami.seller` as `payout_status` and `payout_onboarding_url` (service.ts, A's file, yours by delegation). The installer prints the URL as `Open this to set up payouts: <url>` and runs `open <url>`; the daemon keeps working and `atm-seller status` shows `payouts: pending` until active. Test mode keeps using the synthetic identity, so the link is informational there; live mode is where it matters.
+
+### Step 5 (by 08:45 UTC) — fresh-machine test
+
+Run the one command on a Mac that has never had the repo (the human's friend's laptop, or a new macOS user account on yours). Required evidence: the full terminal transcript (redacted), `list_sellers` showing the new seller with component hash and detected models, one task it claimed and completed against a buyer's posted offer, `atm-seller status` output, and a reboot (or `launchctl bootout` + `bootstrap`) showing it comes back. Put the transcript in `apps/agent-daemon/README.md` under "One-command install".
+
+### Step 6 (by 09:15 UTC) — honesty and docs
+
+In the summary line and README: models are self-reported from the seller's Ollama plus a liveness canary, not attested; the runner is a Wasm sandbox, not a TEE; payments are Stripe test mode. Keep `--runtime node` labelled UNSANDBOXED and never selected by the installer.
+
+### Step 7 — HANDOFF
+
+Branch, SHA, the exact one-liner, what it printed on the fresh machine, the new seller id, and what is still missing (Linux, Homebrew/npm publishing).
+
+## Until the installer exists: the manual path for a friend's Mac (works now)
+
+```sh
+brew install node pnpm ollama wassette && brew services start ollama && ollama pull qwen3:8b
+git clone git@github.com:pranayD21/AgentTaskMarketplace.git && cd AgentTaskMarketplace   # needs repo access
+pnpm install --frozen-lockfile && pnpm build:runner
+printf 'MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp\nOLLAMA_URL=http://localhost:11434\nATM_RUNTIME=wassette\n' > .env
+pnpm daemon --role seller --runtime wassette --display-name <their-name> --computer-id F --poll-ms 5000
+```
+
+No database, Stripe or judge keys go on the seller machine. Only the seller's own identity file is created.
+
+---
+
 # Computer C — seller runtime and the Wasm sandbox
 
 ## Current C handoff, October 17, 21:08 PDT

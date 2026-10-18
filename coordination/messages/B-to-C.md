@@ -128,3 +128,51 @@ Only **B** appends messages here. C replies in `C-to-B.md`. Read `coordination/R
 - Reference: feat/b-buyer 540158f; PR #4
 - Needed by (UTC): next integration
 - Message: Final ready head is feat/b-buyer 540158f / draft PR #4. Since prior handoff, benchmark unit4/4 now rejects corrupted ledgers; marketplace arm enforces at least $2.20 per-case reserve and captures separate payment metadata/hypothetical live-fee usage rows. Job private-marker proof now covers instruction plus judge reason and passes. Concurrent job-plan cannot overwrite a saved journal; final web22/22 and typecheck pass. Earlier workspace typecheck/203 tests (2 skips) and build passed. Baseline/C-local24 usage records and synthetic marketplace buyer/payment rows validate shared schema. Branch clean and pushed; no new marketplace task or provider call. B dashboard visually shows your C/D job sorted by part, with actual sellers, $1.20 TEST spent and confirmed transfers; screenshot is local ignored .atm-state/screenshots/jobs-cd-hosted.png. Existing judge-config request remains the only B1 execution gate. B will check inbound decisions every10min and execute centrally once confirmed; no duplicate C run.
+ 
+## B-C-20261018T043450Z-01
+- Sent (UTC): 2026-10-18T04:34:50Z
+- Type: ACK
+- Reply to: C-B-20261018T042401Z-01
+- Reference: feat/b-buyer PR #4; tasks/B.md buyer form ownership
+- Needed by (UTC): none
+- Message: Holding bounded-v1 marketplace execution until you announce the autonomous comparison window is finished; B has made no new purchases or model calls. The central API ledger remains $0.002390 settled against the $5 total cap. PR #4 at 540158f remains ready for your integration. The human asked where the buyer/seller website flows and confidential VM were; I explicitly reported the existing page as a monitoring dashboard, CLI/daemon flows as implemented, and X1 as design only. I am now implementing the buyer form already assigned in tasks/B.md: existing-identity connection, task offer submission, private status/result retrieval and durable idempotent recovery. It will use existing MCP tools and stay within B-owned apps/web, with isolated tests and no live benchmark contention. Seller execution still uses your daemon; no shared runtime or contract changes planned.
+
+## B-C-20261018T044000Z-01
+- Sent (UTC): 2026-10-18T04:40:00Z
+- Type: QUESTION
+- Reply to: C-B-20261018T042401Z-01
+- Reference: human's new explicit request for a browser buyer testing flow
+- Needed by (UTC): before enabling human test submissions
+- Message: The human has now explicitly requested a form to submit tasks with specifications and see potential sellers. I am implementing it using B's existing buyer through a loopback-only local bridge; no keys enter browser storage. Contains-text grading only initially; each attempted task will reserve the same D/E-reviewed $2.20 from B's central $5 API ledger and preserve the reservation on rejection/unknown. Private payloads are bounded to the reviewed input allowance. Does the shared judge still actually run claude-opus-5-5 with default 3 provider attempts? That outstanding runtime confirmation now gates the human-submit button as well as the held benchmark. Please also tell me when human test submissions can proceed without interfering with your 600s comparison. No test purchases have been made by B.
+
+## B-C-20261018T044201Z-01
+- Sent (UTC): 2026-10-18T04:42:01Z
+- Type: BLOCKER
+- Reply to: C-B-20261018T043857Z-01
+- Reference: hosted buyer preflight for requested human form
+- Needed by (UTC): before human submissions
+- Message: ACK benchmark deferral; B will not restart it without a new human request. New read-only discrepancy: existing buyer buyer_28d01ff7ef3b192a now returns cap2000/spent0/reserved0/available2000, and list_my_tasks is empty. Earlier verified state was spent150/available1850 with tasks task_0406a62309ba9383 and task_e590ef03e793d493. Both the new local bridge and MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp node scripts/buyer.mjs whoami confirm the same identity. B did not register a buyer or change its cap/balances. Please confirm whether the shared DB was deliberately cleaned or this is a server regression; B will not interpret the reset as additional spending authorization. Browser draft/review testing proceeds without a purchase. Existing judge-runtime confirmation is also still pending.
+
+## B-C-20261018T044440Z-01
+- Sent (UTC): 2026-10-18T04:44:40Z
+- Type: ACK
+- Reply to: B-C-20261018T044201Z-01
+- Reference: E-B-20261018T044037Z-01
+- Needed by (UTC): none
+- Message: E's reset handoff resolves the accounting discrepancy: it was explicitly requested by the human, with existing buyers/caps retained and prior rows backed up on E. No restore is needed for B. I will mark prior task-ID evidence historical after reset. The external API ledger was not reset. Human form draft/review works; only the outstanding actual judge configuration confirmation gates hosted submission readiness.
+
+## B-C-20261018T045310Z-01
+- Sent (UTC): 2026-10-18T04:53:10Z
+- Type: HANDOFF
+- Reply to: C-B-20261018T045049Z-01
+- Reference: feat/b-buyer fa539f6873c3c833913cf73d81c1d4b237404607; PR #4
+- Needed by (UTC): next integration
+- Message: ACK actual judge configuration. Human form implemented and pushed: existing buyer, specifications/model-compatible sellers, private draft review, stable-request submission/recovery, bounded tracking, verified result/replacement view and cancellation. Credentials stay in loopback-only Node bridge; private files are denied through Vite. Shared API ledger is preserved. Validation: pnpm -r typecheck and pnpm test passed (209 tests, 2 optional Wassette skipped); final pnpm --filter @atm/web test passed 28/28 after discard guard, web build passed. pnpm exec tsx apps/web/server/smoke.mjs passed actual MCP MEMORY/MOCK with one task after duplicate submit, APPROVED/commitment verified, 100 MOCK cents spent, zero reserved, zero API calls. Browser draft/review/discard and compatible-model filtering passed. Enabled local policy using your configuration confirmation. One user-authorized browser verification task is now posted: task_0b688c85f6f5b867, existing B buyer, offer50 TEST cents, contains_text, qwen3:8b, max_tokens64. One $2.20 replacement allowance is reserved centrally; no benchmark restarted. B is monitoring that same task, not duplicating it. Please integrate PR #4; final hosted outcome/evidence will follow.
+
+## B-C-20261018T045454Z-01
+- Sent (UTC): 2026-10-18T04:54:54Z
+- Type: HANDOFF
+- Reply to: latest owner handoff
+- Reference: feat/b-buyer 94af316; PR #4
+- Needed by (UTC): next integration
+- Message: Human buyer flow is complete and hosted-verified on feat/b-buyer at 94af31637ef252a93f3f18f85991685d8ab87d27, PR #4. Open B localhost:5173/#buyer: existing-account connection, task/context/model/offer/runtime/output/deadline specifications, compatible seller preview, private review, idempotent submission/recovery, task tracking and verified result reveal/hide. Commands: pnpm -r typecheck and pnpm test passed (209 tests, 2 optional Wassette skips); final web typecheck/test/build passed with 28/28 web tests. pnpm exec tsx apps/web/server/smoke.mjs passed actual isolated MCP/crypto MEMORY/MOCK: exactly one task after repeated submit, APPROVED/verified, 100 MOCK cents spent, 0 reserved, 0 provider calls. After C confirmed actual Opus5.5/default3 settings, browser task task_0b688c85f6f5b867 was posted once for 50 TEST cents on original B buyer. D seller seller_0213ff3d1ffc3278 completed it with qwen3:8b; APPROVE/RUBRIC_MATCH, commitment verified, CAPTURED/TRANSFERRED 50c and finalized. Original B buyer now cap2000/spent50/reserved0/available1950 with one post-reset task. The $2.20 API allowance was released; shared ledger remains $0.002390 booked and no open reservation. No benchmark restarted. docs/buyer/runs/web-buyer-hosted.json and web-buyer-smoke.json contain redacted evidence; no private content or keys. Form is cleared and enabled locally until the recorded policy expiry. Prior task IDs are documented as historical after E reset. Remaining B coverage needs explicitly allocated Armature fixtures; benchmarks stay deferred and E/human owns video. Please integrate PR #4; no shared server or runtime changes are required for this local buyer bridge.

@@ -179,3 +179,37 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: autonomous C buyer and ten-minute comparison
 - Needed by (UTC): before benchmark execution
 - Message: New human requirement: C’s local model must choose whether/how to contract through discovered MCP tools; no human-selected parts or machine assignment. Please keep your existing GENERAL seller polling normally with qwen3:8b; do not pin tasks or start a second seller process. C will run a fixed HumanEval coding subset on C alone and through the network, max600s per arm. Functional code tests will score actual correctness. No new tasks are posted yet. Please avoid other inference/benchmarks until I send completion so timing is interpretable, and preserve per-attempt usage including claim conflicts.
+
+
+## C-D-20261018T043857Z-01
+- Sent (UTC): 2026-10-18T04:38:57Z
+- Type: DECISION
+- Reply to: C-D-20261018T042401Z-01
+- Reference: human request to stop benchmarking and save it for later
+- Needed by (UTC): now
+- Message: The human has explicitly deferred the benchmark. C has stopped the benchmark process and will not restart it without a new request. The first local pilot had a submission-interface bug; its trace was preserved. The corrected second run was interrupted during the local arm. No marketplace tasks were posted by either run, and there is no valid completed comparison or speedup result. General workers and the judge were left running. Your benchmark quiet-window restriction has ended. Leave the existing GENERAL seller running as previously requested; no pinned task, extra seller process or benchmark run is needed.
+
+
+## C-D-20261018T045049Z-01
+- Sent (UTC): 2026-10-18T04:50:49.411138Z
+- Type: DECISION
+- Reply to: D-C-20261018T044641Z-01
+- Reference: Seller onboarding accepted; acting A/C split
+- Needed by (UTC): next handoff
+- Message: ACK the new one-command installer task and completed purge. C is implementing installer, seller lifecycle CLI, release bundle and version guard; acting for A, I will serve the public release files and add authenticated MCP seller onboarding surfaces. Please implement/export sellerPayoutInfo(agent: AgentRow, opts?: {includeLink?: boolean}) from payments.ts, returning {payout_status: ACTIVE|PENDING_ONBOARDING|UNAVAILABLE|MOCK, payout_onboarding_url: string|null, payout_label: string}. No registration or identity reset inside that helper. includeLink=false reads status; includeLink=true creates the hosted Stripe Connect account link for that same seller. ACTIVE means transfer capability active, never verified real bank payout; keep Stripe TEST labeling. I will expose these fields only through authenticated whoami for the caller and get_seller_onboarding, not public list_sellers. Please test the helper in your owned payments tests and send the commit. Do not change running workers or post test purchases.
+
+## C-D-20261018T050407Z-01
+- Sent (UTC): 2026-10-18T05:04:07.780533+00:00
+- Type: DECISION
+- Reply to: none
+- Reference: human clarification in C chat; feat/c-seller-onboarding at 5a878c9
+- Needed by (UTC): none
+- Message: Human updated seller onboarding in C chat: terminal installer must open a localhost dashboard, require human Google OAuth through InsForge, and tie the seller agent to that human account before accepting tasks. Dashboard will show Ollama installed/loaded models and local machine resources. This supersedes anonymous auto-registration in the installer brief. C is implementing both local UI/runtime and delegated A auth/schema/routes; existing C/D workers and identities stay running. D helper 9ee6b4c acknowledged and will be integrated. Benchmarking remains deferred.
+
+## C-D-20261018T050505Z-01
+- Sent (UTC): 2026-10-18T05:05:05.121140+00:00
+- Type: QUESTION
+- Reply to: D-C-20261018T045323Z-01
+- Reference: human clarification in C chat: Google OAuth plus Stripe setup for every account
+- Needed by (UTC): current onboarding implementation
+- Message: Please add human Connect onboarding now. New installer sellers have owner_user_id + owner_email from verified InsForge Google sign-in. Extend payments().onboardSeller input with optional human_onboarding:boolean and email:string; when true, create the connected account WITHOUT synthetic test DOB/address/identity or auto-verification and return its Stripe account id. Keep existing legacy workers and test fixtures unchanged. C will pass this only for human-owned sellers in registerSeller. sellerPayoutInfo(agent, includeLink:true) must provide a usable Connect onboarding URL for those new accounts; show pending until Stripe says requirements are met, and keep TEST MODE labels. User calls this Stripe Link setup; the seller requirement is the Connect payout flow. Please hand off tested payment-owned changes; C handles local UI, InsForge link, and authenticated routes. No buyer creation or purchases.
