@@ -1,3 +1,4 @@
+import { publicRows, publicTaskCounts } from './public-data.js';
 import { humanBuyerPayment } from "./human-account.js";
 import { reserveProviderBudget } from "./provider-budget.js";
 /**
@@ -667,7 +668,7 @@ export async function listOpenTasksFor(agent: AgentRow, limit = OPEN_TASKS_DEFAU
   const seller = await getSeller(agent.id);
   const myModels = seller?.models ?? [];
   const n = Math.min(Math.max(1, Math.trunc(limit) || OPEN_TASKS_DEFAULT_LIMIT), OPEN_TASKS_MAX_LIMIT);
-  const rows = unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(n)) as TaskRow[];
+  const rows = await publicRows<TaskRow>("tasks", n, async () => unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(n)) as TaskRow[], "and t.status = 'OPEN'", true);
   const tasks = rows
     .map((t) => {
       const eligible = myModels.filter((m) => t.allowed_models.includes(m.model_id)).map((m) => m.model_id);
@@ -709,6 +710,9 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
   }
   const task = await mustGetTask(taskId);
   if (task.status !== "OPEN") throw new MarketplaceError("CLAIM_CONFLICT", `Task is ${task.status}, not OPEN.`, { next_action: "Call list_open_tasks for tasks you can still claim." });
+  if (env().DB_MODE === 'insforge' && !(await getAgent(task.buyer_id))?.owner_user_id) {
+    throw new MarketplaceError('FORBIDDEN', 'Legacy test tasks cannot be claimed.', { next_action: 'Choose a task from list_open_tasks.' });
+  }
   if (!task.allowed_models.includes(modelId)) {
     throw new MarketplaceError("MODEL_NOT_ALLOWED", `Buyer allows ${task.allowed_models.join(", ")}; ${modelId} is not among them.`, {
       next_action: "Claim with one of the task's eligible_models from list_open_tasks.",
@@ -1088,7 +1092,7 @@ export async function sweep(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function listSellers(): Promise<SellerPublic[]> {
-  const sellers = unwrap(await db().from("sellers").select("*").order("last_seen", { ascending: false }).limit(50)) as SellerRow[];
+  const sellers = await publicRows<SellerRow>("sellers", 50, async () => unwrap(await db().from("sellers").select("*").order("last_seen", { ascending: false }).limit(50)) as SellerRow[]);
   const out: SellerPublic[] = [];
   for (const s of sellers) {
     const a = await getAgent(s.agent_id);
@@ -1100,27 +1104,27 @@ export async function listSellers(): Promise<SellerPublic[]> {
 export async function sellerReputation(sellerId: string): Promise<SellerPublic> {
   const s = await getSeller(sellerId);
   const a = await getAgent(sellerId);
-  if (!s || !a) throw new MarketplaceError("NOT_FOUND", `Unknown seller ${sellerId}.`, { next_action: "Call list_sellers for valid seller ids." });
+  if (!s || !a || (env().DB_MODE === "insforge" && !a.owner_user_id)) throw new MarketplaceError("NOT_FOUND", `Unknown seller ${sellerId}.`, { next_action: "Call list_sellers for valid seller ids." });
   return toSellerPublic(s, a);
 }
 
 export async function dashboard() {
   await sweep();
-  const tasks = (unwrap(await db().from("tasks").select("*").order("created_at", { ascending: false }).limit(40)) as TaskRow[]).map(toTaskPublic);
+  const tasks = (await publicRows<TaskRow>("tasks", 40, async () => unwrap(await db().from("tasks").select("*").order("created_at", { ascending: false }).limit(40)) as TaskRow[])).map(toTaskPublic);
   const sellers = await listSellers();
-  const events = unwrap(await db().from("events").select("*").order("created_at", { ascending: false }).limit(60));
+  const events = await publicRows<Record<string, unknown>>("events", 60, async () => unwrap(await db().from("events").select("*").order("created_at", { ascending: false }).limit(60)) as Record<string, unknown>[]);
   // Stored reason_public is never read: rows written before v0.3 may hold judge free text (contract §8.1).
-  const verdicts = (unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,score,created_at").order("created_at", { ascending: false }).limit(40)) as Pick<VerdictRow, "id" | "task_id" | "verdict" | "reason_code" | "score" | "created_at">[])
-    .map((v) => ({ ...v, reason_public: publicReason(v.reason_code) }));
-  const settlements = (unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[]).map(publicSettlement);
-  const jobRows = unwrap(await db().from("jobs").select("*").order("created_at", { ascending: false }).limit(20)) as JobRow[];
+  const verdicts = (await publicRows<VerdictRow>("verdicts", 40, async () => unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,score,created_at").order("created_at", { ascending: false }).limit(40)) as VerdictRow[]))
+    .map(({id, task_id, verdict, reason_code, score, created_at}) => ({id, task_id, verdict, reason_code, score, created_at, reason_public: publicReason(reason_code)}));
+  const settlements = (await publicRows<SettlementRow>("settlements", 40, async () => unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[])).map(publicSettlement);
+  const jobRows = await publicRows<JobRow>("jobs", 20, async () => unwrap(await db().from("jobs").select("*").order("created_at", { ascending: false }).limit(20)) as JobRow[]);
   const jobParts = await partsOf(jobRows.map((j) => j.id));
   const jobs = jobRows.map((j) => summarizeJob(j, jobParts.get(j.id)!));
   return {
     generated_at: nowIso(),
     payments: { mode: payments().mode, label: payments().label },
     db: dbLabel(),
-    counts: await countTasksByStatus(),
+    counts: await (env().DB_MODE === "memory" ? countTasksByStatus() : publicTaskCounts()),
     tasks,
     sellers,
     verdicts,
@@ -1133,7 +1137,7 @@ export async function dashboard() {
 /** Bounded metadata observations; classes do not imply equal prompt complexity. */
 export async function marketPriceObservations() {
   await ensureSchema();
-  const rows = unwrap(await db().from("tasks").select("id,allowed_models,max_runtime_s,price_cents,max_price_cents,status,created_at,claim_count").eq("pricing_mode", "task_offer").order("created_at", { ascending: false }).limit(500)) as TaskRow[];
+  const rows = await publicRows<TaskRow>("tasks", 500, async () => unwrap(await db().from("tasks").select("*").eq("pricing_mode", "task_offer").order("created_at", { ascending: false }).limit(500)) as TaskRow[], "and t.pricing_mode = 'task_offer'");
   const ids = rows.map((t) => t.id);
   const events = ids.length ? unwrap(await db().from("events").select("task_id,created_at").in("task_id", ids).eq("type", "task.claimed").order("created_at", { ascending: true }).limit(5000)) as { task_id: string; created_at: string }[] : [];
   const firstClaim = new Map<string, string>();
