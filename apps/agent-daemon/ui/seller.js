@@ -125,3 +125,5 @@ $('compute-form').onsubmit=event=>{event.preventDefault();void act(async()=>{awa
 setInterval(()=>void refreshCompute(),3000);
 
 $('seller-toggle').onclick=()=>act(()=>post(data?.worker?.service==='running'?'/api/stop':'/api/start'));
+
+for(const name of ['buyer','seller'])$(name+'-tab').onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?'buyer':event.key==='End'?'seller':name==='buyer'?'seller':'buyer';selectTab(next);$(next+'-tab').focus();}};

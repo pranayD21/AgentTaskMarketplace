@@ -172,7 +172,10 @@ async function install(stage: string, marketplaceUrl: string, node: string) {
     if (!fs.existsSync(link)) { try { fs.symlinkSync(path.join(root,"bin/atm-seller"), link); } catch { console.log(`CLI: ${path.join(root,"bin/atm-seller")}`); } }
     if (!wasRunning) run("launchctl", ["disable", `${domain}/${SERVICE_LABEL}`]);
     await openDashboard();
-    if (wasRunning) await startSeller();
+    if (wasRunning) {
+      if (!(await status()).prepared) await prepare(message => console.log(message));
+      await startSeller();
+    }
     console.log("Your identity and models are kept in ~/.atm. The local dashboard resumes after login.");
     console.log("Commands: atm-seller dashboard | status | logs | stop | start | uninstall");
     if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true });
