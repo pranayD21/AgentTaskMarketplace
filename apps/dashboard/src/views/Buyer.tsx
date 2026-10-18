@@ -13,6 +13,7 @@ import { Orb } from "@/components/ui/thinking-orbs";
 import { ToolGroup } from "@/components/tool-group";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData } from "@/components/ui/tool-invocation";
 import { TaskCard } from "@/components/task-card";
+import { Markdown } from "@/components/markdown";
 
 /** The chat surface: bubbles, plain assistant text, tool calls inline, one composer. */
 export function Buyer({ onOpenAccount }: { onOpenAccount: () => void }) {
@@ -115,7 +116,9 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
           if (item.kind === "assistant") return (
             <div key={item.key} className="flex flex-col gap-2">
               {item.thinking && <Reasoning text={item.thinking} streaming={item.streaming && !item.content} />}
-              {item.content && <p className="whitespace-pre-wrap break-words">{item.content}{item.streaming && <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden />}</p>}
+              {item.content && (item.streaming
+                ? <p className="whitespace-pre-wrap break-words">{item.content}<span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden /></p>
+                : <Markdown text={item.content} className="break-words" />)}
             </div>
           );
           if (item.kind === "tools") {
