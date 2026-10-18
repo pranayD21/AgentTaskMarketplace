@@ -46,7 +46,15 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const tokenFile = path.join(root, "dashboard-open.json");
   writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
-  const sessions = new Set<string>();
+  // Sessions survive dashboard restarts (launchd KeepAlive, updates) and browser
+  // restarts. Only SHA-256 hashes of session cookies are stored, owner-only.
+  const sessionFile = path.join(root, "dashboard-sessions.json");
+  const SESSION_MS = 30 * 24 * 3600 * 1000;
+  const hashSession = (value: string) => createHash("sha256").update(value).digest("hex");
+  const sessions = new Map<string, number>();
+  try { for (const [hash, until] of Object.entries(jsonFile(sessionFile)?.sessions ?? {})) if (/^[a-f0-9]{64}$/.test(hash) && typeof until === "number" && until > Date.now()) sessions.set(hash, until); } catch { /* corrupt file: start empty */ }
+  const saveSessions = () => writePrivate(sessionFile, { sessions: Object.fromEntries(sessions) });
+  const isSession = (cookie: string) => { const until = cookie ? sessions.get(hashSession(cookie)) : undefined; return until !== undefined && until > Date.now(); };
   const pending = new Map<string, { state: string; verifier: string; until: number; insforge: string }>();
   let phase = "Ready to set up your account", lastError: string | null = null, busy = false;
   let cache: { at: number; value: Record<string, unknown> } | undefined;
@@ -107,16 +115,21 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
     if (req.headers.host !== new URL(origin()).host) return json(403, { error: "Invalid local host" });
     const url = new URL(req.url ?? "/", origin());
     const cookie = /(?:^|;\s*)atm_local=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1] ?? "";
-    const authorized = sessions.has(cookie);
+    const authorized = isSession(cookie);
     try {
       if (req.method === "GET" && url.pathname === "/open") {
+        const task = url.searchParams.get("task");
+        const target = task && /^task_[A-Za-z0-9_-]+$/.test(task) ? `/task.html?task=${encodeURIComponent(task)}` : "/";
+        // A reused or stale link with a live session just opens the page.
+        if (authorized) return redirect(res, target);
         const token = jsonFile(tokenFile)?.token ?? "";
         if (!token || !equal(url.searchParams.get("token") ?? "", token)) return json(403, { error: "Run atm-seller dashboard to open this page." });
-        const session = randomBytes(32).toString("hex"); sessions.add(session);
+        const session = randomBytes(32).toString("hex");
+        for (const [hash, until] of sessions) if (until <= Date.now()) sessions.delete(hash);
+        sessions.set(hashSession(session), Date.now() + SESSION_MS); saveSessions();
         writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
-        res.setHeader("Set-Cookie", `atm_local=${session}; HttpOnly; SameSite=Lax; Path=/`);
-        const task = url.searchParams.get("task");
-        return redirect(res, task && /^task_[A-Za-z0-9_-]+$/.test(task) ? `/task.html?task=${encodeURIComponent(task)}` : "/");
+        res.setHeader("Set-Cookie", `atm_local=${session}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_MS / 1000}`);
+        return redirect(res, target);
       }
       if (!authorized) return json(401, { error: "Run atm-seller dashboard to open this page." });
       if (req.method === "POST" && (req.headers.origin !== origin() || (url.pathname !== "/api/buyer" && req.headers["x-atm-request"] !== "1"))) return json(403, { error: "Invalid local request" });

@@ -121,3 +121,15 @@ it('stores the chosen seller model only when selling is stopped and the model is
  f.actions.status.mockResolvedValue({service:'running'});
  expect((await send('')).status).toBe(409);
 });
+it('keeps a signed-in browser across dashboard restarts without storing the raw cookie',async()=>{
+ const f=await fixture();
+ const stored=fs.readFileSync(path.join(f.root,'dashboard-sessions.json'),'utf8');
+ expect(stored).not.toContain(f.cookie.split('=')[1]);expect(fs.statSync(path.join(f.root,'dashboard-sessions.json')).mode&0o777).toBe(0o600);
+ expect((await f.request('/open?token='+f.token)).status).toBe(303);
+ const actions={status:vi.fn(async()=>({service:'stopped'})),prepare:vi.fn(async()=>{}),start:vi.fn(async()=>{}),stop:vi.fn(async()=>{}),payout:vi.fn(async()=>({}))};
+ const again=createSellerDashboard({root:f.root,marketplaceUrl:'https://marketplace.example/mcp',assets:path.resolve('ui'),actions,port:0});await again.listen();
+ cleanup.unshift(async()=>{again.server.closeAllConnections();await new Promise<void>(r=>again.server.close(()=>r()));});
+ const origin=`http://127.0.0.1:${(again.server.address() as any).port}`;
+ expect((await realFetch(origin+'/api/status',{headers:{Cookie:f.cookie}})).status).toBe(200);
+ expect((await realFetch(origin+'/api/status',{headers:{Cookie:'atm_local='+'0'.repeat(64)}})).status).toBe(401);
+});
