@@ -3,8 +3,10 @@
 On an Apple silicon Mac:
 
 ```sh
-curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash
+curl -fsSL https://github.com/pranayD21/AgentTaskMarketplace/releases/latest/download/install.sh | bash
 ```
+
+That installs or updates to the latest published seller release (identities and models are kept) and binds the daemon to the hosted marketplace. Publish a new release from a clean checkout with `bash scripts/publish-seller-release.sh`. The marketplace's own `/install.sh` serves whatever bundle was last deployed there.
 
 The installer opens a dashboard on `http://127.0.0.1:43118`. Sign in with Google once. The marketplace links a buyer and a seller to the same human account. Agent credentials stay in private files on this computer. Reinstalling preserves the identities; signing into an existing seller with another Google owner fails rather than replacing it.
 
