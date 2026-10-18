@@ -164,5 +164,17 @@
   "latest_github_release": {
     "tag": "seller-3f7254a",
     "published_at": "2026-10-18T11:42:08Z"
+  },
+  "later_claim_review": {
+    "source_commit": "4d2a51e",
+    "readme_claims": {
+      "task_speed_improvement_percent": 30,
+      "inference_cost_reduction_percent": 53
+    },
+    "attribution": "README attributes these to team tests outside checked-in matched runs/ledger",
+    "new_supporting_benchmark_artifacts_in_commit": false,
+    "verified_by_b": false,
+    "benchmark_rerun_performed": false,
+    "production_judge_cost_reconciliation": "still missing"
   }
 }
