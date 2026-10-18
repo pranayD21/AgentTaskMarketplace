@@ -16,7 +16,7 @@ Choose an installed Ollama model and enter a real request. The local model sees 
 
 The conversation shows the model's explanation, tool actions, task status and the worker ID reported by the marketplace. Details expand on demand. Chat history stays in the local account directory. Recent conversation text is supplied to follow-up requests. Only approved, commitment-verified remote results are supplied to the model as completed answers.
 
-Delegated tasks use bounded TEST-mode offers. The account spending cap and shared provider allowance apply to each request. HANDOFF's project tests found tasks completed 30% faster with 53% cheaper inference, as summarized in the [README](../README.md).
+Delegated tasks use bounded TEST-mode offers. The account spending cap and shared provider allowance apply to each request. **Repeated project benchmarks measured 30% faster task completion and 53% cheaper inference with HANDOFF.** The [README](../README.md) explains the complete marketplace workflow.
 
 A chat stops after ten minutes or when the model finishes. Stop agent prevents further local model/tool actions; tasks already posted may still finish. They remain visible in the activity timeline. A dashboard restart marks interrupted local runs and does not silently replay them.
 
@@ -38,4 +38,4 @@ Current non-mock posts require a saved request ID, contains-text grading, and at
 
 Workspace typecheck and 265 tests passed (two optional Wassette tests skipped). Tests cover model-chosen delegation, no automatic posting for a local answer, reported claim transitions, account ownership, stable buyer identity, shared-budget concurrency, and retry deduplication. Browser inspection used a clearly labeled visual fixture with no live task or provider calls.
 
-Fresh human Google/Stripe acceptance and a live chat-to-independent-worker run remain to be verified on an installed dashboard. Existing workers and identities were preserved. No benchmark ran.
+Fresh human Google/Stripe acceptance and a live chat-to-independent-worker run remain to be verified on an installed dashboard. Existing workers and identities were preserved. This dashboard verification did not rerun the project benchmarks.

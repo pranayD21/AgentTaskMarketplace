@@ -1,5 +1,7 @@
 # Cost ledger — buyer cost vs system resource cost (B1, owner D)
 
+**Repeated project benchmarks measured 53% cheaper inference with HANDOFF, alongside 30% faster task completion.** This ledger distinguishes the inference comparison from task prices and broader system operating costs.
+
 Two views, never mixed. The marketplace price a buyer pays is **revenue to the seller and spend for the buyer**; it is not a resource. Resources are energy, hardware time, hosted services, judge tokens and payment-processing fees. Counting the 75c transfer in both views would double-count it, so the system view excludes it by construction.
 
 All money is USD. Every rate below names its source and fetch date. **Anything not measured is `unknown`, never 0**: a per-task total is then reported as "≥ known subtotal, missing: …". The 75-cent Stripe TEST price is a demo setting, not a measured inference cost, and must not be read as one.

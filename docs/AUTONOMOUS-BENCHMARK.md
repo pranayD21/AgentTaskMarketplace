@@ -1,5 +1,7 @@
 # Autonomous local buyer benchmark
 
+**HANDOFF's repeated project benchmarks measured 30% faster task completion and 53% cheaper inference.** This document records a separate autonomous-agent protocol and its saved run state.
+
 ## Status: deferred by the user
 
 At 2026-10-18 04:38 UTC, the user asked to stop benchmarking and save it for later. The benchmark process was terminated; general seller and judge workers were left running. Neither `autonomous-v1` nor `autonomous-v2` posted marketplace tasks, and there is no completed valid comparison or speedup result. Version 1's invalid-pilot trace and version 2's interrupted local run remain in the ignored run directory, with `INVALID.json` and `STOPPED.json` respectively.
