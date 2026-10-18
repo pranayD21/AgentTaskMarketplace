@@ -99,6 +99,17 @@ it('requires buying setup before starting a seller but always permits stopping',
  paymentState.status='READY';expect((await f.request('/api/start','POST')).status).toBe(200);expect(f.actions.start).toHaveBeenCalledOnce();
 });
 
+it('clears a previous setup error after seller activation succeeds',async()=>{
+ const f=await fixture();
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.writeFileSync(path.join(f.root,'buyer.json'),JSON.stringify({agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'human-fixture'},marketplace_url:'https://marketplace.example/mcp'}));
+ f.actions.start.mockRejectedValueOnce(Error('launchctl failed (1)'));
+ expect((await f.request('/api/start','POST')).status).toBe(400);
+ expect((await (await f.request('/api/status')).json()).error).toBe('Setup could not finish. Please try again.');
+ expect((await f.request('/api/start','POST')).status).toBe(200);
+ expect((await (await f.request('/api/status')).json()).error).toBeNull();
+});
+
 it('serves task output pages only to authenticated local sessions',async()=>{
  const f=await fixture();
  expect((await realFetch(f.origin+'/task.html?task=task_example')).status).toBe(401);

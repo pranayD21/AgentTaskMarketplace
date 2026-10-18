@@ -243,7 +243,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         }
         if (url.pathname === "/api/start") { const buyer = await buyerCall("whoami"); if (!["READY", "MOCK"].includes(buyer.buyer_payment?.buyer_payment_status)) return json(402, {error:"Complete Stripe buying setup before starting to sell."}); await actions.start(); phase = "Seller started. Waiting for a matching task."; }
         else { await actions.stop(); phase = "Seller stopped. Your identity and models are saved."; }
-        cache = undefined; return json(200, { ok: true });
+        cache = undefined; lastError = null; return json(200, { ok: true });
       }
       if (req.method === "GET" && ["/", "/seller.css", "/seller.js", "/task.html"].includes(url.pathname)) {
         const name = url.pathname === "/" ? "seller.html" : url.pathname.slice(1);
