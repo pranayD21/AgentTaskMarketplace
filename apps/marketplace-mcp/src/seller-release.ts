@@ -1,9 +1,19 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { MCPServer } from "mcp-use";
 import { CONTRACT_VERSION } from "@atm/shared";
 import { env } from "./env.js";
-export function registerSellerReleaseRoutes(server: MCPServer, directory = path.resolve(process.cwd(), "public/seller")) {
+export function registerSellerReleaseRoutes(server: MCPServer, directory?: string) {
+  async function releaseDirectory() {
+    if (directory) return directory;
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    for (const candidate of [path.resolve(process.cwd(), "public/seller"), path.resolve(process.cwd(), "apps/marketplace-mcp/public/seller"),
+      path.resolve(moduleDir, "../../public/seller"), path.resolve(moduleDir, "../public/seller")]) {
+      try { await fs.access(path.join(candidate, "release.json")); directory = candidate; return candidate; } catch {}
+    }
+    throw new Error("SELLER_RELEASE_UNAVAILABLE");
+  }
   for (const state of ["return", "refresh"]) server.get(`/seller/setup-${state}`, c => {
     c.header("Cache-Control", "no-store");
     c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
@@ -11,7 +21,7 @@ export function registerSellerReleaseRoutes(server: MCPServer, directory = path.
   });
   server.get("/api/seller-release", async (c) => {
     try {
-      const manifest = JSON.parse(await fs.readFile(path.join(directory, "release.json"), "utf8"));
+      const manifest = JSON.parse(await fs.readFile(path.join(await releaseDirectory(), "release.json"), "utf8"));
       if (manifest.dirty) throw new Error("Uncommitted release");
       c.header("Cache-Control", "no-store");
       return c.json({ ...manifest, contract_version: CONTRACT_VERSION, seller_protocol: 1 });
@@ -20,7 +30,7 @@ export function registerSellerReleaseRoutes(server: MCPServer, directory = path.
   for (const [name, type] of Object.entries({ "install.sh": "text/x-shellscript", "seller-bundle.tgz": "application/gzip", "runner.wasm": "application/wasm", "runner.wasm.sha256": "text/plain" })) {
     server.get(`/${name}`, async (c) => {
       try {
-        const content = await fs.readFile(path.join(directory, name));
+        const content = await fs.readFile(path.join(await releaseDirectory(), name));
         c.header("Cache-Control", "no-cache"); c.header("Content-Type", type);
         if (name === "install.sh") return c.body(content.toString().replaceAll("__ATM_BASE_URL__", new URL(env().baseUrl).origin));
         return c.body(new Uint8Array(content));

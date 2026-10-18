@@ -1,4 +1,4 @@
-# Git ignores release artifacts here. Manufact's managed uploader reads only
-# the root ignore file, so these generated public downloads are uploaded.
+# Keep generated downloads out of this source repository. The deploy script
+# injects them into a clean source snapshot without this nested ignore file.
 *
 !.gitignore
