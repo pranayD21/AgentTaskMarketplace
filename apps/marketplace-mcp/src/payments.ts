@@ -278,13 +278,17 @@ export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl:
  * unconsumed or the outcome unknown.
  */
 export function stripeDefinitivelyRejected(err: unknown): boolean {
-  const e = err as { type?: string; statusCode?: number; definitive?: boolean } | null;
+  const e = err as { type?: string; code?: string; statusCode?: number; definitive?: boolean } | null;
   if (!e || typeof e !== "object") return false;
   if (typeof e.definitive === "boolean") return e.definitive; // mock/test hook
-  if (e.type === "StripeCardError" || e.type === "StripeInvalidRequestError" || e.type === "StripeIdempotencyError" || e.type === "StripePermissionError") return true;
+  // A key conflict can mean another create is still executing or already
+  // succeeded. Never change the key in response to that ambiguity.
+  if (e.type === "StripeIdempotencyError" || e.code === "idempotency_key_in_use" || [401, 403, 408, 409, 429].includes(e.statusCode ?? 0)) return false;
+  if (e.type === "StripePermissionError") return false;
+  if (e.type === "StripeCardError" || e.type === "StripeInvalidRequestError") return true;
   if (e.type === "StripeConnectionError" || e.type === "StripeAPIError" || e.type === "StripeRateLimitError" || e.type === "StripeAuthenticationError") return false;
   const code = e.statusCode ?? 0;
-  return code >= 400 && code < 500 && code !== 401 && code !== 403 && code !== 408 && code !== 429;
+  return code >= 400 && code < 500 && code !== 401 && code !== 403 && code !== 408 && code !== 409 && code !== 429;
 }
 
 /** Non-reversed transfers Stripe holds for this task (by transfer_group), any destination. */

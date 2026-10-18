@@ -13,8 +13,8 @@ async function fixture() {
   unwrap(await db().from("settlements").update({ transfer_state: "PENDING", payout_transferred_cents: 0, stripe_transfer_id: null }).eq("task_id", task.task_id));
   return task.task_id;
 }
-const paid: TransferOutcome = { transfer_id: "tr_recovered", state: "TRANSFERRED", amount_cents: 100, note: "recovered" };
-const unknown: TransferOutcome = { transfer_id: null, state: "PENDING", amount_cents: 0, pending_reason: "PROVIDER_ERROR", note: "timeout" };
+const paid: TransferOutcome = { transfer_id: "tr_recovered", state: "TRANSFERRED", amount_cents: 100, retry_safe_to_advance: false, note: "recovered" };
+const unknown: TransferOutcome = { transfer_id: null, state: "PENDING", amount_cents: 0, pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false, note: "timeout" };
 
 describe("durable payout ownership", () => {
   it("two concurrent sweeps start one provider call", async () => {

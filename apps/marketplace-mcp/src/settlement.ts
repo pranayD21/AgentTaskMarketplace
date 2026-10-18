@@ -124,7 +124,7 @@ async function moveMoney(task: TaskRow, s: SettlementRow, d: SettlementDecision)
         transfer_state: cap.transfer_state,
         transfer_pending_reason: cap.pending_reason ?? null,
         transfer_manual_review: cap.pending_reason === "MISMATCH",
-        transfer_retry_safe_to_advance: (cap as { retry_safe_to_advance?: boolean }).retry_safe_to_advance === true,
+        transfer_retry_safe_to_advance: cap.transfer_retry_safe_to_advance === true,
         transfer_key_created_at: s.created_at,
       };
     }
@@ -276,6 +276,8 @@ export async function finalizeSettlement(taskId: string): Promise<Finalized> {
  */
 export async function retryPendingTransfers(limit = 10): Promise<{ attempted: number; transferred: number }> {
   const provider = payments();
+  const retry = provider.retryTransfer?.bind(provider);
+  if (!retry) return { attempted: 0, transferred: 0 };
   const now = Date.now();
   const due = (unwrap(await db().from("settlements").select("*").eq("transfer_state", "PENDING").order("created_at", { ascending: true }).limit(limit * 3)) as SettlementRow[])
     .filter((s) => s.finalized_at && !s.transfer_manual_review && (!s.transfer_retry_at || Date.parse(s.transfer_retry_at) <= now) && (!s.transfer_lease_until || Date.parse(s.transfer_lease_until) <= now))
@@ -305,8 +307,8 @@ export async function retryPendingTransfers(limit = 10): Promise<{ attempted: nu
     if (!task) continue;
     const seller = task.seller_id ? await one<AgentRow>(await db().from("agents").select("*").eq("id", task.seller_id).limit(1)) : null;
     const owed = s.payout_owed_cents ?? s.seller_payout_cents;
-    let r: Awaited<ReturnType<typeof provider.retryTransfer>> & { retry_safe_to_advance?: boolean };
-    try { r = await provider.retryTransfer(task, seller, owed, { attempt: keyAttempt, known_transfer_id: s.stripe_transfer_id }); }
+    let r: Awaited<ReturnType<typeof retry>>;
+    try { r = await retry(task, seller, owed, { attempt: keyAttempt, known_transfer_id: s.stripe_transfer_id }); }
     catch { r = { transfer_id: null, state: "PENDING", amount_cents: 0, pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false, note: "Transfer outcome unknown; the same idempotency key will be reused." }; }
     const paid = r.state === "TRANSFERRED" && !!r.transfer_id && r.amount_cents === owed;
     const mismatch = r.pending_reason === "MISMATCH" || (!!r.transfer_id && !paid);

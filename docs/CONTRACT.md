@@ -211,3 +211,5 @@ The human assigned A and C work to C on October 17. This decision replaces selle
 - `TaskPublic.price_cents` is populated before claim. Legacy unclaimed rows with a null price use their stored `max_price_cents`. Claims already accepted keep their stored price. Releasing a task preserves its offer. An approved task pays the accepted offer; a rejection releases the hold.
 - `ClaimPublic.price_cents` is the price accepted by the claim. C's `expected_price_cents` is a local runtime check against this field, never a new MCP argument.
 - Market observations group comparable model sets and runtime limits and include bounded sample counts, recent accepted prices, fill times and claim/expiry rates. Small samples are labelled insufficient. They are descriptive, do not establish an equilibrium and do not raise an offer or spending cap automatically.
+
+Retry-key retention follows [Stripe idempotent requests](https://docs.stripe.com/api/idempotent_requests), checked October 17: v1 keys may be pruned after 24 hours; concurrent request conflicts and parameter mismatches cannot establish that an earlier operation failed. The service keeps the same key for those outcomes.

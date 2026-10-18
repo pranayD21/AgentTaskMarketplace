@@ -86,6 +86,8 @@ describe("reconcileSellerTransfer (P2)", () => {
     expect(await reconcileSellerTransfer(rejected.stripe, task, seller, 75, "ch_1", { attempt: 0 })).toMatchObject({ state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: true });
     const dropped = fakeStripe({ failCreates: 1, createError: Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" }) });
     expect(await reconcileSellerTransfer(dropped.stripe, task, seller, 75, "ch_1", { attempt: 0 })).toMatchObject({ state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false });
+    const conflict = fakeStripe({ failCreates: 1, createError: Object.assign(new Error("key belongs to an in-flight request"), { type: "StripeIdempotencyError", statusCode: 409 }) });
+    expect(await reconcileSellerTransfer(conflict.stripe, task, seller, 75, "ch_1")).toMatchObject({ state: "PENDING", retry_safe_to_advance: false });
     const blocked = fakeStripe({ active: false });
     expect(await reconcileSellerTransfer(blocked.stripe, task, seller, 75, "ch_1", { poll: { attempts: 1, delayMs: 1 } })).toMatchObject({ pending_reason: "PENDING_ONBOARDING", retry_safe_to_advance: false });
     const mismatch = fakeStripe({ existing: [tr({ id: "tr_half", amount: 40 })] });
@@ -93,7 +95,9 @@ describe("reconcileSellerTransfer (P2)", () => {
   });
   it("classifies Stripe errors: decided 4xx advance the key, transport/5xx/429/401 do not", () => {
     expect(stripeDefinitivelyRejected({ type: "StripeCardError" })).toBe(true);
-    expect(stripeDefinitivelyRejected({ type: "StripeIdempotencyError" })).toBe(true);
+    expect(stripeDefinitivelyRejected({ type: "StripeIdempotencyError" })).toBe(false);
+    expect(stripeDefinitivelyRejected({ type: "StripeInvalidRequestError", code: "idempotency_key_in_use", statusCode: 409 })).toBe(false);
+    expect(stripeDefinitivelyRejected({ type: "StripePermissionError", statusCode: 403 })).toBe(false);
     expect(stripeDefinitivelyRejected({ statusCode: 402 })).toBe(true);
     expect(stripeDefinitivelyRejected({ type: "StripeAPIError", statusCode: 500 })).toBe(false);
     expect(stripeDefinitivelyRejected({ type: "StripeRateLimitError", statusCode: 429 })).toBe(false);
