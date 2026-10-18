@@ -985,6 +985,7 @@ footer b {
 .buyer-match span, .buyer-match small { font-size:11px; }
 .buyer-notice { padding:14px 16px; background:#f9f0df; border-left:3px solid var(--amber); font-size:13px; }
 .buyer-error { padding:14px 16px; background:#fbedeb; border-left:3px solid var(--red); color:var(--red); }
+.buyer-history table { min-width:640px; }
 .buyer-review, .buyer-result, .buyer-saved, .buyer-history { border-top:1px solid var(--line); margin-top:30px; padding-top:24px; }
 .buyer-review { padding:24px; border:1px solid #92af9b; background:#f2f6ef; border-radius:5px; }
 .buyer-actions { display:flex; flex-wrap:wrap; gap:12px; margin:18px 0; }

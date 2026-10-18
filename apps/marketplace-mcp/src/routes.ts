@@ -5,7 +5,7 @@ import { dbLabel } from "./db.js";
 import { env } from "./env.js";
 import { registerMppRoutes } from "./mpp-routes.js";
 import { payments } from "./payments.js";
-import { dashboard } from "./service.js";
+import { dashboard, marketPriceObservations } from "./service.js";
 import { registerSellerReleaseRoutes } from "./seller-release.js";
 import { registerSellerIdentityRoutes } from "./seller-identity.js";
 
@@ -26,6 +26,15 @@ export function registerRoutes(server: MCPServer): void {
     } catch (err) {
       console.error(`[dashboard] ${(err as Error).message}`);
       return c.json({ error: { code: "INTERNAL_ERROR", message: "dashboard unavailable", retryable: true } }, 500);
+    }
+  });
+  // Same public data as the market_price_observations tool, under /api/* so browsers get CORS.
+  server.get("/api/market", async (c) => {
+    try {
+      return c.json(await marketPriceObservations());
+    } catch (err) {
+      console.error(`[market] ${(err as Error).message}`);
+      return c.json({ error: { code: "INTERNAL_ERROR", message: "market observations unavailable", retryable: true } }, 500);
     }
   });
 }

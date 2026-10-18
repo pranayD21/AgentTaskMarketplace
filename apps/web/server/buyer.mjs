@@ -49,7 +49,9 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
   function drafts(buyer) {
     if (!fs.existsSync(journalDir)) return [];
     return fs.readdirSync(journalDir).filter(f => idPattern.test(f.replace(/\.json$/, '')) && f.endsWith('.json'))
-      .map(f => load(f.replace(/\.json$/, ''), buyer)).map(summary).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+      // Skip drafts saved for another account or marketplace instead of failing the whole listing.
+      .map(f => JSON.parse(fs.readFileSync(path.join(journalDir, f), 'utf8')))
+      .filter(d => d.endpoint === endpoint && d.buyer_id === buyer.agent_id).map(summary).sort((a,b)=>b.created_at.localeCompare(a.created_at));
   }
   async function connect() {
     const identity = readIdentity(statePath, endpoint);

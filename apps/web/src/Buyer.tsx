@@ -128,6 +128,7 @@ function LocalBuyer() {
             <small>The judge checks this text case-insensitively. Put format and quality requirements in your task instructions too. This check alone does not establish factual accuracy.</small>
             <p className="buyer-privacy">Your instructions and answer stay off the public board. The marketplace and judge can read them; the seller’s machine owner can inspect inference. This is a Wasm sandbox, not a confidential VM.</p>
             <button className="primary-button" disabled={busy || !models.length} type="submit">{busy?'Working…':'Review task →'}</button>
+            {!models.length && <small>Choose at least one allowed model to continue.</small>}
           </form>
           <aside className="buyer-matches" aria-label="Potential sellers"><span className="tiny-label">POTENTIAL SELLERS</span><h3>{potential.length} compatible {potential.length===1?'seller':'sellers'}</h3>
             <p>These active registrations advertise a selected model. Availability is not guaranteed. The first eligible seller to claim your offer gets the task.</p>
