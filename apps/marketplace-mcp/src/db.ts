@@ -10,6 +10,11 @@ import type { HoldResult } from "./payments.js";
 // ---------------------------------------------------------------------------
 
 export interface AgentRow {
+  owner_user_id?: string | null;
+  owner_email?: string | null;
+  stripe_onboarding_started_at?: string | null;
+  stripe_onboarding_attempts?: number;
+  stripe_onboarding_retry_at?: string | null;
   balance_keys?: string[] | null;
   balance_revision?: number;
   id: string;
@@ -217,6 +222,14 @@ export function dbLabel(): string {
  * anyone remembering to run scripts/db-migrate.sh.
  */
 export const SCHEMA_PATCHES = [
+  // Agent credentials and human ownership are server-only. Public projections
+  // are served through MCP; no browser receives direct access to this table.
+  "alter table agents enable row level security",
+  "alter table agents add column if not exists owner_user_id uuid references auth.users(id)",
+  "alter table agents add column if not exists owner_email text",
+  "alter table agents add column if not exists stripe_onboarding_started_at timestamptz",
+  "alter table agents add column if not exists stripe_onboarding_attempts integer not null default 0",
+  "alter table agents add column if not exists stripe_onboarding_retry_at timestamptz",
   "alter table tasks add column if not exists pricing_mode text",
   "alter table tasks add column if not exists post_state text",
   "alter table tasks add column if not exists post_hold jsonb",

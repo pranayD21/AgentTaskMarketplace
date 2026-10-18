@@ -12,6 +12,10 @@ export interface SellerOptions {
   log: (...args: unknown[]) => void;
   measurements?: MeasurementRecorder;
   canary?: boolean;
+  registerOnly?: boolean;
+  beforeClaim?: () => Promise<void>;
+  onRegistered?: (models: { model_id: string; digest: string }[]) => Promise<void>;
+  onPayoutPoll?: () => Promise<boolean>;
 }
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,17 +52,26 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
     ...registration, ...(publicKey ? { runner_pubkey_b64: publicKey.public_key_b64, runner_key_id: publicKey.key_id } : {}),
   });
   log(`listed ${models.map((m) => m.model_id).join(", ")} | pricing=task_offer | runtime=${runtime.runtime} | key mode=${keyMode} | status=${reg.seller.status}`);
-  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); return; }
+  await opts.onRegistered?.(models);
+  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); if (opts.registerOnly) throw new Error("SELLER_SUSPENDED"); return; }
+  if (opts.registerOnly) return;
   if (rt.runCycle) log("Single sandbox call per task; inference capped at 180s within the 300s lease; no host lease renewal.");
+  let payoutReady = false;
+  let nextPayoutPoll = Date.now() + 60000;
 
   for (;;) {
     let taskId: string | undefined;
     let finish: ((result: AttemptResult) => void) | undefined;
     let usage: SellerUsage | null = null;
     try {
+      if (!payoutReady && opts.onPayoutPoll && Date.now() >= nextPayoutPoll) {
+        nextPayoutPoll = Date.now() + 60000;
+        try { payoutReady = await opts.onPayoutPoll(); } catch { log("Payout check temporarily unavailable; retrying later."); }
+      }
       const { tasks } = await mp.call<{ tasks: OfferedTask[] }>("list_open_tasks");
       const task = selectOfferedTask(tasks, models.map((m) => m.model_id), opts.taskId);
       if (!task) { if (opts.once) { log("No eligible open tasks"); return; } await sleep(opts.pollMs); continue; }
+      await opts.beforeClaim?.();
       taskId = task.task_id;
       const model = task.eligible_models.find((id) => models.some((m) => m.model_id === id))!;
       finish = opts.measurements?.begin({ kind: "task_attempt", task_id: taskId, model_id: model, model_digest: models.find((m) => m.model_id === model)?.digest, job_id: task.job_id, part_key: task.part_key, task_attempt: task.attempt, offered_price_cents: task.price_cents });

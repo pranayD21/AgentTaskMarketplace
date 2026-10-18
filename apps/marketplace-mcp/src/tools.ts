@@ -27,7 +27,7 @@ import { requireActor, type ToolCtx } from "./auth.js";
 import { dbLabel } from "./db.js";
 import { env } from "./env.js";
 import { inkbox } from "./inkbox.js";
-import { payments } from "./payments.js";
+import { payments, sellerPayoutInfo } from "./payments.js";
 import { fetchReplacementPackage, submitReplacement } from "./review.js";
 import * as svc from "./service.js";
 
@@ -97,7 +97,7 @@ export function registerTools(server: MCPServer): void {
           "get_result(task_id) → the decrypted answer. From SUBMITTED on it may show commitment_verified=true: that proves you and the judge see the same bytes, not that the judge approved them. Trust the answer once the task is APPROVED; if REJECTED, use replacement_answer (judge-produced) when present",
         ],
         how_to_sell: [
-          "register_agent(kind='seller', display_name) → api_key",
+          "Install the seller dashboard from /install.sh; a human signs in with Google and completes Stripe Connect payout setup",
           "register_seller(models from your local Ollama; runner key optional) → you are listed",
           "list_open_tasks → claim_task(task_id, model_id, runner_pubkey_b64 from the sandbox instance that will run it) → the task encrypted to that key, buyer + judge public keys, a 300 s lease",
           "run it inside the same sandbox instance, then submit_result(encrypted to buyer + judge, with a sha256 commitment)",
@@ -117,7 +117,7 @@ export function registerTools(server: MCPServer): void {
     {
       name: "register_agent",
       description:
-        "Create an identity on the marketplace and receive an API key (shown once). kind='buyer' attaches a Stripe test card and sets a human-approved spend cap; kind='seller' creates a payout account; kind='judge' needs the operator secret.",
+        "Create an identity on the marketplace and receive an API key (shown once). kind='buyer' attaches a Stripe test card and sets a human-approved spend cap; new sellers use the local installer with human Google sign-in and Stripe Connect onboarding; kind='judge' needs the operator secret.",
       inputSchema: z.object({
         kind: z.enum(["buyer", "seller", "judge"]),
         display_name: z.string().min(1).max(80),
@@ -158,6 +158,8 @@ export function registerTools(server: MCPServer): void {
           agent_id: a.id,
           kind: a.kind,
           display_name: a.display_name,
+          owner: a.owner_user_id ? { user_id: a.owner_user_id, email: a.owner_email } : undefined,
+          payout: a.kind === "seller" ? await sellerPayoutInfo(a) : undefined,
           inkbox_handle: a.inkbox_handle,
           spend: a.kind === "buyer" ? { cap_cents: a.spend_cap_cents, reserved_cents: a.reserved_cents, spent_cents: a.spent_cents, available_cents: a.spend_cap_cents - a.reserved_cents - a.spent_cents } : undefined,
           seller: seller ? { status: seller.status, models: seller.models, runtime: seller.runtime, approvals: seller.approvals, rejections: seller.rejections, strikes: seller.strikes } : undefined,
@@ -165,10 +167,18 @@ export function registerTools(server: MCPServer): void {
       }),
   );
 
+  server.tool({ name: "get_seller_onboarding", description: "Seller only: get the Stripe Connect payout setup link and current capability status. Payments remain labelled TEST MODE or MOCK.",
+    inputSchema: z.object({ ...apiKeyField }), annotations: { readOnlyHint: false, destructiveHint: false } },
+    async (p, ctx) => run(async () => {
+      const actor = await requireActor(ctx as ToolCtx, p, ["seller"]);
+      if (!actor.owner_user_id) throw new MarketplaceError("FORBIDDEN", "Link this seller to a Google account before payout onboarding.");
+      return sellerPayoutInfo(actor, { includeLink: true, humanLinked: true });
+    }));
+
   server.tool(
     {
       name: "list_sellers",
-      description: "Public list of registered sellers: models they advertise with asking prices, sandbox runtime, reputation.",
+      description: "Public list of registered sellers: available models, sandbox runtime and reputation. Buyers price tasks.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true },
     },

@@ -86,7 +86,13 @@ export interface PaymentProvider {
   /** Minimum amount the rail accepts, in cents. */
   readonly min_cents: number;
   onboardBuyer(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>>;
-  onboardSeller(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>>;
+  /**
+   * Create the seller's payout account. With `human_onboarding` the account is
+   * created bare (no synthetic test identity, no auto-verification) and the
+   * human completes Stripe's hosted onboarding via sellerPayoutInfo's link;
+   * without it (legacy workers, fixtures) the test-mode identity is applied.
+   */
+  onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>>;
   hold(task: { id: string; max_price_cents: number }, buyer: AgentRow): Promise<HoldResult>;
   capture(task: TaskRow, seller: AgentRow | null, amountCents: number): Promise<CaptureResult>;
   release(task: TaskRow, reason: string): Promise<ReleaseResult>;
@@ -106,6 +112,17 @@ export interface PaymentProvider {
   retryTransfer?(task: TaskRow, seller: AgentRow | null, amountCents: number, opts?: RetryTransferOptions): Promise<TransferOutcome>;
   /** Money assertions for fault tests and reconciliation; never mutates. */
   inspect(task: TaskRow): Promise<MoneyState>;
+  /** Seller payout status and, when pending, a hosted onboarding link (register_seller / whoami). */
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts?: { includeLink?: boolean }): Promise<PayoutOnboarding>;
+}
+
+export interface SellerOnboardInput {
+  id: string;
+  display_name: string;
+  /** True when the seller agent is owned by a verified human (installer OAuth); the account then needs real onboarding. */
+  human_onboarding?: boolean;
+  /** The verified human's email, used as the account contact and prefilled in hosted onboarding. */
+  email?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +162,8 @@ export interface PayoutStatus {
   transfers: TransfersCapability;
   /** Requirement entries that still restrict `stripe_balance.stripe_transfers`. */
   blocking: string[];
+  /** True when the account was created for a verified human (metadata.onboarding = "human"): never auto-verified. */
+  human_onboarding: boolean;
 }
 
 const ACCOUNT_INCLUDE = ["configuration.recipient", "requirements"] as const;
@@ -192,7 +211,7 @@ function readPayoutStatus(account: Stripe.V2.Core.Account): PayoutStatus {
   const blocking = (account.requirements?.entries ?? [])
     .filter((e) => (e.impact?.restricts_capabilities ?? []).some((r) => r.capability === "stripe_balance.stripe_transfers"))
     .map((e) => e.description);
-  return { account_id: account.id, transfers: (cap?.status as TransfersCapability | undefined) ?? "unknown", blocking };
+  return { account_id: account.id, transfers: (cap?.status as TransfersCapability | undefined) ?? "unknown", blocking, human_onboarding: account.metadata?.onboarding === "human" };
 }
 
 /** Read the current transfers capability of a v2 recipient account. */
@@ -208,21 +227,48 @@ export async function payoutStatus(stripe: Stripe, accountId: string): Promise<P
  * `stripe_transfers` capability. With the test-mode identity above the
  * capability is active on creation (verified 2026-10-18 01:50 UTC).
  */
-export async function createRecipientAccount(stripe: Stripe, agent: { id: string; display_name: string }): Promise<PayoutStatus> {
+/**
+ * One payout account per seller agent, ever. The create carries a stable
+ * idempotency key, so a lost response or two concurrent OAuth completions
+ * replay the same account instead of creating a second one. Stripe keeps a
+ * key's result for 24 h; the service retries onboardSeller with the same
+ * agent id inside PAYOUT_ACCOUNT_RETRY_POLICY.window_hours of the first
+ * attempt and stops automatic retries after that (an operator reconciles).
+ */
+export function payoutAccountIdempotencyKey(agentId: string): string {
+  return `atm:${agentId}:payout-account`;
+}
+export const PAYOUT_ACCOUNT_RETRY_POLICY = Object.freeze({
+  /** Automatic retries of onboardSeller for the same agent (first attempt included). */
+  max_attempts: 3,
+  /** Retry only within this window after the first attempt; Stripe's idempotency results expire at 24 h. */
+  window_hours: 20,
+  /** Minimum delay between attempts. */
+  backoff_ms: 5_000,
+});
+
+/** Paths C serves for the human's return from Stripe-hosted onboarding (hosted server base URL + path). */
+export const SELLER_SETUP_RETURN_PATH = "/seller/setup-return";
+export const SELLER_SETUP_REFRESH_PATH = "/seller/setup-refresh";
+
+export async function createRecipientAccount(stripe: Stripe, agent: SellerOnboardInput): Promise<PayoutStatus> {
+  const human = agent.human_onboarding === true;
   const account = await stripe.v2.core.accounts.create({
     display_name: agent.display_name,
-    contact_email: `${agent.id}@agenttaskmarket.dev`,
+    contact_email: human && agent.email ? agent.email : `${agent.id}@agenttaskmarket.dev`,
     dashboard: "none",
     defaults: {
       currency: "usd",
       responsibilities: { fees_collector: "application", losses_collector: "application" },
-      profile: recipientProfile(agent),
+      // A human account states its own profile in hosted onboarding; the synthetic one needs a URL to pass test-mode checks.
+      ...(human ? {} : { profile: recipientProfile(agent) }),
     },
-    identity: testModeRecipientIdentity(agent),
+    // Human-owned accounts get no synthetic identity: Stripe collects it in the hosted flow and verifies it.
+    identity: human ? { country: "us" } : testModeRecipientIdentity(agent),
     configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-    metadata: { agent_id: agent.id, app: "agent-task-marketplace" },
+    metadata: { agent_id: agent.id, app: "agent-task-marketplace", onboarding: human ? "human" : "synthetic-test" },
     include: [...ACCOUNT_INCLUDE],
-  });
+  }, { idempotencyKey: payoutAccountIdempotencyKey(agent.id) });
   return readPayoutStatus(account);
 }
 
@@ -241,6 +287,7 @@ export async function ensureTransfersActive(
   const delayMs = opts.delayMs ?? 1000;
   let status = await payoutStatus(stripe, accountId);
   if (status.transfers === "active") return status;
+  if (status.human_onboarding) return status; // a real person's account: only Stripe's hosted onboarding may change it
   if (status.transfers === "restricted" || status.transfers === "unknown" || status.blocking.length) {
     try {
       const updated = await stripe.v2.core.accounts.update(accountId, {
@@ -261,11 +308,92 @@ export async function ensureTransfersActive(
   return status;
 }
 
-/** Hosted Connect onboarding for a real seller (not used in the demo; documented in docs/payments). */
-export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl: string): Promise<string> {
+/** What the seller surface shows about payouts (register_seller / whoami, seller installer step 6). */
+export interface PayoutOnboarding {
+  /** active = transfers will succeed; pending = account exists but needs the hosted onboarding; none = no connected account. */
+  payout_status: "active" | "pending" | "none";
+  /** Hosted Stripe Connect onboarding URL when pending (single-use, expires); null otherwise. */
+  onboarding_url: string | null;
+  /** Requirement descriptions still blocking transfers (from Stripe), empty when active. */
+  blocking: string[];
+}
+
+/**
+ * Payout status plus, when needed, a fresh hosted onboarding link for the seller
+ * to finish identity verification. Never throws: a link that cannot be created
+ * just comes back null with the blocking list, so registration keeps working.
+ */
+export async function sellerPayoutOnboarding(stripe: Stripe, agent: { id: string; stripe_account_id: string | null }, baseUrl: string, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
+  if (!agent.stripe_account_id) return { payout_status: "none", onboarding_url: null, blocking: ["no connected account; re-run register_seller"] };
+  let status: PayoutStatus;
+  try {
+    status = await payoutStatus(stripe, agent.stripe_account_id);
+  } catch (err) {
+    return { payout_status: "pending", onboarding_url: null, blocking: [`could not read the connected account: ${(err as Error).message}`] };
+  }
+  if (status.transfers === "active") return { payout_status: "active", onboarding_url: null, blocking: [] };
+  let url: string | null = null;
+  if (opts.includeLink !== false) {
+    try {
+      url = await onboardingLink(stripe, agent.stripe_account_id, baseUrl, { human: status.human_onboarding });
+    } catch (err) {
+      console.warn(`[stripe] onboarding link for ${agent.stripe_account_id} not created: ${(err as Error).message}`);
+    }
+  }
+  return { payout_status: "pending", onboarding_url: url, blocking: status.blocking };
+}
+
+/** The shape C exposes through authenticated `whoami` / `get_seller_onboarding` (C-D-20261018T045049Z-01). */
+export type SellerPayoutStatus = "ACTIVE" | "PENDING_ONBOARDING" | "UNAVAILABLE" | "MOCK";
+export interface SellerPayoutInfo {
+  /** ACTIVE = the transfer capability is active on the connected account; never a claim that a real payout happened. */
+  payout_status: SellerPayoutStatus;
+  /** Hosted Stripe Connect onboarding URL, only with includeLink and only while PENDING_ONBOARDING. */
+  payout_onboarding_url: string | null;
+  /** Human-readable rail label; always says TEST MODE or MOCK. */
+  payout_label: string;
+  /** Requirement descriptions still blocking transfers, empty unless pending. */
+  blocking: string[];
+}
+
+/**
+ * Payout status for one seller on the configured rail. Reads only; creates a
+ * single-use onboarding link only when `includeLink` is true, the caller
+ * asserts `humanLinked` (the seller agent is tied to an authenticated human
+ * account — the installer's OAuth step), and the account is still
+ * restricted. An unlinked agent never receives a Stripe Connect link, so an
+ * anonymous process cannot start payout onboarding. Never registers, resets
+ * or mutates the seller.
+ */
+export async function sellerPayoutInfo(
+  agent: { id: string; stripe_account_id: string | null },
+  opts: { includeLink?: boolean; humanLinked?: boolean } = {},
+): Promise<SellerPayoutInfo> {
+  const p = payments();
+  const label = `${p.label}; ACTIVE means the Stripe transfer capability is active, not a verified real payout`;
+  if (p.mode === "mock") return { payout_status: "MOCK", payout_onboarding_url: null, payout_label: label, blocking: [] };
+  const mayLink = opts.includeLink === true && opts.humanLinked === true;
+  const r = await p.payoutOnboarding(agent, { includeLink: mayLink });
+  if (opts.includeLink === true && !mayLink && r.payout_status === "pending") {
+    r.blocking = [...r.blocking, "link the seller to a human account before payout onboarding"];
+  }
+  const payout_status: SellerPayoutStatus = r.payout_status === "active" ? "ACTIVE" : r.payout_status === "pending" ? "PENDING_ONBOARDING" : "UNAVAILABLE";
+  return { payout_status, payout_onboarding_url: r.onboarding_url, payout_label: label, blocking: r.blocking };
+}
+
+/**
+ * Hosted Connect onboarding for a real seller (single-use URL; the installer
+ * prints and opens it). Human-owned accounts return to C's setup pages, which
+ * explain the outcome and lead back to the localhost dashboard, where an
+ * authenticated click mints a fresh link; legacy accounts keep /api/dashboard.
+ */
+export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl: string, opts: { human?: boolean } = {}): Promise<string> {
+  const base = baseUrl.replace(/\/$/, "");
+  const return_url = opts.human ? `${base}${SELLER_SETUP_RETURN_PATH}` : `${base}/api/dashboard`;
+  const refresh_url = opts.human ? `${base}${SELLER_SETUP_REFRESH_PATH}` : `${base}/api/dashboard`;
   const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    use_case: { type: "account_onboarding", account_onboarding: { refresh_url: `${baseUrl}/api/dashboard`, return_url: `${baseUrl}/api/dashboard` } },
+    use_case: { type: "account_onboarding", account_onboarding: { refresh_url, return_url } },
   });
   return link.url;
 }
@@ -451,15 +579,22 @@ export async function inspectStripeMoney(stripe: Stripe, task: TaskRow): Promise
 }
 
 /** Shared seller onboarding used by both Stripe providers. Never throws. */
-export async function onboardSellerAccount(stripe: Stripe, agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+export async function onboardSellerAccount(stripe: Stripe, agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
   try {
     const status = await createRecipientAccount(stripe, agent);
-    if (status.transfers !== "active") {
+    if (status.transfers !== "active" && !status.human_onboarding) {
       console.warn(`[stripe] ${status.account_id}: stripe_transfers=${status.transfers}; blocking: ${status.blocking.join(", ") || "none"}`);
     }
     return { stripe_account_id: status.account_id };
   } catch (err) {
-    console.warn(`[stripe] connected account for ${agent.id} not created: ${(err as Error).message}`);
+    const e = err as { type?: string; message?: string };
+    if (e?.type === "StripeIdempotencyError") {
+      // Same agent id, different parameters (e.g. the email changed between attempts): the first
+      // account exists on Stripe. Replay with the original parameters, or let an operator reconcile.
+      console.warn(`[stripe] payout account for ${agent.id}: idempotency conflict; retry with the first attempt's parameters`);
+    } else {
+      console.warn(`[stripe] connected account for ${agent.id} not created: ${e?.message ?? String(err)}`);
+    }
     return { stripe_account_id: null };
   }
 }
@@ -556,6 +691,9 @@ class MockProvider implements PaymentProvider {
     if (amountCents <= 0) return Promise.resolve({ transfer_id: null, state: "NOT_APPLICABLE", amount_cents: 0, retry_safe_to_advance: false, note: "nothing owed to the seller" });
     return this.mockTransfer(task, seller, amountCents, opts.attempt ?? 0);
   }
+  async payoutOnboarding(): Promise<PayoutOnboarding> {
+    return { payout_status: "active", onboarding_url: null, blocking: [] }; // mock rail: nothing to onboard
+  }
   async inspect(task: TaskRow): Promise<MoneyState> {
     const e = mockLedger.get(task.id);
     return {
@@ -605,7 +743,7 @@ export class StripeCardProvider implements PaymentProvider {
     return onboardBuyerCustomer(this.stripe, agent);
   }
 
-  onboardSeller(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+  onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
     return onboardSellerAccount(this.stripe, agent);
   }
 
@@ -710,6 +848,10 @@ export class StripeCardProvider implements PaymentProvider {
     return inspectStripeMoney(this.stripe, task);
   }
 
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
+    return sellerPayoutOnboarding(this.stripe, agent, env().baseUrl, opts);
+  }
+
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {
     if (!task.stripe_payment_intent_id) return { payment_state: "RELEASED", note: "no PaymentIntent on task" };
     try {
@@ -738,7 +880,7 @@ class RoutingProvider implements PaymentProvider {
   get label() { return this.configured.label; }
   get min_cents() { return this.configured.min_cents; }
   onboardBuyer(agent: { id: string; display_name: string }) { return this.configured.onboardBuyer(agent); }
-  onboardSeller(agent: { id: string; display_name: string }) { return this.configured.onboardSeller(agent); }
+  onboardSeller(agent: SellerOnboardInput) { return this.configured.onboardSeller(agent); }
   hold(task: { id: string; max_price_cents: number }, buyer: AgentRow) { return this.configured.hold(task, buyer); }
   capture(task: TaskRow, seller: AgentRow | null, amountCents: number) { return this.for(task.payment_mode).capture(task, seller, amountCents); }
   release(task: TaskRow, reason: string) { return this.for(task.payment_mode).release(task, reason); }
@@ -749,6 +891,7 @@ class RoutingProvider implements PaymentProvider {
     return p.retryTransfer(task, seller, amountCents, opts);
   }
   inspect(task: TaskRow) { return this.for(task.payment_mode).inspect(task); }
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts?: { includeLink?: boolean }) { return this.configured.payoutOnboarding(agent, opts); }
 
   /** Settlement must use the stored rail; configuration errors must not select a different rail. */
   for(mode: PaymentMode): PaymentProvider {

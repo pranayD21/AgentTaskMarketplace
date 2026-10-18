@@ -1,0 +1,4 @@
+# Git ignores release artifacts here. Manufact's managed uploader reads only
+# the root ignore file, so these generated public downloads are uploaded.
+*
+!.gitignore

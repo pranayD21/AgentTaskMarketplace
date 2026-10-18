@@ -10,6 +10,8 @@ import { safeFailureCode } from "@atm/runner-core";
 import { parseArgs } from "node:util";
 import { Marketplace } from "./marketplace.js";
 import { NodeRuntime } from "./runtime/node.js";
+import { lockIdentity, readAgentState, registerSavedAgent } from "./identity.js";
+import { requireCompatibleRelease } from "./release.js";
 import type { Runtime } from "./runtime/types.js";
 
 const cliArgs = process.argv.slice(2);
@@ -30,6 +32,7 @@ const { values: args } = parseArgs({
     "estimated-watts": { type: "string" },
     canary: { type: "boolean", default: false },
     "canary-only": { type: "boolean", default: false },
+    "register-only": { type: "boolean", default: false },
     "deny-ollama": { type: "boolean", default: false },
     "deny-marketplace": { type: "boolean", default: false },
     once: { type: "boolean", default: false },
@@ -40,12 +43,13 @@ if (!Number.isInteger(Number(args["poll-ms"])) || Number(args["poll-ms"]) < 100)
 if (args["deny-ollama"] && (args.runtime !== "wassette" || args.role !== "seller")) throw new Error("deny-ollama requires the Wassette seller");
 if (args["deny-marketplace"] && (args.runtime !== "wassette" || args.role !== "judge")) throw new Error("deny-marketplace requires the Wassette judge");
 if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.role !== "seller") throw new Error("seller measurement/canary options require --role seller");
-if (args["measurement-file"] && !/^[ABCDE]$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires --computer-id A|B|C|D|E");
+if (args["measurement-file"] && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires a computer-id of 1–64 letters, digits, dots, dashes or underscores");
+if (args["register-only"] && args.role !== "seller") throw new Error("register-only requires seller role");
 if (args["estimated-watts"] && (!args["measurement-file"] || !Number.isFinite(Number(args["estimated-watts"])) || Number(args["estimated-watts"]) <= 0)) throw new Error("estimated-watts requires a measurement file and positive watts");
 const role = args.role as "seller" | "judge";
 const MARKETPLACE_URL = process.env.MARKETPLACE_URL ?? "http://localhost:3000/mcp";
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
-const STATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.atm-state");
+const STATE_DIR = process.env.ATM_STATE_DIR ? path.resolve(process.env.ATM_STATE_DIR) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.atm-state");
 const suffix = args["display-name"] ? `-${createHash("sha256").update(args["display-name"]).digest("hex").slice(0, 10)}` : "";
 const STATE_FILE = args["state-file"] ? path.resolve(args["state-file"]) : path.join(STATE_DIR, `${role}${suffix}.json`);
 const pollMs = Number(args["poll-ms"]);
@@ -56,21 +60,29 @@ interface State { agent_id: string; api_key: string; display_name: string }
 
 function loadState(): State | null {
   if (process.env.AGENT_API_KEY) return { agent_id: "env", api_key: process.env.AGENT_API_KEY, display_name: args["display-name"] ?? role };
-  try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) as State; } catch { return null; }
+  return null;
 }
 
 async function ensureAgent(mp: Marketplace): Promise<State> {
+  if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1") {
+    const saved = readAgentState(STATE_FILE);
+    if (!saved) throw new Error("GOOGLE_SIGN_IN_REQUIRED");
+    const detail = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    mp.setApiKey(saved.api_key);
+    const remote = await mp.call<any>("whoami");
+    if (!detail.owner?.user_id || detail.owner.user_id !== remote.owner?.user_id) throw new Error("GOOGLE_SIGN_IN_REQUIRED");
+    return saved;
+  }
   const existing = loadState();
   if (existing) { mp.setApiKey(existing.api_key); return existing; }
   const display_name = args["display-name"] ?? (role === "seller" ? `seller-${process.env.USER ?? "mac"}` : "atm-judge");
-  const res = await mp.call<{ agent_id: string; api_key: string }>("register_agent", {
-    kind: role, display_name, ...(role === "judge" ? { judge_secret: process.env.JUDGE_REGISTRATION_SECRET } : {}),
+  const state = await registerSavedAgent(STATE_FILE, async () => {
+    const res = await mp.call<{ agent_id: string; api_key: string }>("register_agent", {
+      kind: role, display_name, ...(role === "judge" ? { judge_secret: process.env.JUDGE_REGISTRATION_SECRET } : {}),
+    });
+    return { agent_id: res.agent_id, api_key: res.api_key, display_name };
   });
-  const state: State = { agent_id: res.agent_id, api_key: res.api_key, display_name };
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), { mode: 0o600 });
   mp.setApiKey(state.api_key);
-  log(`registered as ${state.agent_id}; key saved to ${STATE_FILE}`);
   return state;
 }
 
@@ -79,6 +91,7 @@ async function makeRuntime(apiKey: string): Promise<Runtime> {
     const { WassetteRuntime } = await import("./runtime/wassette.js");
     return new WassetteRuntime(role, role === "judge" ? process.env.JUDGE_PRIVATE_KEY_B64 : undefined, {
       apiKey, marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, denyOllama: args["deny-ollama"], denyMarketplace: args["deny-marketplace"],
+      stateDir: STATE_DIR,
     });
   }
   return new NodeRuntime(role === "judge" ? process.env.JUDGE_PRIVATE_KEY_B64 : undefined, { AGENT_API_KEY: apiKey });
@@ -136,12 +149,14 @@ async function judgeLoop(rt: Runtime) {
 // ------------------------------------------------------------------ main ----
 const mp = new Marketplace(MARKETPLACE_URL, undefined);
 let rt: Runtime | undefined;
+let unlock: (() => void) | undefined;
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, async () => {
   if (stopping) return;
   stopping = true;
   await rt?.close();
   await mp.close();
+  unlock?.();
   process.exit(0);
 });
 try {
@@ -163,7 +178,9 @@ try {
       } catch (error) { finish?.({ status: "failed", error_code: safeFailureCode(error) }); throw error; }
     }
   } else {
+    if (!process.env.AGENT_API_KEY) unlock = lockIdentity(STATE_FILE);
     if (role === "seller") {
+      if (process.env.ATM_REQUIRE_RELEASE === "1") await requireCompatibleRelease(MARKETPLACE_URL);
       if (args["ask-cents"] !== undefined) log("--ask-cents is obsolete and ignored. Claiming accepts the task's posted price.");
       try { requireTaskPricing(await mp.call("marketplace_info")); }
       catch (error) { log("Seller startup requires a server advertising pricing.mode=task_offer. Update the server before starting this seller."); throw error; }
@@ -171,9 +188,41 @@ try {
     const state = await ensureAgent(mp);
     log(`agent ${state.agent_id} (${state.display_name})`);
     rt = await makeRuntime(state.api_key);
+    if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" && !args["register-only"]) {
+      const preparedFile = process.env.ATM_PREPARED_FILE;
+      if (!preparedFile || !fs.existsSync(preparedFile)) throw new Error("MODEL_SETUP_REQUIRED");
+      const prepared = JSON.parse(fs.readFileSync(preparedFile, "utf8"));
+      if (prepared.seller_id !== state.agent_id || prepared.runner_sha256 !== rt.info().wasm_sha256) throw new Error("MODEL_SETUP_REQUIRED");
+    }
     if (role === "seller") await sellerLoop(mp, rt, {
       marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs,
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
+      registerOnly: args["register-only"],
+      beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {
+        await requireCompatibleRelease(MARKETPLACE_URL);
+        if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" && (await mp.call<any>("whoami")).payout?.payout_status !== "ACTIVE") throw new Error("PAYOUT_ONBOARDING_REQUIRED");
+      } : undefined,
+      onRegistered: async (models) => {
+        if (!process.env.ATM_STATUS_FILE) return;
+        let payout: Record<string, unknown> = { payout_status: "UNAVAILABLE", payout_onboarding_url: null };
+        try { payout = args["register-only"] ? await mp.call("get_seller_onboarding") : ((await mp.call<any>("whoami")).payout ?? payout); }
+        catch { log("Payout status unavailable; existing identity is retained. Use atm-seller status to check again."); }
+        const status = { worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
+        fs.writeFileSync(process.env.ATM_STATUS_FILE, JSON.stringify(status, null, 2), { mode: 0o600 });
+        log(`payout status=${payout.payout_status}; ${payout.payout_label ?? "Stripe TEST mode"}`);
+
+      },
+      onPayoutPoll: process.env.ATM_STATUS_FILE ? async () => {
+        const file = process.env.ATM_STATUS_FILE!;
+        const current = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (["ACTIVE", "MOCK"].includes(current.payout_status)) return true;
+        const payout = (await mp.call<any>("whoami")).payout;
+        if (payout) {
+          fs.writeFileSync(file, JSON.stringify({ ...current, ...payout, updated_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+          if (payout.payout_status === "ACTIVE") log("Stripe TEST transfer capability is active.");
+        }
+        return payout?.payout_status === "ACTIVE";
+      } : undefined,
       measurements: measurementFile ? new MeasurementRecorder({ file: measurementFile, computerId: args["computer-id"]!, sellerId: state.agent_id === "env" ? null : state.agent_id,
         estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined,
     });
@@ -182,4 +231,4 @@ try {
 } catch (error) {
   log(`stopped: ${safeFailureCode(error)}`);
   process.exitCode = 1;
-} finally { await rt?.close(); await mp.close(); }
+} finally { await rt?.close(); await mp.close(); unlock?.(); }

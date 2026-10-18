@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 node scripts/prepare-manufact-env.mjs
 pnpm install --frozen-lockfile
+node scripts/prepare-seller-release.mjs
 pnpm --filter @atm/marketplace-mcp build
 # Upload the workspace root so workspace:* packages resolve in the cloud.
 # Keep both commands rooted here rather than inside apps/marketplace-mcp.

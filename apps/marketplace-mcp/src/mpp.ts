@@ -30,13 +30,16 @@ import {
   inspectStripeMoney,
   onboardSellerAccount,
   reconcileSellerTransfer,
+  sellerPayoutOnboarding,
   transferToSeller,
   type CaptureResult,
   type HoldResult,
   type MoneyState,
   type PaymentProvider,
+  type PayoutOnboarding,
   type ReleaseResult,
   type RetryTransferOptions,
+  type SellerOnboardInput,
   type TransferOutcome,
 } from "./payments.js";
 
@@ -66,7 +69,7 @@ export class StripeMppProvider implements PaymentProvider {
     return {};
   }
 
-  onboardSeller(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+  onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
     return onboardSellerAccount(this.stripe, agent);
   }
 
@@ -131,6 +134,10 @@ export class StripeMppProvider implements PaymentProvider {
 
   inspect(task: TaskRow): Promise<MoneyState> {
     return inspectStripeMoney(this.stripe, task);
+  }
+
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
+    return sellerPayoutOnboarding(this.stripe, agent, this.baseUrl, opts);
   }
 
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {

@@ -6,9 +6,13 @@ import { env } from "./env.js";
 import { registerMppRoutes } from "./mpp-routes.js";
 import { payments } from "./payments.js";
 import { dashboard } from "./service.js";
+import { registerSellerReleaseRoutes } from "./seller-release.js";
+import { registerSellerIdentityRoutes } from "./seller-identity.js";
 
 export function registerRoutes(server: MCPServer): void {
   server.use("/api/*", cors());
+  registerSellerReleaseRoutes(server);
+  registerSellerIdentityRoutes(server);
   registerMppRoutes(server); // POST|GET /api/pay/:task_id (PAYMENT_MODE=mpp; Computer D)
   // mcp-use start owns /health in production; keep an application-specific path.
   for (const route of ["/health", "/api/health"]) {
