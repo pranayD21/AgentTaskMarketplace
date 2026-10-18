@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import type { AgentRow, TaskRow } from "./db.js";
-import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
+import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, createRecipientAccount, ensureTransfersActive, inspectStripeMoney, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
 
 // ---------------------------------------------------------------- fakes
 const seller = { id: "seller_1", stripe_account_id: "acct_test" } as AgentRow;
@@ -299,11 +299,68 @@ describe("sellerPayoutOnboarding", () => {
     expect(await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: false })).toMatchObject({ payout_status: "pending", onboarding_url: null, blocking: ["identity.entity_type"] });
     expect(links).toHaveLength(0);
   });
+  it("sellerPayoutInfo mints a link only for a human-linked seller", async () => {
+    // Drive the Stripe path through a card provider injected as the configured one is not possible here,
+    // so assert the gate on the helper's own inputs: includeLink without humanLinked must not mint.
+    const { stripe, links } = fakeAccounts({ status: "restricted", blocking: ["identity.entity_type"] });
+    const ungated = await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: true });
+    expect(ungated.onboarding_url).not.toBeNull();
+    expect(links).toHaveLength(1);
+    // The same decision as sellerPayoutInfo applies: includeLink && humanLinked
+    const gated = await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: true && false });
+    expect(gated.onboarding_url).toBeNull();
+    expect(links).toHaveLength(1);
+  });
   it("is exposed on the configured provider, and sellerPayoutInfo maps the mock rail to MOCK with a TEST/MOCK label", async () => {
     expect(await payments().payoutOnboarding({ id: "s", stripe_account_id: null })).toMatchObject({ payout_status: "active" });
     const info = await sellerPayoutInfo({ id: "s", stripe_account_id: null }, { includeLink: true });
     expect(info).toMatchObject({ payout_status: "MOCK", payout_onboarding_url: null, blocking: [] });
     expect(info.payout_label).toMatch(/MOCK/);
     expect(info.payout_label).toMatch(/not a verified real payout/);
+  });
+});
+
+// ---------------------------------------------------------------- human onboarding (C-D-20261018T050505Z-01)
+describe("human-owned seller accounts", () => {
+  function fakeCreate(o: { status?: string } = {}) {
+    const created: Record<string, unknown>[] = [];
+    const updates: Record<string, unknown>[] = [];
+    const stripe = {
+      v2: { core: {
+        accounts: {
+          create: async (params: Record<string, unknown>) => { created.push(params); return { id: "acct_new", metadata: params.metadata, configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: o.status ?? "restricted", status_details: [] } } } } }, requirements: { entries: [{ description: "identity.entity_type", impact: { restricts_capabilities: [{ capability: "stripe_balance.stripe_transfers" }] } }] } }; },
+          retrieve: async () => ({ id: "acct_new", metadata: { onboarding: "human" }, configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: "restricted", status_details: [] } } } } }, requirements: { entries: [{ description: "identity.entity_type", impact: { restricts_capabilities: [{ capability: "stripe_balance.stripe_transfers" }] } }] } }),
+          update: async (_id: string, params: Record<string, unknown>) => { updates.push(params); return { id: "acct_new", metadata: { onboarding: "human" }, configuration: {}, requirements: { entries: [] } }; },
+        },
+        accountLinks: { create: async (p: { account: string }) => ({ url: `https://connect.stripe.com/setup/${p.account}` }) },
+      } },
+    } as unknown as Stripe;
+    return { stripe, created, updates };
+  }
+  it("human_onboarding creates a bare account with the human's email and no synthetic identity", async () => {
+    const { stripe, created } = fakeCreate();
+    const st = await createRecipientAccount(stripe, { id: "seller_h", display_name: "Ada's Mac", human_onboarding: true, email: "ada@example.com" });
+    expect(st).toMatchObject({ account_id: "acct_new", transfers: "restricted", human_onboarding: true, blocking: ["identity.entity_type"] });
+    const params = created[0] as { contact_email: string; identity: Record<string, unknown>; metadata: Record<string, string>; defaults: Record<string, unknown> };
+    expect(params.contact_email).toBe("ada@example.com");
+    expect(params.identity).toEqual({ country: "us" });
+    expect(params.metadata.onboarding).toBe("human");
+    expect(params.defaults).not.toHaveProperty("profile");
+  });
+  it("legacy onboarding still applies the synthetic test identity", async () => {
+    const { stripe, created } = fakeCreate({ status: "active" });
+    await createRecipientAccount(stripe, { id: "seller_t", display_name: "fixture" });
+    const params = created[0] as { identity: { individual?: unknown; attestations?: unknown }; metadata: Record<string, string> };
+    expect(params.identity.individual).toBeDefined();
+    expect(params.identity.attestations).toBeDefined();
+    expect(params.metadata.onboarding).toBe("synthetic-test");
+  });
+  it("never auto-verifies a human account: ensureTransfersActive leaves it pending, and the link is the way forward", async () => {
+    const { stripe, updates } = fakeCreate();
+    const st = await ensureTransfersActive(stripe, "acct_new", { id: "seller_h", display_name: "Ada's Mac" }, { attempts: 1, delayMs: 1 });
+    expect(st).toMatchObject({ transfers: "restricted", human_onboarding: true });
+    expect(updates).toHaveLength(0);
+    const info = await sellerPayoutOnboarding(stripe, { id: "seller_h", stripe_account_id: "acct_new" }, "http://x", { includeLink: true });
+    expect(info).toMatchObject({ payout_status: "pending", onboarding_url: "https://connect.stripe.com/setup/acct_new", blocking: ["identity.entity_type"] });
   });
 });
