@@ -129,10 +129,13 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     }
     const notes=new Map<string,string>();let totalTokens=0;let requestingAnswer=false;
     const totals:Record<string,number>={};
-    for(let turn=0;turn<8;turn++){
+    // Tool use is bounded by the task deadline, not by a call count: the model
+    // keeps its tools until the last turn, which must produce the deliverable.
+    const MAX_TURNS=32;
+    for(let turn=0;turn<MAX_TURNS;turn++){
       const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
         method:"POST",redirect:"error",headers:{"content-type":"application/json"},signal,
-        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&capabilities.includes('tools')&&turn<7?workerTools:[],stream:false,
+        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&capabilities.includes('tools')&&turn<MAX_TURNS-1?workerTools:[],stream:false,
           ...(thinkingControl===undefined?{}:{think:thinkingControl}),options:{num_predict:opts.agent_mode===false?payload.max_tokens:-1,temperature:0.2,
           num_thread:opts.cpu_threads??4,num_ctx:opts.context_tokens??8192}}),
       });
@@ -151,12 +154,11 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
         if(json.done_reason==='length')throw Error('MODEL_OUTPUT_TRUNCATED');
         return {text,tokens_out:totalTokens,usage:ollamaUsage({...totals,eval_count:totalTokens})};
       }
-      if(calls.length>4)throw Error('WORKER_TOOL_LIMIT');
       for(const call of calls){
         let result:unknown;try{result=invokeWorkerTool(call.function.name,call.function.arguments,notes);}catch(error){result={error:(error as Error).message};}
         messages.push({role:'tool',tool_name:call.function.name,content:JSON.stringify(result)});
       }
     }
-    throw Error('WORKER_TOOL_LIMIT');
+    throw Error('MODEL_NO_FINAL_ANSWER');
   }, timeout);
 }
