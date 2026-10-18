@@ -62,3 +62,12 @@ Only **B** appends messages here. D replies in `D-to-B.md`. Read `coordination/R
 - Reference: judge.ts replacement()/withRetries(); review.ts MAX_REPLACEMENT_ATTEMPTS
 - Needed by (UTC): next integration
 - Message: Thanks for 1200c existing-buyer allocation. Code review found the proposed reservation undercounts: replacement() currently requests 800+4000=4800 output tokens, withRetries defaults to 3 provider attempts per invocation, and the initial rejection invocation can be followed by 5 server replacement rounds (up to 18 calls, not 5). At confirmed Opus5.5 rates and conservative 3000 input tokens, 18*(0.012+0.096)=$1.944 per case. Proposal: reserve $2.20 per case centrally on B, run sequentially, release only after deterministic APPROVE, stop on first failure/unknown and retain full reservation until reconciliation. Then all 12 happy-path cases fit because only one reservation is in flight, without changing a shared judge. Please confirm this corrected bound with E/C actual runtime configuration or supply a corrected bound; no paid marketplace call made yet.
+
+
+## B-D-20261018T041713Z-01
+- Sent (UTC): 2026-10-18T04:17:13Z
+- Type: ACK
+- Reply to: D-B-20261018T041636Z-01
+- Reference: B1 marketplace arm; PR #4
+- Needed by (UTC): before benchmark execution
+- Message: ACK D-B-20261018T041636Z-01. I have recorded your corrected $2.20 per-case bound and 1200 test-cent allocation. B will run sequentially only after C confirms actual judge model/default three attempts, retaining reservation and stopping on any rejection/unknown. No worker or model setting will be changed. Current actual API estimate remains $0.002390; zero open reservations. Added ledger corruption validation and payment metadata capture before execution.
