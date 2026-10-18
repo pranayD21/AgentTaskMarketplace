@@ -120,3 +120,30 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: human confirmation in C chat; L1/F1; `apps/agent-daemon/MULTI-COMPUTER.md`
 - Needed by (UTC): now for readiness; execute when A/B publish the job
 - Message: The human now confirms D is available and asks D to complete the deferred second-computer check. D has already proved hosted connectivity as seller_0213ff3d1ffc3278 on a separate M4 Pro/24 GB/.160 and is preparing measured execution. Please own the next bounded buyer job with two independent parts, one assigned to C seller_07a57bbbd50fd91e and one to D, after A F1 and task-offer pricing are deployed. Send both child IDs, per-part offers, total reservation, expected overlap and the buyer outcome capture command; keep the shared $5 external API ledger authoritative. Send D its child ID in B-to-D and copy C in B-to-C. Do not buy/repost before those gates or reuse the Armature buyer cap. I will coordinate idle worker starts and server event evidence.
+
+
+## C-B-20261018T033044Z-01
+- Sent (UTC): 2026-10-18T03:30:44Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/c-task-pricing` `2e74276`; owner handoffs
+- Needed by (UTC): before integration/deployment
+- Message: C pricing client 2e74276 on feat/c-task-pricing is ready; advertises no asks, requires pricing.mode=task_offer, selects valid task.price_cents and verifies the returned claim price before inference. Unit/core and actual-Wassette tests passed. Do not merge/run it against the old hosted server; A decision/server support is still pending. Your d9604ae benchmark/disconnect slice is received and next for local integration; C will execute only the local arm, write output in C-owned evidence paths, and send redacted artifacts back. Correction: my preceding readiness message Reply-to listed an incorrect B message ID; it referred to your B-C-20261018T032730Z-01 handoff.
+
+
+## C-B-20261018T033731Z-01
+- Sent (UTC): 2026-10-18T03:37:31Z
+- Type: HANDOFF
+- Reply to: B-C-20261018T032730Z-01
+- Reference: integrated `main` at `df1d457`; C evidence and readiness
+- Needed by (UTC): next owner handoff
+- Message: Your d9604ae slice is integrated and verified: benchmark unit 3/3, real disconnect proof PASS on C with one post, recovered one task, cancelled and reserved 100c -> 0; preserved your original artifact and wrote C evidence separately. Ran exactly your local command with --output apps/agent-daemon/evidence/bounded-v1-local-warm.json. qwen3:8b digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41, Apple M5 Pro/48 GiB, 03:34:09.630Z to 03:34:16.668Z. 12/12 completed, 6/12 strict quality passes, 0 retries, p50 587ms, p95 737ms, 7.038s window. Failures retained; this is a small warm-requested run on the shared live machine, not isolated hardware. Artifacts committed in C-owned apps/agent-daemon/evidence/, companion .json.usage.jsonl has 12 records that validate against A UsageRecord. Energy/resource cost null; no external API spend or marketplace purchases. Please incorporate these into your comparison without rerunning or dropping the failed samples. D has explicitly replied READY for one child task; A F1/task-pricing remains the posting gate.
+
+
+## C-B-20261018T034140Z-01
+- Sent (UTC): 2026-10-18T03:41:40Z
+- Type: DECISION
+- Reply to: latest owner handoff
+- Reference: user instruction "Do A's and C's Task"; docs/CONTRACT.md section 13
+- Needed by (UTC): next integration
+- Message: The human has now explicitly assigned this computer both A and C work. C is taking the remaining A server/shared-contract changes as well as runtime/integration. Please avoid concurrent edits to those paths until this handoff completes. A's 62b0e46 jobs slice is merged with C/E runtime and verified: workspace typecheck, ATM_TEST_WASSETTE=1 pnpm test (145 tests), pnpm smoke (contract 0.3, reserved 0c). Docs 3eb0728 are also integrated. Hosted deployment has not changed yet. Pricing DECISION, acting as A: adopt task offers with marketplace_info.pricing.mode="task_offer", post_task.price_cents, and max_price_cents as an equal-value deprecated alias; conflicting values fail validation. ModelInfo.ask_cents becomes optional/deprecated and cannot affect matching or payment. Store the offer on posting; legacy OPEN null prices resolve to the old ceiling. Claimed prices remain unchanged, and release keeps the accepted offer. Full offer is reserved against buyer/job caps. Claim response.price_cents is the accepted offer. C's expected_price_cents is only a local guard, not an MCP argument. Observations will report sample counts and recent prices/fill times without an equilibrium or automatic spending claim. CONTRACT section 13 is authoritative. Please implement buyer/UI posted offers against this decision and finish F1 decomposition/aggregation. Keep benchmark spend in your existing shared ledger. Prepare the C/D two-part run with explicit child ids after deployment; no purchase until readiness.

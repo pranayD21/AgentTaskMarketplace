@@ -3,16 +3,18 @@
  *
  * Every buyer/seller gets an Inkbox identity with an A2A receiver. The
  * marketplace itself owns one identity (`atm-marketplace`) and sends task
- * notices from it, reusing one A2A context per task so the console shows a
- * single thread: assignment → submitted → verdict.
+ * notices from it: the seller's thread per task reads assignment → submitted
+ * → verdict, and the buyer receives the verdict in its own thread.
  *
  * Nothing here may fail or slow a tool: every call is bounded by a timeout and
  * errors degrade to `null` with one log line. Notice text carries ids, prices
- * and public verdict reasons only, never prompts or answers.
+ * and fixed reason-code text only, never prompts, answers or judge output.
  */
 import fs from "node:fs";
+import { publicReason } from "@atm/shared";
 import path from "node:path";
 import { Inkbox, type A2AClient, type A2AResolvedTarget, type A2ASkill } from "@inkbox/sdk";
+import { db, one, unwrap, type AgentRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { kekOpen, kekSeal } from "./kek.js";
 
@@ -125,29 +127,36 @@ async function target(s: Sender, handle: string): Promise<A2AResolvedTarget> {
 }
 
 // An A2A context belongs to one caller/target pair, so a task has one thread
-// per recipient. The first recipient (the seller, at assignment) owns the
-// task's main thread, whose id the service stores as `inkbox_context_id`;
-// notices without a recipient ("submitted") and every verdict go there too,
-// so that thread reads assignment → submitted → verdict.
-const threadOwner = new Map<string, string>();
-const contexts = new Map<string, string>();
+// per recipient. The seller's thread is the task's main thread: the service
+// stores its id as `tasks.inkbox_context_id`, and it reads assignment →
+// submitted → verdict. The buyer gets the verdict in its own thread.
+// Recipients are rebuilt from the database on every notice, so a server
+// restart between claim and verdict loses nothing (I1).
 
-async function sendNotice(s: Sender, taskId: string, handle: string, text: string, storedContext: string | null): Promise<string | null> {
-  const key = `${taskId}:${handle}`;
-  const known = contexts.get(key) ?? (threadOwner.get(taskId) === handle ? storedContext ?? undefined : undefined);
+
+interface TaskRecipients { seller: string | null; buyer: string | null; verdict: { verdict: string; reason_code: string } | null }
+
+async function recipientsFor(taskId: string): Promise<TaskRecipients> {
+  const task = await one<Pick<TaskRow, "seller_id" | "buyer_id">>(await db().from("tasks").select("seller_id,buyer_id").eq("id", taskId).limit(1));
+  const ids = [task?.seller_id, task?.buyer_id].filter((x): x is string => Boolean(x));
+  const agents = ids.length ? (unwrap(await db().from("agents").select("id,inkbox_handle").in("id", ids)) as Pick<AgentRow, "id" | "inkbox_handle">[]) : [];
+  const handle = (id: string | null | undefined) => agents.find((a) => a.id === id)?.inkbox_handle ?? null;
+  const verdict = await one<Pick<VerdictRow, "verdict" | "reason_code">>(await db().from("verdicts").select("verdict,reason_code").eq("task_id", taskId).order("created_at", { ascending: false }).limit(1));
+  return { seller: handle(task?.seller_id), buyer: handle(task?.buyer_id), verdict };
+}
+
+async function sendNotice(s: Sender, handle: string, text: string, contextId: string | null): Promise<string | null> {
   const t = await target(s, handle);
-  const send = (contextId?: string) => s.client.send(t, { text, ...(contextId ? { contextId } : {}) });
+  const send = (ctx?: string) => s.client.send(t, { text, ...(ctx ? { contextId: ctx } : {}) });
   let res;
   try {
-    res = await send(known);
+    res = await send(contextId ?? undefined);
   } catch (err) {
-    // A context from another recipient (or a lost in-memory map) is refused; start a fresh thread.
-    if (!known || !/context/i.test(errMsg(err))) throw err;
+    // A stored context that Inkbox no longer accepts: start a fresh thread rather than drop the notice.
+    if (!contextId || !/context/i.test(errMsg(err))) throw err;
     res = await send(undefined);
   }
-  const ctx = (res.kind === "task" ? res.task.contextId : (res.message.contextId as string | undefined)) ?? null;
-  if (ctx) contexts.set(key, ctx);
-  return ctx;
+  return (res.kind === "task" ? res.task.contextId : (res.message.contextId as string | undefined)) ?? null;
 }
 
 export const inkbox = {
@@ -181,24 +190,36 @@ export const inkbox = {
   async notify(event: { type: string; task_id: string; to_handle: string | null; text: string; context_id?: string | null }): Promise<string | null> {
     if (!this.enabled) return null;
     const stored = event.context_id ?? null;
-    if (event.to_handle && !threadOwner.has(event.task_id)) threadOwner.set(event.task_id, event.to_handle);
-    const owner = threadOwner.get(event.task_id);
-    const recipients = [...new Set([event.to_handle, event.type === "verdict" || !event.to_handle ? owner : null].filter((h): h is string => Boolean(h)))];
-    if (!recipients.length) return stored;
-    const text = `[${event.type}] ${event.text}`;
     try {
       return await withTimeout(
         (async () => {
+          const r = await recipientsFor(event.task_id);
+          let text = event.text;
+          let sends: { handle: string; context: string | null; main: boolean }[];
+          if (event.type === "verdict") {
+            if (!r.verdict) return stored;
+            text = `Judge ${r.verdict.verdict} for ${event.task_id}: ${publicReason(r.verdict.reason_code)}`;
+            sends = [
+              ...(r.seller ? [{ handle: r.seller, context: stored, main: true }] : []),
+              ...(r.buyer && r.buyer !== r.seller ? [{ handle: r.buyer, context: null, main: false }] : []),
+            ];
+          } else {
+            const to = event.to_handle ?? r.seller;
+            sends = to ? [{ handle: to, context: to === r.seller ? stored : null, main: to === r.seller }] : [];
+          }
+          if (!sends.length) return stored;
           const s = await sender();
-          const sent = await Promise.allSettled(recipients.map((h) => sendNotice(s, event.task_id, h, text, stored)));
-          const failed = sent.find((r): r is PromiseRejectedResult => r.status === "rejected");
+          const results = await Promise.allSettled(sends.map((x) => sendNotice(s, x.handle, `[${event.type}] ${text}`, x.context)));
+          const failed = results.find((x): x is PromiseRejectedResult => x.status === "rejected");
           if (failed) warnOnce(`notify:${errMsg(failed.reason).slice(0, 40)}`, `${event.type} notice for ${event.task_id} partly failed: ${errMsg(failed.reason)}`);
-          return (owner && contexts.get(`${event.task_id}:${owner}`)) ?? stored;
+          const mainIdx = sends.findIndex((x) => x.main);
+          const main = mainIdx >= 0 ? results[mainIdx] : undefined;
+          return (main?.status === "fulfilled" ? main.value : null) ?? stored;
         })(),
       );
     } catch (err) {
       warnOnce(`notify:${errMsg(err).slice(0, 40)}`, `${event.type} notice for ${event.task_id} not sent: ${errMsg(err)}`);
-      return event.context_id ?? null;
+      return stored;
     }
   },
 };

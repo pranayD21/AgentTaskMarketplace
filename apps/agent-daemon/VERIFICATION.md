@@ -1,5 +1,17 @@
 # Computer C verification
 
+## C follow-up status, October 17, 20:37 PDT
+
+- D is available and replied READY in `D-C-20261018T033115Z-01`. D passed the measured Wassette canary. C independently read the hosted dashboard and confirmed D seller `seller_0213ff3d1ffc3278` is ACTIVE and its standalone task `task_1197eab50f2c0367` is APPROVED. The shared parent job with overlapping C/D execution remains pending A/B implementation and deployment.
+- C measurements, optional job/part identifiers and the liveness canary are on main at `c0099ef` and its integration commits. The final component from that slice passed the real qwen3:8b canary at 03:26:12 UTC (2327 ms). A canary is operational evidence only.
+- A server slice `9622d2d`, E worker/Inkbox slice `6c32e46` and B benchmark/disconnect slice `d9604ae` are integrated. C resolved the A/E type mismatch by importing A's canonical public reason table in the judge and Inkbox. Workspace typecheck, 130 ordinary tests, all 15 daemon tests with actual Wassette, the 3 benchmark tests and smoke passed. There are 132 unique workspace tests when the two optional Wassette cases are included. Current combined component SHA-256 is `5f82c3e1e05b04dae5facd66d3cac719c58b4b56da2ec84f4fb2f179c8e62294`. This server slice is not yet deployed.
+- C ran B's `atm-bounded-v1` direct-local warm arm: 12 requests completed, 6 strict quality passes, no retries; p50 587 ms, p95 737 ms. All failures remain in the evidence. The 12 usage rows validate against A's `UsageRecord`. No external model or payment call occurred. Energy and total system cost are unknown. The local arm alone cannot establish savings.
+- C's task-offer client is tested and pushed at `feat/c-task-pricing` / `2e74276`: no seller quote, advertised-offer selection, and price verification before inference. It is held off main until A publishes the matching pricing contract/server. A owns task pricing and market observations; B owns buyer/UI changes; D payment assertions; E demo wording. No equilibrium has been measured.
+- D's payment-provider handoff needs the transfer-identity/amount checks reported in C-to-D. A/D must also reconcile retry attempt keys and durable retry ownership. A's parent/part implementation, hosted migration/deployment and the joint physical run are still open. E's newer overlap script needs claim-attempt/RUNNING interval review before it can prove simultaneous execution.
+
+Evidence: [local arm](evidence/bounded-v1-local-warm.json), [usage rows](evidence/bounded-v1-local-warm.json.usage.jsonl), [C's isolated disconnect run](evidence/disconnect-c-20261018.json). The earlier entries below retain their original timestamps and limitations.
+
+
 ## C runtime follow-up, October 17, 2026, 20:22 PDT
 
 B's PR #3 at `39eaa4e` was reviewed and integrated; its buyer recovery/docs passed typecheck, 82 tests and smoke before publication. C then added local per-attempt measurement files, a fixed model canary and an `atm.usage.v1` exporter. A's v0.3 contract is adopted for optional job/part metadata; live job server support is still pending.

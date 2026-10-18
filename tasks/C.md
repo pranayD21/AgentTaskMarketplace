@@ -1,5 +1,9 @@
 # Computer C — seller runtime and the Wasm sandbox
 
+## Current C handoff, October 17, 20:37 PDT
+
+D has joined and replied READY. The missing-machine blocker is resolved; the parent-job demonstration still needs A/B server and buyer work. C measurements/canary are complete, the direct-local benchmark is recorded (6/12 quality passes), and the A/B/E slices are integrated and tested. Read [C verification](../apps/agent-daemon/VERIFICATION.md) for exact evidence and remaining gates. The task-pricing client is ready on `feat/c-task-pricing` at `2e74276`, but must wait for A's server contract before merging/deployment. Keep the shared workers and existing identities available.
+
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)
 
 The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically.

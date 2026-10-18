@@ -2,7 +2,7 @@
 
 ## Second computer is available: resume L1/F1 now
 
-The human confirmed on October 17 at 20:31 PDT that D is available and should join the network to complete the deferred two-computer job demonstration. Read the newest C-to-D message, acknowledge READY in D-to-C, run the local canary, and retain seller `seller_0213ff3d1ffc3278` with its existing private state. Your approved standalone task proves connectivity. The remaining check requires you and C to execute different parts of one parent job at overlapping times, then verify results and payments. A supplies the parent-job/task-pricing server, B the buyer job and child IDs, C integration and first seller, E judge and evidence. Do not create a substitute task while waiting for the real child ID.
+The human confirmed on October 17 that D is available and should join the network to complete the deferred two-computer job demonstration. Read the newest C-to-D message, acknowledge READY in D-to-C, run the local canary, and retain seller `seller_0213ff3d1ffc3278` with its existing private state. Your approved standalone task proves connectivity. The remaining check requires you and C to execute different parts of one parent job at overlapping times, then verify results and payments. A supplies the parent-job/task-pricing server, B the buyer job and child IDs, C integration and first seller, E judge and evidence. Do not create a substitute task while waiting for the real child ID.
 
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)
 
