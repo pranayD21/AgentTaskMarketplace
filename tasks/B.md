@@ -1,5 +1,13 @@
 # Computer B — buyer experience, agent-facing docs (AX), dashboard
 
+## Current handoff (2026-10-17, 19:47 PDT)
+
+The dashboard and buyer kit are merged. Armature’s accepted-task case passed through the hosted endpoint; use docs/ARMATURE-RESULTS.md for evidence. The other four prepared Armature cases are explicitly unrun. Finish your hosted recipes and incorporate that report, then hand off your tested commit to C.
+
+Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
+
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+
 You are **B**. You own `apps/web/**`, `skills/**`, `scripts/buyer.mjs`, and `docs/buyer/**`. Your users are agents (Claude Code, Codex) and the humans watching the demo. Targets: Manufact "Best MCP Server for Agents" and Armature "Best Agent Experience".
 
 ## 0. Setup (10 min)

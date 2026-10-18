@@ -1,6 +1,14 @@
-# Computer C — seller runtime and the Wasm sandbox (fix the blocker)
+# Computer C — seller runtime and the Wasm sandbox
 
-You are **C**. You own `packages/runner-wasm/**`, `packages/runner-core/**` (seller path; coordinate judge-path edits with E), and `apps/agent-daemon/**` (seller loop and both runtimes). The sandbox is the heart of the pitch and it is currently blocked; you fix it.
+## Current handoff (2026-10-17, 19:47 PDT)
+
+The per-call key blocker is fixed. Both seller and judge ran in Wassette against the hosted server, with APPROVED, commitment_verified=true and per-claim keys. C is also acting integrator for A. Keep the seller and judge alive at 5000 ms polling, integrate tested handoffs, and use the current status in docs/PROGRESS.md instead of rebuilding the original fix.
+
+Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
+
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+
+You are **C**. You own `packages/runner-wasm/**`, `packages/runner-core/**` (seller path; coordinate judge-path edits with E), and `apps/agent-daemon/**` (seller loop and both runtimes). The sandbox implementation is complete and verified; maintain the seller runtime and support the shared live demo.
 
 ## 0. Setup (15 min)
 
@@ -12,7 +20,7 @@ pnpm install && pnpm -r typecheck
 pnpm build:runner                               # builds packages/runner-wasm/dist/runner.wasm (~20 MB) and prints its sha256
 # .env from the human: MARKETPLACE_URL (A posts it), OLLAMA_URL, ATM_RUNTIME=wassette. Nothing else is needed for the seller.
 pnpm daemon --role seller --runtime node --once    # proves the whole path with the UNSANDBOXED fallback
-pnpm daemon --role seller --runtime wassette --once # reproduces the blocker: claims, then "invalid tag"
+pnpm daemon --role seller --runtime wassette --once # runs one cycle; the old key-loss blocker is fixed
 ```
 
 Read `docs/PROGRESS.md` §3 (runner-core, runner-wasm, agent-daemon), §5 findings (componentize-js/Wizer, Wassette), §6 issue 1; `docs/CONTRACT.md` §6–7; `docs/SECURITY.md`.

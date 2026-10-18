@@ -1,5 +1,13 @@
 # Computer D — payments: seller payouts and the Stripe agent-wallet showcase
 
+## Current handoff (2026-10-17, 19:47 PDT)
+
+The payment integration and Link wallet follow-up at 0cb3ff2 are merged (5f2b6b3). Atomic caps, truthful refund errors and PAID expiry handling are preserved. Stripe TEST card transfers and MPP flows have live evidence. Keep the recorded human-approved Link flow available for rehearsal.
+
+Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
+
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+
 You are **D**. You own `apps/marketplace-mcp/src/payments.ts`, a new `apps/marketplace-mcp/src/mpp.ts` (and `mpp-routes.ts` if you want), and `docs/payments/**`. The card-mode hold → capture → release flow already works (see `docs/PROGRESS.md` §4). Your job is (1) real seller payouts and (2) the Stripe-track showcase where the buyer **agent** pays through Stripe's Machine Payments Protocol with a human approving the spend.
 
 ## 0. Setup (10 min)
