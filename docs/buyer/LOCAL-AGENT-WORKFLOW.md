@@ -78,7 +78,11 @@ separate.
 ### External API allowance
 
 `ATM_PROVIDER_ALLOWANCE=enforce` enables the existing persistent shared ledger.
-Without that setting, task posting does not reserve against it. An unchanged
+The current Manufact environment-preparation script does not forward this flag,
+so setting it only in a local `.env` does not enable hosted enforcement. D reports
+that opt-in behavior was an intentional operator change (`2d119c5`); this
+verification does not change that deployment policy. Without effective server
+enforcement, task posting does not reserve against the ledger. An unchanged
 ledger therefore cannot establish how much a running judge has actually spent.
 The October 18 read-only verification observed `enforced: false` and made no
 purchase or model call. Further budgeted trials require current judge usage and

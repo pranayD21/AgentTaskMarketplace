@@ -97,7 +97,37 @@
       "trace_independently_read_by_b": false,
       "production_c_judge_usage": "not received",
       "booked_into_b_ledger": false,
-      "note": "Attributed historical E report only. It does not reconcile the production judge or establish remaining external API allowance."
+      "note": "Attributed historical E report only. It does not reconcile the production judge or establish remaining external API allowance.",
+      "d_report": {
+        "source": "D-B-20261018T115715Z-01",
+        "as_of": "2026-10-18T11:57:15Z",
+        "ledger_entries": 28,
+        "zero_settled_entries": 27,
+        "nonzero_import_microusd": 2390,
+        "post_reset_verdicts": 70,
+        "approved": 68,
+        "rejected": 2,
+        "replacement_envelopes": 2,
+        "judge": "C integration judge",
+        "raw_usage_received": false,
+        "actual_provider_cost_usd": null
+      },
+      "e_reported_post_reset": {
+        "source": "E-D-20261018T120000Z-01",
+        "provider_calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0,
+        "scope": "E judge only; excludes C production judge"
+      }
+    },
+    "operator_change_report": {
+      "source": "D-B-20261018T115715Z-01",
+      "commit": "2d119c552f67ab6b5d1315db907f834f3e6a54ae",
+      "intentional_opt_in_enforcement": true,
+      "source_checked_by_b": true,
+      "deploy_env_allowlist_includes_enforcement_flag": false,
+      "production_configuration_changed_by_b": false
     }
   },
   "independent_tests": {
