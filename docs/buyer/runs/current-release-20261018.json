@@ -1,0 +1,117 @@
+{
+  "checked_at": "2026-10-18T11:49:19.332Z",
+  "tested_source_commit": "87667d4e210a1728ac6ccc475624e0078981650a",
+  "deployed_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+  "release_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+  "url": "https://warm-cloud-4hh5i.run.mcp-use.com/marketplace/",
+  "contract": "0.3",
+  "storage": "Insforge Postgres",
+  "payment_mode": "card",
+  "board_http_status": 200,
+  "canonical_redirect_status": 308,
+  "assets": [
+    {
+      "path": "/marketplace/assets/index-CwDb7jzR.js",
+      "status": 200,
+      "sha256": "b14e75b917c153e2cad5282354c56c6cabfeb95f9999804fe51a149589b37207"
+    },
+    {
+      "path": "/marketplace/assets/index-L3noAE9d.css",
+      "status": 200,
+      "sha256": "c5c2025ea97ba3b3ad692373a37b20d6cc37b38dc7cd876d754064a0a0ed1325"
+    }
+  ],
+  "installer_artifacts": [
+    {
+      "name": "seller-bundle.tgz",
+      "status": 200,
+      "size_matches": true,
+      "sha256_matches": true,
+      "sha256": "80e0d5f10ce1337dedd00e10985f7625950a5a45f25560c266fe41cb680a3c0d"
+    },
+    {
+      "name": "runner.wasm",
+      "status": 200,
+      "size_matches": true,
+      "sha256_matches": true,
+      "sha256": "a911fb3952069f3e7c3161187b58b39dc7ba5b632e306721b1f976c7d0a83046"
+    }
+  ],
+  "public_metadata": {
+    "task_window": 40,
+    "total_counts": {
+      "APPROVED": 51,
+      "EXPIRED": 2,
+      "REJECTED": 2
+    },
+    "sellers": 5,
+    "awaiting_runner_setup": 1,
+    "legacy_b_task_visible": false,
+    "private_field_scan": "passed",
+    "unexpected_private_keys": []
+  },
+  "hosted_buyer_endpoint_status": 404,
+  "browser": {
+    "verified": true,
+    "live": true,
+    "awaiting_runner_setup": true,
+    "hosted_submission_unavailable": true,
+    "confirmed_transfer": true,
+    "replacement_delivered": true,
+    "stripe_test_mode": true
+  },
+  "google_ownership_metadata_read": {
+    "tasks_checked": 40,
+    "sellers_checked": 5,
+    "all_task_buyers_google_owned": true,
+    "all_task_sellers_google_owned": true,
+    "all_directory_sellers_google_owned": true,
+    "same_owner_claims_in_visible_window": 0
+  },
+  "provider_budget": {
+    "authenticated_whoami_enforced": false,
+    "reservation_microusd": 0,
+    "remaining_microusd": null,
+    "persisted_ledger_revision": 54,
+    "persisted_cap_microusd": 5000000,
+    "persisted_booked_microusd": 2390,
+    "persisted_open_reservations": 0,
+    "ledger_is_not_current_usage_reconciliation": true,
+    "legacy_local_submissions_enabled": false
+  },
+  "independent_tests": {
+    "workspace_typecheck": "passed",
+    "passed": 317,
+    "skipped": 4,
+    "packages": {
+      "dashboard": 17,
+      "web": 33,
+      "crypto": 7,
+      "runner_core": 55,
+      "agent_daemon": 62,
+      "marketplace": 143
+    },
+    "hosted_web_build": "passed"
+  },
+  "new_purchases": 0,
+  "external_model_calls": 0,
+  "limitations": [
+    "No fresh human Google/Stripe signup or live chat submission was performed by B.",
+    "Published latest installer tag and hosted source can differ; no install or worker restart performed.",
+    "Provider allowance is disabled in the deployed account response; persisted ledger totals do not prove current actual API spending.",
+    "Account UI still claims at most four tasks/200 TEST cents although current orchestration removed those ceilings.",
+    "Remaining Armature cases need explicitly allocated owned fixtures and authorization; public rejected tasks are not that evidence.",
+    "Benchmarking remains deferred."
+  ],
+  "installed_account": {
+    "revision": "3f7254a5498b8304fd8c22e1ce59abedd672ce6b",
+    "buyer_identity_matches": true,
+    "google_owned": true,
+    "buyer_payment_status": "READY",
+    "fresh_browser_onboarding_performed": false
+  },
+  "latest_github_release": {
+    "tag": "seller-3f7254a",
+    "published_at": "2026-10-18T11:42:08Z"
+  }
+}
