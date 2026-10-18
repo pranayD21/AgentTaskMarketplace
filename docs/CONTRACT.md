@@ -112,7 +112,9 @@ When A merges a contract change: A commits `docs/CONTRACT.md` + `packages/shared
 
 # v0.3 additions — ADOPTED 2026-10-17 20:30 PDT (audit items J1–J3, P1/P2, F1, B1, I1)
 
-Every v0.3 change is additive. A v0.2 client keeps working; the differences it can observe are listed under each item. Server implementation lands on `main` in the commits named in A's HANDOFF to C. Until then the sections below are the contract to build against, not a description of the running service.
+Every v0.3 change is additive. A v0.2 client keeps working; the differences it can observe are listed under each item. **Implemented** on `claude/zen-mccarthy-0xradq`: §8–§9 at `9622d2d`, and §10–§12 at `62b0e46` (`CONTRACT_VERSION` 0.3). The deployed service runs it only after C merges and redeploys; check `/api/health.contract`.
+
+New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge); `create_job`, `get_job` and `list_my_jobs` (buyer). `post_task` adds `client_request_id`, `job_id`, `part_key` and `part_label`, and returns `idempotent`. `submit_verdict.reason_public` is optional and ignored. `expire_stale` also returns `resumed` and `transfers_retried`.
 
 ## 8. Judge outcomes (J1, J2, J3)
 

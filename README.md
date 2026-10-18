@@ -54,7 +54,7 @@ Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)     
 1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt is encrypted to the judge key immediately and held encrypted at rest under a server key until a result is submitted, then deleted.
 2. The first eligible seller to `claim_task` wins a 300 s lease and receives the task **encrypted to a key generated inside its sandbox**.
 3. Inside the same instance the runner decrypts, calls the local model, and encrypts the identical canonical result bytes to the buyer and to the judge, with a sha256 commitment. Its only network grants are Ollama and the marketplace. The seller host only ever forwards ciphertext.
-4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller's connected account; `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and hands the buyer the judge's own answer.
+4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller's connected account; `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and the judge's own answer is delivered when it can be produced (`replacement_status`: PENDING → DELIVERED, or UNAVAILABLE after 5 tries; contract §8.3). A judge outage is a retried review, never a strike (§8.2).
 
 ## Layout
 
