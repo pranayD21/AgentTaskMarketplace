@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx --env-file=../../.env src/main.ts",
+    "live": "tsx --env-file=../../.env src/main.ts --viewer",
+    "live:demo": "tsx src/viewer/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
