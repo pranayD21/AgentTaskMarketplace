@@ -12,9 +12,10 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "dev:server": "pnpm --filter @atm/marketplace-mcp dev",
-    "daemon": "pnpm --filter @atm/agent-daemon start --",
+    "daemon": "pnpm --filter @atm/agent-daemon start",
     "build:runner": "pnpm --filter @atm/runner-wasm build",
-    "setup:env": "bash scripts/setup-env.sh"
+    "setup:env": "bash scripts/setup-env.sh",
+    "smoke": "tsx scripts/smoke-local.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -27,6 +28,7 @@
     "typescript": "^5.9.3",
     "vitest": "^5.0.5",
     "@atm/crypto": "workspace:*",
-    "@atm/shared": "workspace:*"
+    "@atm/shared": "workspace:*",
+    "@atm/runner-core": "workspace:*"
   }
 }

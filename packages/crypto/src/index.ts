@@ -68,6 +68,18 @@ export function keyDescriptor(keyId: string, publicKey: Uint8Array): KeyDescript
   return { key_id: keyId, public_key_b64: toB64(publicKey) };
 }
 
+/** Decode a base64 X25519 public key; throws unless it is valid base64 of exactly 32 bytes. */
+export function publicKeyFromB64(b64: string): Uint8Array {
+  let bytes: Uint8Array;
+  try {
+    bytes = fromB64(b64.trim());
+  } catch {
+    throw new Error("public key is not valid base64");
+  }
+  if (bytes.length !== 32) throw new Error(`public key must be 32 bytes, got ${bytes.length}`);
+  return bytes;
+}
+
 /** Stable id for a public key: first 16 hex chars of sha256(pubkey). */
 export function keyIdFor(publicKey: Uint8Array): string {
   return bytesToHex(sha256(publicKey)).slice(0, 16);

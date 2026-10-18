@@ -1,6 +1,7 @@
 import { createAdminClient } from "@insforge/sdk";
 import { MarketplaceError, type AgentKind, type Envelope, type ModelInfo, type SellerStatus, type TaskStatus } from "@atm/shared";
 import { env } from "./env.js";
+import { memoryDb } from "./memdb.js";
 
 // ---------------------------------------------------------------------------
 // Row types (snake_case mirrors db/schema.sql)
@@ -31,6 +32,8 @@ export interface SellerRow {
   models: ModelInfo[];
   runner_pubkey_b64: string | null;
   runner_key_id: string | null;
+  last_claim_key_id: string | null;
+  last_claim_pubkey_b64: string | null;
   runner_wasm_sha256: string | null;
   runtime: "wassette" | "node-unsandboxed";
   wassette_version: string | null;
@@ -58,6 +61,8 @@ export interface TaskRow {
   model_id: string | null;
   price_cents: number | null;
   lease_expires_at: string | null;
+  claim_runner_key_id: string | null;
+  claim_runner_pubkey_b64: string | null;
   claim_count: number;
   judge_id: string | null;
   payment_mode: "card" | "mpp" | "mock";
@@ -124,16 +129,66 @@ type Admin = ReturnType<typeof createAdminClient>;
 let admin: Admin | undefined;
 
 export function db(): Admin["database"] {
+  // The memory store implements the subset of the PostgREST builder used here.
+  if (env().DB_MODE === "memory") return memoryDb() as unknown as Admin["database"];
   if (!admin) {
-    admin = createAdminClient({ baseUrl: env().INSFORGE_BASE_URL, apiKey: env().INSFORGE_API_KEY });
+    admin = createAdminClient({ baseUrl: env().INSFORGE_BASE_URL!, apiKey: env().INSFORGE_API_KEY! });
   }
   return admin.database;
 }
 
+export function dbLabel(): string {
+  return env().DB_MODE === "memory" ? "MEMORY — in-process tables, dev/test only, lost on restart" : "Insforge Postgres";
+}
+
+/**
+ * Columns added after the first schema push (contract v0.2). Mirrors the
+ * `alter table … add column if not exists` lines at the end of db/schema.sql
+ * so a server started from main brings an older database up to date without
+ * anyone remembering to run scripts/db-migrate.sh.
+ */
+const SCHEMA_PATCHES = [
+  "alter table tasks add column if not exists claim_runner_key_id text",
+  "alter table tasks add column if not exists claim_runner_pubkey_b64 text",
+  "alter table sellers add column if not exists last_claim_key_id text",
+  "alter table sellers add column if not exists last_claim_pubkey_b64 text",
+];
+
+let schemaReady: Promise<void> | undefined;
+let schemaFailedAt = 0;
+
+/** Apply SCHEMA_PATCHES once per process; never throws. A failure is logged and retried after 30 s. */
+export function ensureSchema(): Promise<void> {
+  if (env().DB_MODE === "memory") return Promise.resolve();
+  if (!schemaReady && Date.now() - schemaFailedAt > 30_000) {
+    schemaReady = rawSql(SCHEMA_PATCHES.join(";\n") + ";").then(
+      () => undefined,
+      (err: unknown) => {
+        schemaFailedAt = Date.now();
+        schemaReady = undefined;
+        console.error(`[db] schema patch failed (will retry): ${(err as Error).message}`);
+      },
+    );
+  }
+  return schemaReady ?? Promise.resolve();
+}
+
+/** Task counts per status for the dashboard. */
+export async function countTasksByStatus(): Promise<Record<string, number>> {
+  if (env().DB_MODE === "memory") {
+    const counts: Record<string, number> = {};
+    for (const t of memoryDb().rows("tasks")) counts[t.status as string] = (counts[t.status as string] ?? 0) + 1;
+    return counts;
+  }
+  const rows = await rawSql<{ status: string; n: number }>("select status, count(*)::int as n from tasks group by status");
+  return Object.fromEntries(rows.map((c) => [c.status, c.n]));
+}
+
 function describe(err: unknown): string {
   if (err && typeof err === "object") {
-    const e = err as { message?: string; code?: string; details?: string; hint?: string };
-    return [e.code, e.message, e.details].filter(Boolean).join(" ");
+    // `details` is left out on purpose: Postgres puts the failing row's values there.
+    const e = err as { message?: string; code?: string; hint?: string };
+    return [e.code, e.message, e.hint].filter(Boolean).join(" ");
   }
   return String(err);
 }
@@ -151,6 +206,7 @@ export async function one<T>(res: { data: T[] | null; error: unknown }): Promise
 
 /** Admin raw SQL through Insforge; used only for aggregates the query builder cannot express. */
 export async function rawSql<T = Record<string, unknown>>(query: string): Promise<T[]> {
+  if (env().DB_MODE === "memory") throw new MarketplaceError("INTERNAL_ERROR", "raw SQL is not available with DB_MODE=memory");
   const res = await fetch(`${env().INSFORGE_BASE_URL}/api/database/advance/rawsql`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env().INSFORGE_API_KEY}`, "Content-Type": "application/json" },

@@ -8,6 +8,7 @@ import {
   keypairFromSecretB64,
   open,
   openJson,
+  publicKeyFromB64,
   seal,
   sealJson,
   toB64,
@@ -56,5 +57,14 @@ describe("commitment", () => {
 
   it("canonicalises nested objects", () => {
     expect(canonicalJson({ b: [{ z: 1, a: 2 }], a: null })).toBe('{"a":null,"b":[{"a":2,"z":1}]}');
+  });
+});
+
+describe("publicKeyFromB64", () => {
+  it("accepts a 32-byte X25519 key and rejects anything else", () => {
+    const kp = generateKeypair();
+    expect(publicKeyFromB64(toB64(kp.publicKey))).toEqual(kp.publicKey);
+    expect(() => publicKeyFromB64(toB64(new Uint8Array(31)))).toThrow(/32 bytes/);
+    expect(() => publicKeyFromB64("not base64 at all!!")).toThrow(/base64/);
   });
 });

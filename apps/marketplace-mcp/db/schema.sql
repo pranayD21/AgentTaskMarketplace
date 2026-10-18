@@ -118,3 +118,14 @@ create table if not exists events (
 );
 create index if not exists events_task_idx on events(task_id);
 create index if not exists events_created_idx on events(created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Contract v0.2: per-claim runner keys. The key a claim's seller envelope was
+-- sealed to (generated inside that sandbox instance), and the seller's latest
+-- per-claim key for SellerPublic when no key is registered. The server applies
+-- these at startup too (src/db.ts ensureSchema), so older databases catch up.
+-- ---------------------------------------------------------------------------
+alter table tasks add column if not exists claim_runner_key_id text;
+alter table tasks add column if not exists claim_runner_pubkey_b64 text;
+alter table sellers add column if not exists last_claim_key_id text;
+alter table sellers add column if not exists last_claim_pubkey_b64 text;

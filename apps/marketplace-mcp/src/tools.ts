@@ -6,8 +6,10 @@
 import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import {
+  CONTRACT_VERSION,
   Envelope,
   LEASE_SECONDS,
+  MAX_PRICE_CENTS,
   MODEL_ALLOWLIST,
   MarketplaceError,
   ModelInfo,
@@ -19,6 +21,7 @@ import {
   VerdictReasonCode,
 } from "@atm/shared";
 import { requireActor, type ToolCtx } from "./auth.js";
+import { dbLabel } from "./db.js";
 import { env } from "./env.js";
 import { inkbox } from "./inkbox.js";
 import { payments } from "./payments.js";
@@ -37,7 +40,8 @@ function ok(obj: unknown): ToolResult {
 
 function fail(err: unknown): ToolResult {
   const e = err instanceof MarketplaceError ? err : new MarketplaceError("INTERNAL_ERROR", err instanceof Error ? err.message : String(err), { retryable: true });
-  if (!(err instanceof MarketplaceError)) console.error("[tool] unexpected error:", err);
+  // Name and message only: an error object can carry request bodies or row data.
+  if (!(err instanceof MarketplaceError)) console.error(`[tool] unexpected error: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`.slice(0, 500));
   return { isError: true, content: [{ type: "text", text: JSON.stringify(e.toJSON(), null, 2) }] };
 }
 
@@ -48,6 +52,11 @@ async function run(fn: () => Promise<unknown>): Promise<ToolResult> {
     return fail(err);
   }
 }
+
+const runnerKeyFields = {
+  runner_pubkey_b64: z.string().min(40).max(64).optional().describe("X25519 public key (base64 of 32 bytes) generated inside the runner sandbox."),
+  runner_key_id: z.string().min(1).max(128).optional().describe("Id for that key; default runner-<16 hex of sha256(pubkey)>."),
+};
 
 const apiKeyField = {
   api_key: z.string().optional().describe("Only if your MCP client cannot send an `Authorization: Bearer <key>` header."),
@@ -66,8 +75,10 @@ export function registerTools(server: MCPServer): void {
     async () =>
       run(async () => ({
         name: "Agent Task Marketplace",
+        contract_version: CONTRACT_VERSION,
         tagline: "Rent idle local compute from other agents. Tasks run in a sandboxed Wasm runner; a judge verifies before the seller is paid.",
-        payments: { mode: payments().mode, label: payments().label, min_cents: payments().min_cents, currency: "usd" },
+        payments: { mode: payments().mode, label: payments().label, min_cents: payments().min_cents, max_cents: MAX_PRICE_CENTS, currency: "usd" },
+        storage: dbLabel(),
         identity: { inkbox: inkbox.enabled ? "enabled: each agent gets an Inkbox identity + A2A inbox" : "disabled" },
         models: Object.entries(MODEL_ALLOWLIST).map(([model_id, m]) => ({ model_id, family: m.family, params: m.params })),
         task_states: TASK_STATUSES,
@@ -80,9 +91,9 @@ export function registerTools(server: MCPServer): void {
         ],
         how_to_sell: [
           "register_agent(kind='seller', display_name) → api_key",
-          "register_seller(models from your local Ollama, runner public key from your sandbox) → you are listed",
-          "list_open_tasks → claim_task(task_id, model_id) → returns the task encrypted to your runner key (300 s lease)",
-          "run it inside the sandbox, then submit_result(encrypted to buyer + judge, with a sha256 commitment)",
+          "register_seller(models from your local Ollama; runner key optional) → you are listed",
+          "list_open_tasks → claim_task(task_id, model_id, runner_pubkey_b64 from the sandbox instance that will run it) → the task encrypted to that key, buyer + judge public keys, a 300 s lease",
+          "run it inside the same sandbox instance, then submit_result(encrypted to buyer + judge, with a sha256 commitment)",
           "the judge approves → you are paid your ask; rejects → no payout and a strike",
         ],
         privacy:
@@ -165,7 +176,7 @@ export function registerTools(server: MCPServer): void {
   server.tool(
     {
       name: "expire_stale",
-      description: "Housekeeping any agent may call: expires listings past their deadline, reopens tasks whose seller lease lapsed, requeues stuck reviews. Safe to call often.",
+      description: "Housekeeping any agent may call: expires listings past their deadline, reopens tasks whose seller lease lapsed, requeues stuck reviews. Safe to call often. `failed` counts tasks that could not be processed this time (retried on the next call).",
       inputSchema: z.object({}),
       annotations: { idempotentHint: true },
     },
@@ -182,7 +193,7 @@ export function registerTools(server: MCPServer): void {
         prompt: z.string().min(1).max(20_000).describe("The instruction the seller's model should follow."),
         context: z.string().max(60_000).optional().describe("Optional supporting material (files, data, notes)."),
         allowed_models: z.array(z.string()).min(1).describe("Ollama model tags you accept, e.g. ['qwen3:8b','qwen2.5:7b']. See marketplace_info."),
-        max_price_cents: z.number().int().positive().describe("Most you will pay, in US cents (test mode). Stripe minimum is 50."),
+        max_price_cents: z.number().int().positive().max(MAX_PRICE_CENTS).describe(`Most you will pay, in US cents (test mode). Stripe minimum is 50; maximum ${MAX_PRICE_CENTS}.`),
         max_runtime_s: z.number().int().positive().max(1800).optional().describe("Seller execution limit; default 180."),
         expires_in_s: z.number().int().positive().max(86_400).optional().describe("How long the listing stays open; default 3600."),
         rubric: Rubric.describe("How the judge grades: contains_text (deterministic) or llm_rubric (criteria graded by the judge model)."),
@@ -261,11 +272,10 @@ export function registerTools(server: MCPServer): void {
     {
       name: "register_seller",
       description:
-        "Seller: advertise the models your local Ollama actually has (with asking prices) and the public key generated inside your sandboxed runner. Re-call whenever models change. Model digests are self-reported, not attested.",
+        "Seller: advertise the models your local Ollama actually has (with asking prices). The runner key is optional: omit it when your sandbox generates a fresh key per claim (then every claim_task must carry runner_pubkey_b64). Re-call whenever models change; it replaces the previous registration. Model digests are self-reported, not attested.",
       inputSchema: z.object({
         models: z.array(ModelInfo).min(1),
-        runner_pubkey_b64: z.string().min(40).describe("X25519 public key generated inside the runner sandbox (base64)."),
-        runner_key_id: z.string().min(1),
+        ...runnerKeyFields,
         runner_wasm_sha256: z.string().length(64).optional().describe("sha256 of the runner.wasm you loaded."),
         runtime: z.enum(["wassette", "node-unsandboxed"]).describe("node-unsandboxed is a labelled fallback; buyers can see it."),
         wassette_version: z.string().optional(),
@@ -284,14 +294,17 @@ export function registerTools(server: MCPServer): void {
   server.tool(
     {
       name: "list_open_tasks",
-      description: "Seller: OPEN tasks you are eligible for (your model is allowed and your ask fits the buyer's max). Metadata only; claim one with claim_task.",
-      inputSchema: z.object({ ...apiKeyField }),
+      description: "Seller: OPEN tasks you are eligible for (your model is allowed and your ask fits the buyer's max), oldest first. Metadata only; claim one with claim_task.",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(svc.OPEN_TASKS_MAX_LIMIT).optional().describe(`How many OPEN tasks to scan, oldest first; default ${svc.OPEN_TASKS_DEFAULT_LIMIT}.`),
+        ...apiKeyField,
+      }),
       annotations: { readOnlyHint: true },
     },
     async (p, ctx) =>
       run(async () => {
         const seller = await requireActor(ctx as ToolCtx, p, ["seller"]);
-        return svc.listOpenTasksFor(seller);
+        return svc.listOpenTasksFor(seller, p.limit);
       }),
   );
 
@@ -299,22 +312,22 @@ export function registerTools(server: MCPServer): void {
     {
       name: "claim_task",
       description:
-        "Seller: atomically claim an OPEN task. First valid claim wins. Returns claim_id, your locked price, a 300 s lease and seller_envelope: the task encrypted to your runner key. Decrypt it only inside the sandbox.",
-      inputSchema: z.object({ task_id: z.string(), model_id: z.string(), ...apiKeyField }),
+        "Seller: atomically claim an OPEN task. First valid claim wins. Pass runner_pubkey_b64 generated inside the sandbox instance that will run the task (required if you registered without a key; overrides the registered key for this claim). Returns claim_id, your locked price, a 300 s lease, seller_envelope (the task encrypted to that key) and the buyer + judge public keys to seal the result to. Decrypt only inside the sandbox.",
+      inputSchema: z.object({ task_id: z.string(), model_id: z.string(), ...runnerKeyFields, ...apiKeyField }),
       annotations: { idempotentHint: false },
     },
     async (p, ctx) =>
       run(async () => {
         const seller = await requireActor(ctx as ToolCtx, p, ["seller"]);
-        const claim = await svc.claimTask(seller, p.task_id, p.model_id);
-        return { claim, next: `Run inside the sandbox, call renew_lease every ~120 s, then submit_result before ${claim.lease_expires_at}.` };
+        const claim = await svc.claimTask(seller, p.task_id, p.model_id, { runner_pubkey_b64: p.runner_pubkey_b64, runner_key_id: p.runner_key_id });
+        return { claim, next: `Decrypt and run inside the sandbox, seal the result to claim.buyer_public_key and claim.judge_public_key, call renew_lease every ~120 s if needed, then submit_result before ${claim.lease_expires_at}.` };
       }),
   );
 
   server.tool(
     {
       name: "get_recipient_keys",
-      description: "Seller: the buyer's and the judge's public keys for your active claim. Seal the identical canonical result bytes to each before submit_result.",
+      description: "Seller: the buyer's and the judge's public keys for your active claim (claim_task already returns them). Seal the identical canonical result bytes to each before submit_result.",
       inputSchema: z.object({ task_id: z.string(), claim_id: z.string(), ...apiKeyField }),
       annotations: { readOnlyHint: true },
     },
@@ -369,7 +382,7 @@ export function registerTools(server: MCPServer): void {
     {
       name: "submit_result",
       description:
-        "Seller: deliver the result. Both envelopes must contain the same canonical result bytes: one encrypted to the buyer's key (task.buyer public key), one to the judge's key; commitment_sha256 is sha256 of those bytes. Moves the task to SUBMITTED for judging.",
+        "Seller: deliver the result. Both envelopes must contain the same canonical result bytes: one encrypted to claim.buyer_public_key, one to claim.judge_public_key; commitment_sha256 is sha256 of those bytes. Moves the task to SUBMITTED for judging.",
       inputSchema: z.object({
         task_id: z.string(),
         claim_id: z.string(),
