@@ -1,0 +1,66 @@
+{
+  "checked_at": "2026-10-18T04:13:53.777Z",
+  "source": "https://warm-cloud-4hh5i.run.mcp-use.com/api/dashboard",
+  "observer": "B",
+  "hosted_revision": "920c0525fb7f688b2c0699db83fac853d779e32b",
+  "contract": "0.3",
+  "pricing": "task_offer",
+  "job": {
+    "job_id": "job_6487101b45b433f1",
+    "status": "COMPLETE",
+    "budget_cents": 120,
+    "reserved_cents": 0,
+    "spent_cents": 120,
+    "progress": {
+      "parts": 2,
+      "approved": 2,
+      "rejected": 0,
+      "in_progress": 0,
+      "open": 0,
+      "failed_latest": 0
+    }
+  },
+  "parts": [
+    {
+      "task_id": "task_d7e2992aa0951f46",
+      "part_key": "2-part",
+      "status": "APPROVED",
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "price_cents": 60,
+      "review_status": "FINAL"
+    },
+    {
+      "task_id": "task_2e401d3bac3419a5",
+      "part_key": "1-part",
+      "status": "APPROVED",
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "price_cents": 60,
+      "review_status": "FINAL"
+    }
+  ],
+  "settlements": [
+    {
+      "task_id": "task_d7e2992aa0951f46",
+      "kind": "STRIPE_TEST",
+      "state": "RECORDED",
+      "payout_owed_cents": 60,
+      "payout_transferred_cents": 60,
+      "transfer_state": "TRANSFERRED",
+      "finalized_at": "2026-10-18T04:07:57.48+00:00"
+    },
+    {
+      "task_id": "task_2e401d3bac3419a5",
+      "kind": "STRIPE_TEST",
+      "state": "RECORDED",
+      "payout_owed_cents": 60,
+      "payout_transferred_cents": 60,
+      "transfer_state": "TRANSFERRED",
+      "finalized_at": "2026-10-18T04:07:05.88+00:00"
+    }
+  ],
+  "limits": [
+    "B read public metadata only; private commitment/result verification belongs to C",
+    "C created the prepared parts; this is separate from B automatic decomposition",
+    "No purchase or model call by this observation"
+  ]
+}

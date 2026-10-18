@@ -4,15 +4,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { JobError, planJob, saveJob, loadJob, runJob, collectJob, taskOfferFields } from "../skills/marketplace/scripts/job.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const help = `Agent Task Marketplace buyer (Node >=22.22)
-  info | sellers | tools                  Public discovery; no registration
+  info | sellers | prices | tools                  Public discovery; no registration
   whoami | tasks                         Register once, reuse buyer identity
   post <prompt> --expect <text>           Case-insensitive substring rubric
   post --prompt-file <file> --criteria <text>
   task <id> | result <id> | cancel <id>    Inspect, read result, cancel OPEN task
   wait <id> [--timeout 180]               Poll every 3s until terminal/timeout
-Post flags: --models qwen3:8b --max 100 --max-tokens 400
+  job-plan <input.json> --name <name> --parts 2 --budget 200
+  job-run <name> [--timeout 180]          Post/resume saved parts once
+  job-status <name> | job-result <name>   Safe progress / private aggregate
+Post flags: --models qwen3:8b --price 100 --max-tokens 400
             --context <text> | --context-file <file>
             --runtime 180 --expires 3600
 Use exactly one of --expect or --criteria. Amounts are integer US cents.
@@ -46,9 +50,9 @@ export function parseCommand(argv) {
   const [command, ...rest] = argv;
   if (!command || ["--help", "help", "-h"].includes(command))
     return { command: "help" };
-  const noArgs = ["info", "sellers", "tools", "whoami", "tasks"];
+  const noArgs = ["info", "sellers", "prices", "tools", "whoami", "tasks"];
   if (
-    ![...noArgs, "post", "task", "result", "cancel", "wait"].includes(command)
+    ![...noArgs, "post", "task", "result", "cancel", "wait", "job-plan", "job-run", "job-status", "job-result"].includes(command)
   )
     invalid("Unknown command.");
   const values = {},
@@ -63,13 +67,14 @@ export function parseCommand(argv) {
           "criteria",
           "models",
           "max",
+          "price",
           "max-tokens",
           "runtime",
           "expires",
         ]
-      : command === "wait"
+      : command === "wait" || command === "job-run"
         ? ["timeout"]
-        : [];
+        : command === "job-plan" ? ["name", "parts", "budget"] : [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (!arg.startsWith("--")) {
@@ -89,6 +94,15 @@ export function parseCommand(argv) {
   if (noArgs.includes(command)) {
     if (positionals.length) invalid(`${command} takes no arguments.`);
     return { command };
+  }
+  if (command.startsWith("job-")) {
+    if (positionals.length !== 1) invalid("Supply exactly one job name or input file.");
+    const name = command === "job-plan" ? values.name : positionals[0];
+    if (!name || !/^[A-Za-z0-9_-]{1,48}$/.test(name)) invalid("Use a job name of 1–48 letters, digits, dashes or underscores.");
+    return { command, name, input: command === "job-plan" ? positionals[0] : undefined,
+      parts: integer(values.parts ?? 2, "--parts", 2, 20),
+      budget: command === "job-plan" ? integer(values.budget, "--budget", 2, 100000) : undefined,
+      timeout: integer(values.timeout ?? 180, "--timeout", 1, 3600) };
   }
   if (command !== "post") {
     if (positionals.length !== 1 || !positionals[0].trim())
@@ -123,13 +137,14 @@ export function parseCommand(argv) {
     ...new Set((values.models ?? "qwen3:8b").split(",").map((v) => v.trim())),
   ];
   if (models.some((v) => !v)) invalid("Model IDs cannot be blank.");
+  if (values.max && values.price && Number(values.max) !== Number(values.price)) invalid("--max is a deprecated alias and must equal --price.");
   return {
     command,
     args: {
       prompt,
       ...(context !== undefined ? { context } : {}),
       allowed_models: models,
-      max_price_cents: integer(values.max ?? 100, "--max", 1, 100000),
+      price_cents: integer(values.price ?? values.max ?? 100, "--price", 1, 100000),
       max_tokens: integer(values["max-tokens"] ?? 400, "--max-tokens", 1, 4096),
       max_runtime_s: integer(values.runtime ?? 180, "--runtime", 1, 1800),
       expires_in_s: integer(values.expires ?? 3600, "--expires", 1, 86400),
@@ -334,6 +349,7 @@ export function privateResult(data) {
     task: data.task,
     result,
     verdict: data.verdict,
+    replacement_status: data.replacement_status ?? data.task?.replacement_status ?? null,
     replacement_answer: data.replacement_answer,
     ...(sellerAnswerWithheld ? { seller_answer_withheld: true } : {}),
     settlement: data.settlement,
@@ -354,10 +370,19 @@ export async function main(argv = process.argv.slice(2)) {
   const statePath = path.resolve(
     process.env.ATM_BUYER_STATE ?? path.join(root, ".atm-state/buyer.json"),
   );
-  const isPublic = ["info", "sellers", "tools"].includes(parsed.command);
+  const jobFile = parsed.name ? path.join(process.env.ATM_JOB_DIR ?? path.join(root, ".atm-state/jobs"), `${parsed.name}.json`) : null;
+  if (parsed.command === "job-plan") {
+    if (fs.existsSync(jobFile)) invalid("Job name already exists; resume it instead of overwriting its request keys.");
+    const state = planJob(JSON.parse(fs.readFileSync(parsed.input, "utf8")), { endpoint, parts: parsed.parts, budget: parsed.budget });
+    saveJob(jobFile, state, { createOnly: true });
+    console.log(JSON.stringify({ status: "PLANNED", name: parsed.name, parts: state.plan.parts.length, budget_cents: state.plan.budget_cents, offers_cents: state.plan.parts.map(part => part.offer_cents) }));
+    return;
+  }
+  const isPublic = ["info", "sellers", "prices", "tools"].includes(parsed.command);
   let key = isPublic
     ? undefined
     : (process.env.ATM_API_KEY ?? readIdentity(statePath, endpoint)?.api_key);
+  if (parsed.command.startsWith("job-") && !key) throw new JobError("JOB_BUYER_REQUIRED", "Jobs require an existing authorized buyer.", "Use the original buyer credential; registration is never automatic for jobs.");
   let client = createClient(endpoint, key);
   await client.initialize();
   if (!isPublic && !key) {
@@ -387,12 +412,22 @@ export async function main(argv = process.argv.slice(2)) {
   const simple = {
     info: "marketplace_info",
     sellers: "list_sellers",
+    prices: "market_price_observations",
     whoami: "whoami",
     tasks: "list_my_tasks",
     task: "get_task",
     cancel: "cancel_task",
   };
-  if (parsed.command === "tools")
+  if (parsed.command.startsWith("job-")) {
+    const state = loadJob(jobFile);
+    if (state.plan.endpoint !== endpoint) throw new JobError("JOB_ENDPOINT_MISMATCH", "Job belongs to a different marketplace.");
+    if (state.buyer_id && (await client.tool("whoami")).agent_id !== state.buyer_id) throw new JobError("JOB_BUYER_CHANGED", "Use the original buyer for this job.");
+    const result = parsed.command === "job-run"
+      ? await runJob(jobFile, client, endpoint, { timeoutSeconds: parsed.timeout, postFields: taskOfferFields })
+      : await collectJob(state, client);
+    const { records, ...metadata } = result;
+    out(parsed.command === "job-result" ? result : metadata);
+  } else if (parsed.command === "tools")
     out(
       (await client.tools()).tools.map((t) => ({
         name: t.name,
@@ -403,9 +438,9 @@ export async function main(argv = process.argv.slice(2)) {
     out(await client.tool(simple[parsed.command], parsed.args));
   else if (parsed.command === "post") {
     const info = await client.tool("marketplace_info");
-    if (parsed.args.max_price_cents < info.payments.min_cents)
+    if (parsed.args.price_cents < info.payments.min_cents)
       invalid(
-        `--max must be at least ${info.payments.min_cents} cents in ${info.payments.mode} mode.`,
+        `--price must be at least ${info.payments.min_cents} cents in ${info.payments.mode} mode.`,
       );
     if (
       parsed.args.allowed_models.some(
@@ -415,6 +450,7 @@ export async function main(argv = process.argv.slice(2)) {
       invalid(
         "A requested model is not allowlisted. Run info and sellers to choose an exact model ID.",
       );
+    taskOfferFields(parsed.args.price_cents, info);
     out(await client.tool("post_task", parsed.args));
   } else if (parsed.command === "result")
     out(privateResult(await client.tool("get_result", parsed.args)));
@@ -451,7 +487,7 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   main().catch((error) => {
-    const known = error instanceof BuyerError;
+    const known = error instanceof BuyerError || error instanceof JobError;
     console.error(
       JSON.stringify(
         {

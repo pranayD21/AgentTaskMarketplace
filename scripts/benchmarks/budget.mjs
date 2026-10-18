@@ -20,12 +20,21 @@ export function lock(file) {
   fs.writeFileSync(fd, String(process.pid));
   return () => { fs.closeSync(fd); fs.unlinkSync(file); };
 }
+function validateLedger(ledger) {
+  if (ledger.schema !== 'atm-api-budget/v1' || !Number.isSafeInteger(ledger.cap_microusd) || ledger.cap_microusd < 0 || ledger.cap_microusd > 5_000_000 ||
+      !ledger.entries || typeof ledger.entries !== 'object' || Array.isArray(ledger.entries) ||
+      Object.values(ledger.entries).some(entry => !entry || !['reserved','settled'].includes(entry.state) || !Number.isSafeInteger(entry.booked_microusd) || entry.booked_microusd < 0)) {
+    throw new Error('API ledger is invalid; reconcile it before any additional call');
+  }
+  if (Object.values(ledger.entries).reduce((sum,entry)=>sum+entry.booked_microusd,0) > ledger.cap_microusd) throw new Error('Existing API ledger exceeds its cap; stop and reconcile');
+}
 export function reserve(file, attemptId, worstMicrousd, limitMicrousd = 5_000_000) {
   if (!Number.isSafeInteger(limitMicrousd) || limitMicrousd < 0 || limitMicrousd > 5_000_000) throw new Error('External API cap cannot exceed the authorized $5 total');
   if (!Number.isSafeInteger(worstMicrousd) || worstMicrousd <= 0) throw new Error('Invalid API reservation');
   const release = lock(`${file}.lock`);
   try {
     const ledger = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { schema: 'atm-api-budget/v1', cap_microusd: limitMicrousd, entries: {} };
+    validateLedger(ledger);
     if (ledger.cap_microusd !== limitMicrousd) throw new Error('Existing API ledger cap differs; do not silently change authorization');
     if (ledger.entries[attemptId]) throw new Error('API attempt already reserved; reconcile before any retry');
     const booked = Object.values(ledger.entries).reduce((sum, entry) => sum + entry.booked_microusd, 0);
@@ -39,6 +48,7 @@ export function settle(file, attemptId, actualMicrousd) {
   const release = lock(`${file}.lock`);
   try {
     const ledger = JSON.parse(fs.readFileSync(file, 'utf8'));
+    validateLedger(ledger);
     const entry = ledger.entries[attemptId];
     if (!entry || entry.state !== 'reserved') throw new Error('API reservation is missing or already settled');
     if (actualMicrousd > entry.booked_microusd) throw new Error('Reported API cost exceeds conservative reservation; stop and reconcile');

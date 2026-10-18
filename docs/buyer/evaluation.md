@@ -1,5 +1,7 @@
 # Buyer agent evaluation cases
 
+**Fixture reset, 04:40 UTC:** E reports a human-requested reset of shared task/result/settlement history and buyer spent/reserved counters, with identities and caps retained (E-B-20261018T044037Z-01). The runs below describe pre-reset evidence; their task IDs no longer resolve on the live server. The recorded 25-cent remaining balance is historical. Recheck the original Armature buyer and obtain an explicit fixture allocation before any new evaluation purchase; a reset does not authorize duplicating the accepted run or spending additional provider budget.
+
 The hosted MCP endpoint is [https://warm-cloud-4hh5i.run.mcp-use.com/mcp](https://warm-cloud-4hh5i.run.mcp-use.com/mcp). B verified contract 0.2, all 21 tools, Insforge Postgres, Stripe test card mode, and authenticated reads of the existing approved buyer tasks. Public hosting is ready.
 
 C completed three targeted cases in the team's Armature session: accepted task, insufficient cap, and simulated missing-task-ID recovery. Each scored **5/5 across three criteria**. There were four runs because the recovery fixture description was corrected and rerun; this is three scenarios, not five cases or a broad benchmark. B independently checked the accepted task's public state, verdict, and settlement; authenticated balance checks, commitment verification, and tool traces are reported by C. See [C's redacted report](../ARMATURE-RESULTS.md) and [B's verification](verification.md).

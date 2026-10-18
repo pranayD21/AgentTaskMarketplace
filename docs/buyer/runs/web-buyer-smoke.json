@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-10-18T04:44:00.516Z",
+  "mode": "MEMORY/MOCK",
+  "runtime": "node-unsandboxed",
+  "model": "deterministic synthetic fixture",
+  "task_id": "task_172ce14077682f17",
+  "task_count": 1,
+  "status": "APPROVED",
+  "commitment_verified": true,
+  "answer_withheld_until_approved": true,
+  "duplicate_submit_same_task": true,
+  "buyer_spent_mock_cents": 100,
+  "buyer_reserved_mock_cents": 0,
+  "api_calls": 0,
+  "api_reservation_released": true
+}

@@ -121,6 +121,27 @@ describe("public dashboard boundary", () => {
     ])
       expect(html).toContain(visible);
   });
+  it("groups parts without private labels, and distinguishes owed money and pending replacement", () => {
+    const raw = fixture();
+    const data = Dashboard.parse({ ...raw,
+      tasks: [{...raw.tasks[0], job_id:"job_synthetic",part_key:"part-1",part_label:privateMarker,attempt:1,
+        replacement_status:"PENDING", review:{status:"RETRY_PENDING",attempts:2,retry_at:stamp}}],
+      jobs:[{job_id:"job_synthetic",buyer_id:"buyer_synthetic",label_public:privateMarker,budget_cents:120,reserved_cents:60,spent_cents:60,status:"IN_PROGRESS",created_at:stamp,
+        progress:{parts:2,approved:1,rejected:0,in_progress:1,open:0,failed_latest:0}}],
+      settlements:[{...raw.settlements[0],state:"RECORDED",finalized_at:stamp,payout_owed_cents:60,payout_transferred_cents:0,transfer_state:"PENDING",transfer_retry_at:stamp}],
+    });
+    expect(JSON.stringify(data)).not.toContain(privateMarker);
+    const html=renderToStaticMarkup(<DashboardView data={data} now={Date.parse(stamp)} filter="ALL" search="" />);
+    for(const value of ["job_synthetic","part-1","1 / 2 approved","Seller / computer:","Replacement PENDING","Review RETRY_PENDING","owed, not paid","Buyer settlement final","Transferred","$0.00","Only 1 parts"]) expect(html).toContain(value);
+    expect(html).not.toContain("Seller transfer confirmed");
+    expect(html).not.toContain("Replacement DELIVERED");
+    expect(html).not.toContain(privateMarker);
+  });
+  it("does not turn an old onboarding note into a pending transfer after confirmation", () => {
+    const raw=fixture(); const data=Dashboard.parse({...raw,settlements:[{...raw.settlements[0],transfer_state:"TRANSFERRED",payout_owed_cents:75,payout_transferred_cents:75,finalized_at:stamp}]});
+    const html=renderToStaticMarkup(<DashboardView data={data} now={Date.parse(stamp)} filter="ALL" search="" />);
+    expect(html).toContain("Seller transfer confirmed");expect(html).not.toContain("PENDING_ONBOARDING");
+  });
   it("labels simulated payments and sandbox runtime", () => {
     const raw = fixture();
     raw.payments.mode = "mock";

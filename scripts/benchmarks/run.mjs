@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createClient, normalizeEndpoint, readIdentity } from '../buyer.mjs';
 import { lock, reserve, settle, writeAtomic, writeTextAtomic } from './budget.mjs';
+import { taskOfferFields } from '../../skills/marketplace/scripts/job.mjs';
 import { VERSION, SYSTEM, MODEL, LOCAL_MODEL, MAX_TOKENS, TEMPERATURE, RATE, hash, order, grade, summarize, usageRecords } from './workloads.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -89,13 +90,16 @@ try {
       runBudget = Number(values['marketplace-budget-cents']);
       judgeReservation = Math.ceil(Number(values['judge-reservation-usd']) * 1e6);
       if (!Number.isSafeInteger(runBudget) || runBudget < samples.length * 100 ||
-          !Number.isSafeInteger(judgeReservation) || judgeReservation <= 0) throw new Error('Specify an authorized test-cent budget and D-reviewed worst-case judge API reservation');
+          !Number.isSafeInteger(judgeReservation) || judgeReservation < 2_200_000) throw new Error('Specify an authorized test-cent budget and at least the D-reviewed $2.20 worst-case judge API reservation');
+      if (samples.some(({item}) => Buffer.byteLength(item.prompt, 'utf8') > 2500)) throw new Error('Synthetic prompt exceeds the reviewed judge input bound');
       client = createClient(endpoint, key); await client.initialize();
       const info = await client.tool('marketplace_info');
+      taskOfferFields(100, info);
       if (info.payments.mode !== 'card') throw new Error('This benchmark protocol currently requires Stripe TEST card mode');
       const who = await client.tool('whoami');
       const remaining = samples.length - report.records.filter(row => row.task_id).length;
       if (who.spend.available_cents < remaining * 100) throw new Error('Existing buyer lacks the required remaining capacity; no cap/identity change allowed');
+      report.judge_reservation_usd = judgeReservation / 1e6;
       report.buyer_id = who.agent_id ?? who.agent?.agent_id ?? null;
       report.marketplace = endpoint; report.marketplace_budget_cents = runBudget;
     }
@@ -142,9 +146,10 @@ try {
           if (!row.task_id) {
             reserve(budgetPath, attemptId, judgeReservation);
             const posted = await client.tool('post_task', { prompt: item.prompt, allowed_models: [LOCAL_MODEL],
-              max_price_cents: 100, max_tokens: MAX_TOKENS, max_runtime_s: 180, expires_in_s: 600,
+              price_cents: 100, max_tokens: MAX_TOKENS, max_runtime_s: 180, expires_in_s: 600,
               rubric: { kind: 'contains_text', expected_text: Object.keys(item.expected)[0] } });
-            row.task_id = posted.task.task_id; save();
+            row.task_id = posted.task.task_id; row.posted_offer_cents = 100; save();
+            console.log(JSON.stringify({event:'posted',sample:sampleId,task_id:row.task_id,offer_cents:100}));
           }
           let task;
           const deadline = Date.now() + 240000;
@@ -165,6 +170,14 @@ try {
           row.seller_runtime_ms = result.result.runtime_ms ?? null;
           row.stripe_test_charge_cents = result.settlement?.seller_payout_cents ?? null;
           row.stripe_test_refund_cents = result.settlement?.buyer_refund_cents ?? null;
+          row.payment = { kind: result.settlement?.kind ?? null, state: result.task.payment.state,
+            posted_offer_cents: 100, agreed_price_cents: result.task.price_cents,
+            payout_owed_cents: result.settlement?.payout_owed_cents ?? null,
+            payout_transferred_cents: result.settlement?.payout_transferred_cents ?? null,
+            transfer_state: result.settlement?.transfer_state ?? null, finalized_at: result.settlement?.finalized_at ?? null,
+            hypothetical_live_card_fee_usd: result.task.payment.state === 'CAPTURED' && Number.isFinite(row.stripe_test_charge_cents)
+              ? Math.round((row.stripe_test_charge_cents / 100 * 0.029 + 0.30)*1e6)/1e6 : null };
+
           // This protocol uses contains_text. Approval takes the deterministic judge path:
           // no grading/replacement provider call. This is not total system cost.
           settle(budgetPath, attemptId, 0); row.judge_external_cost_microusd = 0;

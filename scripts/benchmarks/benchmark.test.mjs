@@ -33,3 +33,11 @@ test('summary counts quality failures, preserves unknown costs, and uses nearest
   assert.equal(summary.success_rate, 0.75); assert.equal(summary.p50_latency_ms, 20); assert.equal(summary.p95_latency_ms, 40);
   assert.equal(summary.known_provider_cost_usd, null); assert.equal(summary.total_system_cost_usd, null);
 });
+test('a corrupted persisted ledger cannot create more API allowance', () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'atm-budget-invalid-'));const file=path.join(directory,'budget.json');
+  try {
+    fs.writeFileSync(file,JSON.stringify({schema:'atm-api-budget/v1',cap_microusd:5_000_000,entries:{old:{state:'reserved',booked_microusd:-100}}}));
+    assert.throws(()=>reserve(file,'new',100),/invalid/);
+    assert.throws(()=>settle(file,'old',0),/invalid/);
+  } finally {fs.rmSync(directory,{recursive:true,force:true});}
+});

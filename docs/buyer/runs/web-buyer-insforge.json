@@ -1,0 +1,22 @@
+{
+  "checked_at": "2026-10-18T05:00:03.032Z",
+  "source": "B direct read from Insforge tasks table",
+  "hosted_storage": "Insforge Postgres",
+  "task": {
+    "id": "task_0b688c85f6f5b867",
+    "buyer_id": "buyer_28d01ff7ef3b192a",
+    "status": "APPROVED",
+    "allowed_models": ["qwen3:8b"],
+    "price_cents": 50,
+    "max_runtime_s": 180,
+    "created_at": "2026-10-18T04:52:17.043+00:00",
+    "client_request_id": "web-07384204-6403-44a0-8d21-becd9fbbfa1e",
+    "post_state": "READY"
+  },
+  "checks": {
+    "existing_buyer_matches": true,
+    "submitted_request_matches": true
+  },
+  "new_purchases": 0,
+  "private_fields_selected": false
+}

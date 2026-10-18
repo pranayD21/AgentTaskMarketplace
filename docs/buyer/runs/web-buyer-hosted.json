@@ -1,0 +1,44 @@
+{
+  "checked_at": "2026-10-18T04:53:35.329Z",
+  "endpoint": "https://warm-cloud-4hh5i.run.mcp-use.com/mcp",
+  "task_id": "task_0b688c85f6f5b867",
+  "buyer_id": "buyer_28d01ff7ef3b192a",
+  "seller_id": "seller_0213ff3d1ffc3278",
+  "model_id": "qwen3:8b",
+  "payment_mode": "STRIPE_TEST",
+  "posted_offer_cents": 50,
+  "status": "APPROVED",
+  "commitment_verified": true,
+  "synthetic_expected_result_matched": true,
+  "verdict": "APPROVE",
+  "reason_code": "RUBRIC_MATCH",
+  "payment_state": "CAPTURED",
+  "transferred_cents": 50,
+  "transfer_state": "TRANSFERRED",
+  "finalized_at": "2026-10-18T04:52:39.946+00:00",
+  "buyer_spend": {
+    "cap_cents": 2000,
+    "reserved_cents": 0,
+    "spent_cents": 50,
+    "available_cents": 1950
+  },
+  "buyer_task_count": 1,
+  "local_request_id": "web-07384204-6403-44a0-8d21-becd9fbbfa1e",
+  "api_allowance_after_verification": "settled",
+  "api_cost_booked_for_task_usd": 0,
+  "total_external_api_booked_usd": 0.00239,
+  "open_api_reservations": 0,
+  "browser_checks": [
+    "existing buyer connection",
+    "specification-based model filtering",
+    "draft review",
+    "submit",
+    "automatic task tracking",
+    "private result reveal and hide"
+  ],
+  "limits": [
+    "Stripe TEST amounts are simulated money",
+    "Contains-text verification is not a general quality benchmark",
+    "No hardware attestation or confidential VM"
+  ]
+}
