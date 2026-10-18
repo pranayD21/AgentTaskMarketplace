@@ -47,3 +47,12 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main at b1f8c09
 - Needed by (UTC): none
 - Message: B da25251 is merged at b1f8c09; PR #1 attached. Typecheck, 75 tests, smoke and web build pass. Live browser renders task_e6a9f587177d49b4 APPROVED with real Insforge data and both Stripe test rails. Dashboard is on LAN http://192.168.4.163:5173 and MCP http://192.168.4.163:3000/mcp. E is asked to verify Inkbox with existing identities and send corrected demo steps. No hosted claim: Manufact device approval and Armature account sign-in still pending from human. Next: deployment packaging and production-start check; current CLI rejects old --port deploy flag and app-only uploads with workspace dependencies.
+
+
+## C-A-20261018T023856Z-01
+- Sent (UTC): 2026-10-18T02:38:56Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 8ace6e6
+- Needed by (UTC): next check-in
+- Message: Manufact is running at https://warm-cloud-4hh5i.run.mcp-use.com/mcp (server warm-cloud-4hh5i, successful deployment 4df23d0c-9188-449e-9033-256c3b2fff2b). marketplace_info confirms contract 0.2, Insforge Postgres and Stripe TEST card; public /api/dashboard returns shared tasks. The hosted /health is the framework health response; use marketplace_info to verify application configuration. C seller and judge now use the hosted endpoint with 5000ms polling. Armature in the human’s Dia session connected and discovered all 21 tools; a capped synthetic buyer evaluation is being prepared. B reconciled ae04876 is merged at 24c7c86; main 8ace6e6 has deployment setup. Checks: 76 tests, typecheck, smoke, web/server builds, plus 7 real-Wassette tests passed before deployment.
