@@ -65,8 +65,8 @@ describe("reconcileSellerTransfer (P2)", () => {
     const a0 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 0 });
     const a1 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 1 });
     const a2 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 2 });
-    expect(a0).toMatchObject({ transfer_id: null, state: "FAILED" });
-    expect(a1).toMatchObject({ transfer_id: null, state: "FAILED" });
+    expect(a0).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR" });
+    expect(a1).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR" });
     expect(a2).toMatchObject({ transfer_id: "tr_1", state: "TRANSFERRED" });
     expect(created).toHaveLength(1);
     expect(created[0]!.key).toBe(transferIdempotencyKey("task_1", 2));
@@ -76,14 +76,14 @@ describe("reconcileSellerTransfer (P2)", () => {
   it("keeps the explicit pending fallback when the account cannot receive transfers", async () => {
     const { stripe, created } = fakeStripe({ active: false });
     const out = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 1, poll: { attempts: 1, delayMs: 1 } });
-    expect(out.state).toBe("PENDING_ONBOARDING");
+    expect(out).toMatchObject({ state: "PENDING", pending_reason: "PENDING_ONBOARDING" });
     expect(out.note).toContain("PENDING_ONBOARDING");
     expect(created).toHaveLength(0);
   });
   it("reports nothing owed and no account without touching Stripe", async () => {
     const { stripe, created } = fakeStripe();
     expect((await reconcileSellerTransfer(stripe, task, seller, 0, "ch_1")).state).toBe("NOT_APPLICABLE");
-    expect((await reconcileSellerTransfer(stripe, task, null, 75, "ch_1")).state).toBe("PENDING_ONBOARDING");
+    expect(await reconcileSellerTransfer(stripe, task, null, 75, "ch_1")).toMatchObject({ state: "PENDING", pending_reason: "PENDING_ONBOARDING" });
     expect(created).toHaveLength(0);
   });
 });
@@ -115,12 +115,11 @@ describe("MockProvider fault injection", () => {
     const p = payments();
     await p.hold({ id: "task_m", max_price_cents: 100 }, buyer);
     const cap = await p.capture(mtask, seller, 75);
-    expect(cap).toMatchObject({ stripe_transfer_id: null, owed_cents: 75, transferred_cents: 0, transfer_state: "FAILED" });
-    const settlement = { seller_payout_cents: 75, stripe_capture_id: cap.stripe_capture_id, stripe_transfer_id: null };
-    expect((await p.retryTransfer(mtask, seller, settlement, 1)).state).toBe("FAILED");
-    const ok = await p.retryTransfer(mtask, seller, settlement, 2);
+    expect(cap).toMatchObject({ stripe_transfer_id: null, owed_cents: 75, transferred_cents: 0, transfer_state: "PENDING", pending_reason: "PROVIDER_ERROR" });
+    expect((await p.retryTransfer(mtask, seller, 75, { attempt: 1 })).state).toBe("PENDING");
+    const ok = await p.retryTransfer(mtask, seller, 75, { attempt: 2 });
     expect(ok).toMatchObject({ transfer_id: "mock_tr_task_m", state: "TRANSFERRED" });
-    const again = await p.retryTransfer(mtask, seller, { ...settlement, stripe_transfer_id: ok.transfer_id }, 3);
+    const again = await p.retryTransfer(mtask, seller, 75, { attempt: 3, known_transfer_id: ok.transfer_id });
     expect(again.transfer_id).toBe("mock_tr_task_m");
     expect(mockLedgerFor("task_m")).toMatchObject({ captured: 75, transferred: 75, transfer_id: "mock_tr_task_m" });
     expect((await p.inspect(mtask)).transfer_ids).toEqual(["mock_tr_task_m"]);

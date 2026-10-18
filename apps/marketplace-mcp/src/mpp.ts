@@ -36,7 +36,7 @@ import {
   type MoneyState,
   type PaymentProvider,
   type ReleaseResult,
-  type SettlementView,
+  type RetryTransferOptions,
   type TransferOutcome,
 } from "./payments.js";
 
@@ -106,6 +106,7 @@ export class StripeMppProvider implements PaymentProvider {
       owed_cents: amountCents,
       transferred_cents: transfer.transfer_id ? amountCents : 0,
       transfer_state: transfer.state,
+      pending_reason: transfer.pending_reason,
       note,
     };
   }
@@ -116,8 +117,15 @@ export class StripeMppProvider implements PaymentProvider {
     return compensateStripeHold(this.stripe, task, hold, reason);
   }
 
-  retryTransfer(task: TaskRow, seller: AgentRow | null, settlement: SettlementView, attempt: number): Promise<TransferOutcome> {
-    return reconcileSellerTransfer(this.stripe, task, seller, settlement.seller_payout_cents, settlement.stripe_capture_id, { attempt, known_transfer_id: settlement.stripe_transfer_id });
+  async retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts: RetryTransferOptions = {}): Promise<TransferOutcome> {
+    let chargeId: string | null = null;
+    if (task.stripe_payment_intent_id) {
+      try {
+        const pi = await this.stripe.paymentIntents.retrieve(task.stripe_payment_intent_id);
+        chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id ?? null;
+      } catch { /* transfer without source_transaction */ }
+    }
+    return reconcileSellerTransfer(this.stripe, task, seller, amountCents, chargeId, opts);
   }
 
   inspect(task: TaskRow): Promise<MoneyState> {
