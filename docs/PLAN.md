@@ -25,7 +25,7 @@ This is the full plan the team approved at ~17:15 PDT on Oct 17 and is executing
 - Replace the earlier five-computer Python/FastAPI plan entirely with one TypeScript build.
 - Payments: **Stripe test mode** (not x402 / on-chain).
 - Identity + messaging: **Inkbox** (not Primitive).
-- **Both the seller worker and the judge run inside confidential, sandboxed VMs** (Wassette / Wasmtime components). Blaxel not used.
+- **Seller and judge workers run inside sandboxed Wasm components** (Wassette / Wasmtime). The original confidentiality goal needs the later TEE design; this implementation does not hide inference from the machine owner. Blaxel is not used.
 - Database: **Insforge**. Local model: **Ollama qwen3:8b** (M4 Pro, 24 GB).
 - Buyer agent for the demo: **Claude Code** (Codex also configured).
 
@@ -59,7 +59,7 @@ Buyer agent (Claude Code / Codex)                         Seller Mac (idle compu
 - **Sandboxed:** seller and judge logic run as Wasm components under Wassette (Wasmtime, deny-by-default). Seller grant: outbound HTTP to `localhost:11434` (and, after the fix in §5, the marketplace host). Judge grant: `api.anthropic.com` (+ marketplace host) and two secrets. The component cannot read the seller's files, other hosts, or env. We demo a denied request live.
 - **Protected from the seller's daemon, not from the machine owner** (corrected 20:50 PDT; see SECURITY.md and X1 in COMPLETION-AUDIT.md): the runner generates an X25519 keypair *inside* the sandbox; the marketplace encrypts the task to that key; the result is encrypted to buyer + judge inside the sandbox. The daemon only ever moves ciphertext. Honest caveat we say out loud: inference tokens cross into Ollama on the host GPU, and a host with a debugger can dump memory — that is exactly where a GPU TEE slots in; the Wasm boundary covers everything else. We do **not** call it a TEE.
 - **Buyer trusts the marketplace** (like Fiverr), not the random seller. Server-side encryption; plaintext is held encrypted-at-rest under a server KEK only until a result is submitted, then deleted. True buyer-side E2E (a local proxy that encrypts before the server sees anything) is a stretch goal.
-- **Model proof:** daemon reports `GET /api/tags` names + digests; marketplace allowlist pins `model_id`; a liveness canary was planned but is **not built**; the runner only checks the model is listed before running. We call it "self-reported", not attestation.
+- **Model proof:** daemon reports `GET /api/tags` names + digests; marketplace allowlist pins `model_id`; an optional bounded liveness canary is built and records usage, timing and hardware. It checks a model response but does not attest model identity. We call it "self-reported", not attestation.
 
 ### Repo layout (pnpm monorepo, TypeScript, Node ≥ 22.22)
 
@@ -86,14 +86,14 @@ AgentTaskMarketplace/
 | table | key columns |
 |---|---|
 | `agents` | `id`, `kind` (buyer/seller/judge), `display_name`, `api_key_hash`, `inkbox_handle`, `inkbox_identity_id`, `buyer_pubkey_b64`, `buyer_key_id`, `buyer_secret_enc` (KEK-encrypted), `stripe_customer_id`, `stripe_payment_method_id`, `stripe_account_id`, `spend_cap_cents`, `reserved_cents`, `spent_cents` |
-| `sellers` | `agent_id`, `status` (ACTIVE/SUSPENDED), `models` jsonb `[{model_id, digest, ask_cents}]`, `runner_pubkey_b64`, `runner_key_id`, `runner_wasm_sha256`, `runtime` (wassette / node-unsandboxed), `wassette_version`, `approvals`, `rejections`, `strikes`, `last_seen` |
+| `sellers` | `agent_id`, `status` (ACTIVE/SUSPENDED), `models` jsonb `[{model_id, digest}]` (deprecated ask ignored), `runner_pubkey_b64`, `runner_key_id`, `runner_wasm_sha256`, `runtime` (wassette / node-unsandboxed), `wassette_version`, `approvals`, `rejections`, `strikes`, `last_seen` |
 | `tasks` | `id`, `buyer_id`, `allowed_models text[]`, `max_price_cents`, `max_runtime_s`, `status`, `expires_at`, `plaintext_enc_server` (KEK; null after SUBMITTED), `payload_enc_judge`, `payload_enc_seller`, `claim_id`, `seller_id`, `model_id`, `price_cents`, `lease_expires_at`, `claim_count`, `judge_id`, `payment_mode`, `payment_state`, `stripe_payment_intent_id`, `payment_link`, `inkbox_context_id` |
 | `results` | `id`, `task_id`, `claim_id`, `seller_id`, `model_id`, `result_enc_buyer`, `result_enc_judge`, `commitment_sha256`, `runtime_ms`, `tokens_out` |
 | `verdicts` | `id`, `task_id`, `result_id`, `judge_id`, `verdict`, `reason_code`, `reason_public`, `score`, `replacement_enc_buyer` |
 | `settlements` | `id`, `task_id` (unique), `kind` (STRIPE_TEST / MOCK), `state`, `seller_payout_cents`, `buyer_refund_cents`, `stripe_capture_id`, `stripe_transfer_id`, `note` |
 | `events` | `id`, `task_id`, `agent_id`, `type`, `meta` — dashboard timeline (never plaintext) |
 
-**Task states:** `[AWAITING_PAYMENT →] OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED | REJECTED`, plus `EXPIRED`, `CANCELLED` (`AWAITING_PAYMENT` only in MPP payment mode; `CLAIMED` exists in the enum but `claim_task` moves straight to `PAYLOAD_READY` because the envelope is produced in the same atomic update). Lease 300 s, renewable; expiry reopens the task and invalidates the seller envelope. Claim = one `UPDATE … WHERE id=? AND status='OPEN'` → exactly one winner.
+**Task states:** `[AWAITING_PAYMENT →] OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED | REJECTED`, plus `EXPIRED`, `CANCELLED` (`AWAITING_PAYMENT` during durable posting and while MPP awaits payment; `CLAIMED` exists in the enum but `claim_task` moves straight to `PAYLOAD_READY` because the envelope is produced in the same atomic update). Lease 300 s, renewable; expiry reopens the task and invalidates the seller envelope. Claim = one `UPDATE … WHERE id=? AND status='OPEN'` → exactly one winner.
 
 ## 4. Payments — Stripe test mode (`PAYMENT_MODE=card | mpp | mock`)
 

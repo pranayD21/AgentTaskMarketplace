@@ -2,6 +2,8 @@ import { createAdminClient } from "@insforge/sdk";
 import { MarketplaceError, type AgentKind, type Envelope, type ModelInfo, type SellerStatus, type TaskStatus } from "@atm/shared";
 import { env } from "./env.js";
 import { memoryDb } from "./memdb.js";
+import { PREPARE_TASK_SQL } from "./prepare-task-sql.js";
+import type { HoldResult } from "./payments.js";
 
 // ---------------------------------------------------------------------------
 // Row types (snake_case mirrors db/schema.sql)
@@ -9,6 +11,7 @@ import { memoryDb } from "./memdb.js";
 
 export interface AgentRow {
   balance_keys?: string[] | null;
+  balance_revision?: number;
   id: string;
   kind: AgentKind;
   display_name: string;
@@ -61,6 +64,9 @@ export interface TaskRow {
   seller_id: string | null;
   model_id: string | null;
   price_cents: number | null;
+  pricing_mode?: string | null;
+  post_state?: string | null;
+  post_hold?: HoldResult | null;
   lease_expires_at: string | null;
   claim_runner_key_id: string | null;
   claim_runner_pubkey_b64: string | null;
@@ -139,6 +145,13 @@ export interface SettlementRow {
   transfer_state?: "NOT_APPLICABLE" | "PENDING" | "TRANSFERRED" | null;
   transfer_attempts?: number | null;
   transfer_retry_at?: string | null;
+  transfer_lease_token?: string | null;
+  transfer_lease_until?: string | null;
+  transfer_key_attempt?: number | null;
+  transfer_key_created_at?: string | null;
+  transfer_retry_safe_to_advance?: boolean | null;
+  transfer_manual_review?: boolean | null;
+  transfer_pending_reason?: string | null;
 }
 
 /** What a settlement intent remembers so any later call can finish it the same way. */
@@ -163,6 +176,7 @@ export interface JobRow {
   spent_cents: number;
   balance_keys: string[] | null;
   client_job_key: string | null;
+  balance_revision?: number;
   created_at: string;
   updated_at: string;
 }
@@ -203,6 +217,10 @@ export function dbLabel(): string {
  * anyone remembering to run scripts/db-migrate.sh.
  */
 export const SCHEMA_PATCHES = [
+  "alter table tasks add column if not exists pricing_mode text",
+  "alter table tasks add column if not exists post_state text",
+  "alter table tasks add column if not exists post_hold jsonb",
+  "alter table agents add column if not exists balance_revision integer not null default 0",
   // v0.2
   "alter table tasks add column if not exists claim_runner_key_id text",
   "alter table tasks add column if not exists claim_runner_pubkey_b64 text",
@@ -230,6 +248,13 @@ export const SCHEMA_PATCHES = [
   "alter table settlements add column if not exists transfer_state text",
   "alter table settlements add column if not exists transfer_attempts integer not null default 0",
   "alter table settlements add column if not exists transfer_retry_at timestamptz",
+  "alter table settlements add column if not exists transfer_lease_token text",
+  "alter table settlements add column if not exists transfer_lease_until timestamptz",
+  "alter table settlements add column if not exists transfer_key_attempt integer not null default 0",
+  "alter table settlements add column if not exists transfer_key_created_at timestamptz",
+  "alter table settlements add column if not exists transfer_retry_safe_to_advance boolean not null default false",
+  "alter table settlements add column if not exists transfer_manual_review boolean not null default false",
+  "alter table settlements add column if not exists transfer_pending_reason text",
   "alter table agents add column if not exists balance_keys text[] not null default '{}'",
   // v0.3 §10
   "create table if not exists jobs (id text primary key, buyer_id text not null references agents(id), label_public text, budget_cents integer not null, reserved_cents integer not null default 0, spent_cents integer not null default 0, balance_keys text[] not null default '{}', client_job_key text, created_at timestamptz not null default now(), updated_at timestamptz not null default now())",
@@ -243,6 +268,9 @@ export const SCHEMA_PATCHES = [
   "create unique index if not exists tasks_job_part_attempt_uniq on tasks(job_id, part_key, attempt)",
   "create unique index if not exists tasks_buyer_request_uniq on tasks(buyer_id, client_request_id)",
   "create unique index if not exists jobs_buyer_key_uniq on jobs(buyer_id, client_job_key)",
+  "alter table jobs add column if not exists balance_revision integer not null default 0",
+  PREPARE_TASK_SQL,
+  "revoke all on function atm_prepare_task(jsonb) from public",
   // v0.3 §12
   "alter table tasks add column if not exists inkbox_thread_owner text",
   "alter table tasks add column if not exists inkbox_buyer_context_id text",
@@ -304,7 +332,7 @@ export interface BalanceOpts {
   key?: string;
 }
 
-type CounterRow = { reserved_cents: number; spent_cents: number; balance_keys?: string[] | null };
+type CounterRow = { reserved_cents: number; spent_cents: number; balance_keys?: string[] | null; balance_revision?: number };
 
 async function adjustCounters<R extends CounterRow>(
   table: "agents" | "jobs",
@@ -324,10 +352,11 @@ async function adjustCounters<R extends CounterRow>(
     const rows = unwrap(
       await db()
         .from(table)
-        .update({ reserved_cents: reserved, spent_cents: spent, ...(opts.key ? { balance_keys: [...keys, opts.key] } : {}) })
+        .update({ reserved_cents: reserved, spent_cents: spent, balance_revision: (cur.balance_revision ?? 0) + 1, ...(opts.key ? { balance_keys: [...keys, opts.key] } : {}) })
         .eq("id", id)
         .eq("reserved_cents", cur.reserved_cents)
         .eq("spent_cents", cur.spent_cents)
+        .eq("balance_revision", cur.balance_revision ?? 0)
         .select(),
     ) as R[];
     if (rows.length) return { row: rows[0]!, refused: false, applied: true };
@@ -402,4 +431,22 @@ export async function logEvent(type: string, fields: { task_id?: string | null; 
   } catch (err) {
     console.error("[events] failed to log", type, (err as Error).message);
   }
+}
+
+/** Task insert and cap reservation commit together, before any provider call. */
+export async function prepareTask(row: Record<string, unknown>): Promise<TaskRow> {
+  let result: { task?: TaskRow; error?: string };
+  if (env().DB_MODE === "memory") result = unwrap(memoryDb().prepareTask(row)) as typeof result;
+  else {
+    await ensureSchema();
+    const json = JSON.stringify(row).replace(/'/g, "''");
+    const rows = await rawSql<{ result: typeof result }>(`select atm_prepare_task('${json}'::jsonb) as result`);
+    result = rows[0]!.result;
+  }
+  if (result.error) {
+    const code = result.error === "SPEND_CAP_EXCEEDED" || result.error === "JOB_BUDGET_EXCEEDED" ? result.error : "NOT_FOUND";
+    throw new MarketplaceError(code, "The task could not reserve its offer within the buyer and job budgets.", { next_action: "Inspect whoami and get_job. Lower the offer or wait for existing tasks to settle; do not raise a cap without human approval." });
+  }
+  if (!result.task) throw new MarketplaceError("INTERNAL_ERROR", "No task was returned by the posting transaction.", { retryable: true });
+  return result.task;
 }

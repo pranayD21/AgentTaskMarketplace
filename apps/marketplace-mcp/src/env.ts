@@ -15,6 +15,7 @@ const AppEnvSchema = z.object({
   JUDGE_PUBLIC_KEY_B64: z.string().min(40),
   JUDGE_KEY_ID: z.string().default("judge-1"),
   JUDGE_REGISTRATION_SECRET: z.string().min(8),
+  ATM_BUILD_REVISION: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   BASE_URL: z.string().optional(),
   MCP_URL: z.string().optional(),
   SUSPEND_AFTER_STRIKES: z.coerce.number().int().positive().default(1),

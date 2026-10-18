@@ -185,3 +185,45 @@ alter table tasks add column if not exists inkbox_buyer_context_id text;
 create unique index if not exists tasks_job_part_attempt_uniq on tasks(job_id, part_key, attempt);
 create unique index if not exists tasks_buyer_request_uniq on tasks(buyer_id, client_request_id);
 create unique index if not exists jobs_buyer_key_uniq on jobs(buyer_id, client_job_key);
+
+-- Task offers leave accepted historical claim prices unchanged.
+alter table tasks add column if not exists pricing_mode text;
+
+alter table tasks add column if not exists post_state text;
+alter table tasks add column if not exists post_hold jsonb;
+alter table agents add column if not exists balance_revision integer not null default 0;
+alter table jobs add column if not exists balance_revision integer not null default 0;
+
+create or replace function atm_prepare_task(p jsonb) returns jsonb
+language plpgsql security invoker as $$
+declare b agents%rowtype; j jobs%rowtype; t tasks%rowtype; amount integer; k text;
+begin
+  amount := (p->>'max_price_cents')::integer;
+  k := 'reserve:' || (p->>'id');
+  select * into b from agents where id = p->>'buyer_id' for update;
+  if not found or b.kind <> 'buyer' then return jsonb_build_object('error', 'NOT_FOUND'); end if;
+  if b.reserved_cents + b.spent_cents + amount > b.spend_cap_cents then return jsonb_build_object('error', 'SPEND_CAP_EXCEEDED'); end if;
+  if p->>'job_id' is not null then
+    select * into j from jobs where id = p->>'job_id' for update;
+    if not found or j.buyer_id <> b.id then return jsonb_build_object('error', 'NOT_FOUND'); end if;
+    if j.reserved_cents + j.spent_cents + amount > j.budget_cents then return jsonb_build_object('error', 'JOB_BUDGET_EXCEEDED'); end if;
+  end if;
+  insert into tasks select (jsonb_populate_record(null::tasks, p || jsonb_build_object('settle_pending', false, 'review_attempts', 0, 'replacement_attempts', 0))).* returning * into t;
+  if t.payment_mode <> 'mpp' then
+    update agents set reserved_cents = reserved_cents + amount, balance_keys = array_append(coalesce(balance_keys, '{}'), k), balance_revision = balance_revision + 1 where id = b.id;
+    if j.id is not null then
+      update jobs set reserved_cents = reserved_cents + amount, balance_keys = array_append(coalesce(balance_keys, '{}'), k), balance_revision = balance_revision + 1 where id = j.id;
+    end if;
+  end if;
+  return jsonb_build_object('task', to_jsonb(t));
+end;
+$$;
+revoke all on function atm_prepare_task(jsonb) from public;
+
+alter table settlements add column if not exists transfer_lease_token text;
+alter table settlements add column if not exists transfer_lease_until timestamptz;
+alter table settlements add column if not exists transfer_key_attempt integer not null default 0;
+alter table settlements add column if not exists transfer_key_created_at timestamptz;
+alter table settlements add column if not exists transfer_retry_safe_to_advance boolean not null default false;
+alter table settlements add column if not exists transfer_manual_review boolean not null default false;
+alter table settlements add column if not exists transfer_pending_reason text;
