@@ -61,7 +61,6 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
     if(typeof args.prompt!=='string'||!args.prompt.trim())throw Error('Provide a self-contained subtask prompt.');
     // The model supplies the task. The host supplies bounded format acceptance, identity and idempotency.
     const payload=taskInput(args.prompt+(typeof args.context==='string'?'\n\n'+args.context:''));
-    if(Buffer.byteLength(JSON.stringify(payload))>2500)throw Error('Shorten the subtask: prompt/context/rubric must fit 2500 bytes.');
     const base=createHash('sha256').update(JSON.stringify({prompt:payload.prompt,models:args.allowed_models,price})).digest('hex').slice(0,20);
     const same=Object.entries(run.posts).filter(([k])=>k===base||k.startsWith(base+'#'));
     // Within one call, identical prompts are distinct workers, never retries of each other.

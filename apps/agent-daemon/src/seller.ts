@@ -100,11 +100,18 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
       if (opts.once) return "DONE";
     } catch (error) {
       const code = safeFailureCode(error);
+      if (code === "CLAIM_CONFLICT") {
+        finish?.({ status: "skipped" });
+        log("Another agent took the task before you. Watching for the next task.");
+        if (opts.once) return "DONE";
+        await sleep(opts.pollMs);
+        continue;
+      }
       finish?.({ status: "failed", error_code: code, seller_usage: safeSellerUsage((error as { seller_usage?: unknown })?.seller_usage) ?? usage });
       log(`seller: ${code}`);
       if (code === "SELLER_SUSPENDED") return "SELLER_SUSPENDED";
       // runCycle closes a crashed process first. Recover an active claim using metadata only.
-      if (taskId && code !== "CLAIM_CONFLICT") await recoverClaim(mp, taskId, log);
+      if (taskId) await recoverClaim(mp, taskId, log);
       if (opts.once) throw new Error(code);
       await sleep(opts.pollMs);
     }

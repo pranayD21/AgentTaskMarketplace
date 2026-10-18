@@ -68,6 +68,25 @@ describe("chat timeline", () => {
     expect(html).toContain("<strong>bold</strong>");
     expect(html).not.toContain("<script>");
   });
+  it("renders common LaTeX delimiters and repairs older escaped formulas", () => {
+    const html = renderToStaticMarkup(createElement(Markdown, { text: "Inline \\(\\frac{1}{2}\\) and display:\n\\[\\text{Power} = 2\\times3\\]" }));
+    expect(html.match(/<math/g)).toHaveLength(2);
+    expect(html).not.toContain("katex-error");
+    const old = renderToStaticMarkup(createElement(Markdown, { text: "Load factor: $\f rac{\text{Avg}}{\text{Max}}$".replace("\f ", "\f") }));
+    expect(old).toContain("<math");
+    expect(old).toContain("<mfrac>");
+    expect(old).toContain("<mtext>Avg</mtext>");
+    expect(old).not.toContain("katex-error");
+  });
+  it("renders a worker answer as formatted Markdown in the chat feed", () => {
+    const html = renderToStaticMarkup(createElement(TaskCard, { defaultOpen: true, task: {
+      task_id: "task_a", index: 0, status: "APPROVED", label: "Completed", approved: true,
+      answer: "A **bold answer** with <script>unsafe</script>.",
+    } }));
+    expect(html).toContain("<strong>bold answer</strong>");
+    expect(html).not.toContain("**bold answer**");
+    expect(html).not.toContain("<script>");
+  });
   it("escapes untrusted text in tool data and labels run states", () => {
     const html = renderToStaticMarkup(createElement(ToolInvocation, null,
       createElement(ToolInvocationContentCollapsible, { defaultOpen: true, header: createElement(ToolInvocationName, { name: "mcp_post_task", type: "output-error" }) },

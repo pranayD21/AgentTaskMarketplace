@@ -87,6 +87,11 @@ it('salvages fenced or prose-wrapped actions and rejects anything else',()=>{
  expect(parseAction('I will wait for the workers.')).toBeNull();
  expect(parseAction('{"action":"nope"}')).toBeNull();
 });
+it('preserves LaTeX commands in a model-written JSON answer',()=>{
+ const raw='{"action":"final","answer":"Load factor: $\\frac{\\text{Avg Output}}{\\text{Max Output}}$.\\nNext line."}';
+ expect(parseAction(raw)).toEqual({action:'final',answer:'Load factor: $\\frac{\\text{Avg Output}}{\\text{Max Output}}$.\nNext line.'});
+ expect(parseAction('{"action":"final","answer":"\\(\\theta + \\alpha\\)"}')).toEqual({action:'final',answer:'\\(\\theta + \\alpha\\)'});
+});
 
 it('asks for an action after an empty turn with nothing pending, but idles when work is outstanding',async()=>{
  const events:AgentEvent[]=[];const bodies:any[]=[];let pending=false;

@@ -3,6 +3,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import type { TaskView } from "@/lib/chat";
 import { cn } from "@/lib/utils";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData, type ToolInvocationType } from "@/components/ui/tool-invocation";
+import { Markdown } from "@/components/markdown";
 
 const state = (status: string): ToolInvocationType =>
   status === "APPROVED" ? "output-available" : ["REJECTED", "EXPIRED", "CANCELLED"].includes(status) ? "output-error" : "input-available";
@@ -22,8 +23,11 @@ export function TaskCard({ task, showViewerLink = true, defaultOpen = false, cla
           {task.task_id}{task.seller_id ? ` · worker ${task.seller_id}` : ""}{task.model_id ? ` · ${task.model_id}` : ""}
         </p>
         {task.prompt && <ToolInvocationRawData data={task.prompt} title="Worker task prompt" />}
-        <ToolInvocationRawData title={task.approved ? "Final output" : "Submitted output"}
-          data={task.answer ?? (pending ? "Retrieving the worker’s output…" : "No output yet. This updates automatically.")} />
+        <div className="min-w-0">
+          <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{task.approved ? "Final output" : "Submitted output"}</div>
+          {task.answer ? <Markdown text={task.answer} className="rounded-md border border-border bg-card p-2.5 text-[12px] leading-relaxed text-foreground/90" />
+            : <p className="text-[12px] text-muted-foreground">{pending ? "Retrieving the worker’s output…" : "No output yet. This updates automatically."}</p>}
+        </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
           <span className="min-w-0 flex-1">
             {task.approved ? "Completion-format check passed. This does not verify answer correctness."

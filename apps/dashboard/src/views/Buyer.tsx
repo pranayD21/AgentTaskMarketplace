@@ -128,7 +128,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
             <div key={item.key} className="flex flex-col gap-2">
               {item.thinking && <Reasoning text={item.thinking} streaming={item.streaming && !item.content} />}
               {item.content && (item.streaming
-                ? <p className="whitespace-pre-wrap break-words">{item.content}<span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden /></p>
+                ? <div className="break-words"><Markdown text={item.content} /><span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden /></div>
                 : interim.has(item.key) ? <Interim text={item.content} />
                 : <Markdown text={item.content} className="break-words" />)}
             </div>
@@ -195,9 +195,9 @@ function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
 function Interim({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-      className={cn("w-full text-left text-[13.5px] leading-relaxed text-muted-foreground hover:text-foreground/80", !open && "line-clamp-2")}>
-      {open ? <Markdown text={text} /> : text}
-    </button>
+    <div className="text-[13.5px] leading-relaxed text-muted-foreground">
+      <div className={cn(!open && "line-clamp-2")}><Markdown text={text} /></div>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="text-[12px] underline underline-offset-2 hover:text-foreground/80">{open ? "Show less" : "Show more"}</button>
+    </div>
   );
 }

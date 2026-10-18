@@ -1,9 +1,9 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { Check, ChevronRight, CircleAlert, Loader2, Wrench } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, Loader2, Minus, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger, useCollapsible } from "./collapsible";
 
-export type ToolInvocationType = "input-streaming" | "input-available" | "output-available" | "output-error";
+export type ToolInvocationType = "input-streaming" | "input-available" | "output-available" | "output-neutral" | "output-error";
 
 export const ToolInvocation = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("rounded-xl border border-border bg-card/60 text-[13px]", className)} {...props} />
@@ -17,6 +17,7 @@ const status: Record<ToolInvocationType, { icon: ReactNode; text: string; tone: 
   "input-streaming": { icon: <Loader2 className="size-3.5 animate-spin" />, text: "Preparing", tone: "text-muted-foreground" },
   "input-available": { icon: <Loader2 className="size-3.5 animate-spin" />, text: "Running", tone: "text-info" },
   "output-available": { icon: <Check className="size-3.5" />, text: "Done", tone: "text-success" },
+  "output-neutral": { icon: <Minus className="size-3.5" />, text: "Taken", tone: "text-muted-foreground" },
   "output-error": { icon: <CircleAlert className="size-3.5" />, text: "Error", tone: "text-danger" },
 };
 
