@@ -118,13 +118,18 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     const installed = await inventory.json() as { models?: { name: string }[] };
     if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
+    let capabilities:string[]=/^qwen3([:-]|$)/.test(opts.model_id)?['tools','thinking']:[];
+    if(opts.agent_mode!==false){
+      const metadata=await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/show`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:opts.model_id}),signal,redirect:'error'});
+      if(metadata.ok){const info=await metadata.json() as any;if(Array.isArray(info.capabilities))capabilities=info.capabilities;}
+    }
     const notes=new Map<string,string>();let totalTokens=0;const totalBudget=payload.max_tokens;
     const totals:Record<string,number>={};
     for(let turn=0;turn<8;turn++){
       const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
         method:"POST",redirect:"error",headers:{"content-type":"application/json"},signal,
-        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&turn<7?workerTools:[],stream:false,
-          think:opts.agent_mode!==false&&/^qwen3([:-]|$)/.test(opts.model_id),options:{num_predict:Math.max(1,totalBudget-totalTokens),temperature:0.2,
+        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&capabilities.includes('tools')&&turn<7?workerTools:[],stream:false,
+          think:opts.agent_mode!==false&&capabilities.includes('thinking'),options:{num_predict:Math.max(1,totalBudget-totalTokens),temperature:0.2,
           num_thread:opts.cpu_threads??4,num_ctx:opts.context_tokens??8192}}),
       });
       if(!res.ok)throw new Error(`OLLAMA_HTTP_${res.status}`);

@@ -162,6 +162,8 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
    try {const account:any=await gate.call('whoami');if(account.kind!=='buyer'||account.agent_id!==buyer.agent_id||account.owner?.user_id!==buyer.owner.user_id)throw Error('Sign in with the account owner.');if(!['READY','MOCK'].includes(account.buyer_payment?.buyer_payment_status)){json(402,{error:'Complete Stripe buying setup before sending requests.'});return true;}}finally{await gate.close();}
    const inventory:any=await fetch('http://localhost:11434/api/tags',{signal:AbortSignal.timeout(3000)}).then(r=>r.json());
    if(!inventory.models?.some((m:any)=>m.name===input.model))throw Error('Choose a local model installed on this computer.');
+   const metadata=await fetch('http://localhost:11434/api/show',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:input.model}),signal:AbortSignal.timeout(5000)});
+   if(metadata.ok){const info:any=await metadata.json();if(Array.isArray(info.capabilities)&&!info.capabilities.includes('tools'))throw Error('Choose a local model with tool calling, such as Qwen3.');}
    const run:Run={id:randomUUID(),owner_id:buyer.owner.user_id,buyer_id:buyer.agent_id,prompt:input.prompt,mode:'agent',conversation_id,model:input.model,status:'running',events:[],task_ids:[],posts:{},jobs:[]};
    runs.push(run);if(runs.length>30)runs.shift();persist();const controller=new AbortController();active.set(run.id,controller);void execute(run,buyer,controller);json(202,{id:run.id});
   }catch(error){json(400,{error:error instanceof Error&&/^(Sign in|Message|Enter |Choose a local)/.test(error.message)?error.message:'Chat is unavailable. Check your account and marketplace connection.'});}

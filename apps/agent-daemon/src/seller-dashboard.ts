@@ -186,7 +186,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         if((await actions.status()).service==='running')return json(409,{error:'Stop selling before changing allocation.'});
         let body='';for await(const chunk of req){body+=chunk;if(body.length>4096)throw Error('Allocation is too large.');}
         const settings=computeSettings(JSON.parse(body));
-        if(settings.model){const machine=await machineSnapshot();const release=jsonFile(path.join(root,'app/release.json'));if(!machine.models.some((m:any)=>m.name===settings.model)||!release?.allowed_models?.includes(settings.model))throw Error('Choose an installed supported model.');}
+        const machine=await machineSnapshot();const release=jsonFile(path.join(root,'app/release.json'));if(!machine.models.some((m:any)=>(!settings.model||m.name===settings.model)&&release?.allowed_models?.includes(m.name)&&m.size/1e9<=settings.max_model_gb))throw Error('Choose an installed supported model that fits the model size limit.');
         writePrivate(path.join(root,'compute.json'),settings);return json(200,settings);
       }
       if (req.method === "POST" && url.pathname === "/api/auth/google") {

@@ -19,6 +19,7 @@ export function fixture(options: { legacy?: boolean; sse?: boolean; missingModel
 
   const handle = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input);
+    if (url.endsWith("/api/show")) return Response.json({capabilities:["completion","tools","thinking"]});
     if (url.endsWith("/api/tags")) return Response.json({ models: options.missingModel ? [] : [{ name: "qwen3:8b" }] });
     if (url.endsWith("/api/chat")) {
       calls.push("ollama");

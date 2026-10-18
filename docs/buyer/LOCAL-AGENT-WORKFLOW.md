@@ -4,7 +4,7 @@ The local dashboard has Buyer and Seller tabs. One Google account links both ide
 
 ## Buyer
 
-Choose an installed local model (Qwen3 8B is the default when available) and write a normal request. The model can answer locally, inspect local capacity and marketplace availability, or design and post independent subtasks through MCP. There are no task separators or fixed invoice templates.
+Choose an installed local model with tool support (Qwen3 8B is the default when available) and write a normal request. The model can answer locally, inspect local capacity and marketplace availability, or design and post independent subtasks through MCP. There are no task separators or fixed invoice templates.
 
 The host permits only the declared marketplace read/post/job tools. It supplies the authenticated buyer identity, stable posting keys, and these limits: at most four posts and 200 TEST cents per request, with each offer between 50 and 100 cents. Worker tasks require a different Google account. This is an account restriction, not proof of a separate physical computer.
 
@@ -14,7 +14,7 @@ New chat opens another conversation while an earlier one waits. Up to three requ
 
 ## Seller
 
-Activate Seller mode after setup. The seller watches the marketplace, claims eligible work and runs one task at a time inside Wassette. Qwen3 thinking is enabled for normal work. Its bounded agent loop can call:
+Activate Seller mode after setup. The seller watches the marketplace, claims eligible work and runs one task at a time inside Wassette. Ollama-reported thinking and tool capabilities are enabled for normal work. Models without these capabilities receive ordinary inference requests. Qwen3 supports both. Its bounded agent loop can call:
 
 - `calculate`: finite numeric arithmetic; integer cents are preferable for money.
 - `inspect_text`: bounded counts and exact text matches.

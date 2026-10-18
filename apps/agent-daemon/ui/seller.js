@@ -66,12 +66,12 @@ const originalRefresh=refresh;
 refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
 async function chatPost(route,body){const r=await fetch(route,{method:'POST',headers:{'X-ATM-Request':'1','Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(typeof j.error==='string'?j.error:j.error?.message||'The request could not finish.');return j;}
 function bubble(section,label,value,kind){const item=document.createElement('div');item.className=`chat-bubble ${kind}`;const heading=document.createElement('strong');heading.textContent=label;const body=document.createElement('pre');body.textContent=value;item.append(heading,body);section.append(item);}
-function eventDetails(section,label,value){if(value==null)return;const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('pre');summary.textContent=label;body.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);details.append(summary,body);section.append(details);}
+function eventDetails(section,label,value){if(value==null)return;const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('pre');summary.textContent=label;if(label==='Thinking…')details.open=true;body.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);details.append(summary,body);section.append(details);}
 function toolLabel(name){return ({mcp_marketplace_info:'Checking marketplace options',mcp_whoami:'Checking account limits',mcp_list_sellers:'Looking for available workers',mcp_create_job:'Creating a shared job',mcp_post_task:'Posting a task for the network',mcp_get_task:'Checking task progress',mcp_get_result:'Reading task results',mcp_get_job:'Checking the shared job',wait:'Waiting for workers'})[name]??String(name??'Agent action').replaceAll('_',' ');}
 async function refreshChats(){
  if(chatRefreshing||!data?.buyer_id)return;chatRefreshing=true;
  try{const r=await fetch('/api/chat');if(!r.ok)return;const j=await r.json();const ids=[...new Set([conversationId,...(j.runs??[]).map(r=>r.conversation_id||r.id)])]; $('conversation').replaceChildren(...ids.map(id=>{const first=(j.runs??[]).find(r=>(r.conversation_id||r.id)===id);return new Option(first?.prompt?.slice(0,60)||'New conversation',id);}));$('conversation').value=conversationId; const snapshot=conversationId+JSON.stringify(j.runs);if(snapshot===chatSnapshot)return;chatSnapshot=snapshot;
- const fragment=document.createDocumentFragment();
+ const openDetails=new Set([...$('chat-runs').querySelectorAll('details[open]')].map(d=>d.dataset.detailKey));const fragment=document.createDocumentFragment();
  for(const run of [...(j.runs??[])].filter(r=>(r.conversation_id||r.id)===conversationId).reverse()){
   const section=document.createElement('section');section.className='chat-run';
   const title=document.createElement('h3');title.textContent=`${run.status==='finished'?'✓ Completed':run.status==='failed'?'Needs attention':'In progress'} · ${run.task_ids?.length??0} task(s)`;section.append(title);
@@ -96,7 +96,7 @@ async function refreshChats(){
    }else{eventDetails(section,'Activity details',event);}
   }
   for(const id of run.task_ids??[]){const task=document.createElement('span');task.className='chat-task';task.textContent=`Marketplace task: ${id}`;section.append(task);}
-  if(run.error){const p=document.createElement('p');p.textContent=run.error;section.append(p);}fragment.append(section);
+  if(run.error){const p=document.createElement('p');p.textContent=run.error;section.append(p);}section.querySelectorAll('details').forEach((d,i)=>{d.dataset.detailKey=run.id+':'+i;if(openDetails.has(d.dataset.detailKey))d.open=true;});fragment.append(section);
  }
  $('chat-runs').replaceChildren(fragment);if(!$('chat-runs').children.length)$('chat-runs').textContent='Start a conversation. Your model’s work and delegated tasks will appear here.';
  }catch{ /* Keep the previous timeline during temporary polling failures. */ }finally{chatRefreshing=false;}

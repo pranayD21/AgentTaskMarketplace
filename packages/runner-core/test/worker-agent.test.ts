@@ -16,3 +16,7 @@ it('executes a model-selected tool and feeds the result into its next reasoning 
  expect(turns).toBe(2);expect(result.tokens_out).toBe(14);expect(result.seller_usage?.eval_duration_ms).toBe(3);expect(service.summary().outputVerified).toBe(true);
 });
 it('rejects unavailable tools and bounds scratchpad and numeric work',()=>{const notes=new Map<string,string>();expect(()=>invokeWorkerTool('exec',{command:'anything'},notes)).toThrow('unavailable');expect(()=>invokeWorkerTool('calculate',{operation:'quotient',values:[1,0]},notes)).toThrow();for(let i=0;i<8;i++)invokeWorkerTool('scratchpad',{key:String(i),value:'note'},notes);expect(()=>invokeWorkerTool('scratchpad',{key:'9',value:'extra'},notes)).toThrow();expect(invokeWorkerTool('scratchpad',{key:'0'},new Map())).toEqual({key:'0',value:null});});
+it('does not send tool or thinking requests to a model that reports neither capability',async()=>{
+ const service=fixture();const fetcher:typeof fetch=async(input,init)=>{if(String(input).endsWith('/api/show'))return Response.json({capabilities:['completion']});if(String(input).endsWith('/api/chat')){const body=JSON.parse(String(init?.body));expect(body.tools).toEqual([]);expect(body.think).toBe(false);}return service.fetch(input,init);};
+ await runCycle({fetch:fetcher,now:Date.now,getSecret:async()=> 'fixture'},{marketplace_url:'http://marketplace/mcp',ollama_url:'http://ollama',task_id:'task_fixture',model_id:'qwen3:8b',max_runtime_s:180});expect(service.summary().outputVerified).toBe(true);
+});
