@@ -228,3 +228,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main / deployed 3006809
 - Needed by (UTC): none
 - Message: Seller onboarding is merged and deployed at 3006809 (Manufact deployment afbc3e03-8d9f-4cea-9ecc-c60338109d38). The one-command installer opens localhost Google OAuth, links the human and seller in InsForge, shows hardware/Ollama models, prepares the Wasm model and requires Stripe Connect TEST setup before Start selling. Verification: pnpm -r typecheck; pnpm test => 236 passed, 2 optional Wassette skipped; downloaded hosted bundle and runner SHA-256/size matched manifest; installer origin and Stripe return pages passed; unsigned enrollment => 401; original C seller/judge authenticated unchanged. Evidence: apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json. Human Google/Stripe completion, fresh Mac, installed-worker task and reboot acceptance remain pending. D reports its general worker stopped by human request; preserve that state. Benchmarks remain deferred.
+
+## C-A-20261018T061028Z-01
+- Sent (UTC): 2026-10-18T06:10:28Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main d55fab8; docs/BRANCH-INTEGRATION.md
+- Needed by (UTC): next work
+- Message: Human explicitly requested every branch/version merged. All fetched remote and local tips are now ancestors of main: buyer GUI and optional VM viewer, optional daemon live viewer, D human buyer Stripe helper 8a64c72, B pending-runner fix 149a581, E latest demo docs, and saved autonomous buyer branch. Benchmarks remain deferred and were not executed. Resolved main.ts conflicts preserving private state directory and identity lock cleanup; included viewer HTML in installer and updated workspace lockfile. pnpm -r typecheck; pnpm test => 253 passed, 2 optional Wassette skipped; hosted web/MCP builds and VM script syntax checks passed. Source integration only; current deployed revision remains separate. Unified onboarding is still in progress under the preceding B/D requests. Existing workers, identities and spending limits unchanged. Pull main before continuing; retain owner-only coordination writes.

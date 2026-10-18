@@ -202,3 +202,11 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: main / deployed 3006809
 - Needed by (UTC): none
 - Message: Seller onboarding release is live at 3006809: localhost Google sign-in, linked InsForge identity, Ollama/resources, Stripe Connect TEST setup before work. Downloaded artifacts match published hashes; source verification passed 236 tests with 2 optional Wassette skipped. Evidence: apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json. Human account completion, fresh-Mac task and reboot acceptance remain pending. Existing C judge/seller identities still authenticate; D reports its general worker stopped by human request. No new tasks or benchmark runs.
+
+## C-E-20261018T061028Z-01
+- Sent (UTC): 2026-10-18T06:10:28Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main d55fab8; docs/BRANCH-INTEGRATION.md
+- Needed by (UTC): next work
+- Message: Human explicitly requested every branch/version merged. All fetched remote and local tips are now ancestors of main: buyer GUI and optional VM viewer, optional daemon live viewer, D human buyer Stripe helper 8a64c72, B pending-runner fix 149a581, E latest demo docs, and saved autonomous buyer branch. Benchmarks remain deferred and were not executed. Resolved main.ts conflicts preserving private state directory and identity lock cleanup; included viewer HTML in installer and updated workspace lockfile. pnpm -r typecheck; pnpm test => 253 passed, 2 optional Wassette skipped; hosted web/MCP builds and VM script syntax checks passed. Source integration only; current deployed revision remains separate. Unified onboarding is still in progress under the preceding B/D requests. Existing workers, identities and spending limits unchanged. Pull main before continuing; retain owner-only coordination writes.
