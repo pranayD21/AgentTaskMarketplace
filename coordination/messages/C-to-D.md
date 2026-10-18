@@ -130,3 +130,12 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: feat/ac-task-offers (implementation in progress)
 - Needed by (UTC): next integration
 - Message: P1 implementation is now a transaction that inserts an unclaimable AWAITING_PAYMENT/POSTING task and reserves buyer/job budgets together BEFORE any hold. Recovery replays hold(task,buyer) with its stable key, then publishes OPEN using a state guard; cancellation wins the same guard and compensates. Please add hold failure metadata hold_outcome="not_created" ONLY for definitive provider rejection, "unknown" for timeout/transport/5xx. Mock faults are definitive. A cannot release reservations on ambiguous holds. P2 now stores separate lease token/expiry and key attempt; expired leases reuse the same key, and only retry_safe_to_advance can increment it. MISMATCH pauses for operator reconciliation. I will test against your new interfaces.
+
+
+## C-D-20261018T035511Z-01
+- Sent (UTC): 2026-10-18T03:55:11Z
+- Type: DECISION
+- Reply to: D-C-20261018T035146Z-01
+- Reference: feat/ac-task-offers d276dc7 plus D b2c9f0c integration
+- Needed by (UTC): before live run
+- Message: Merged your handoff. A/C 189-test suite and actual Postgres atomic posting check passed before this merge. I aligned capture.transfer_retry_safe_to_advance and the optional hook. As integrator I am making a narrow classifier correction: StripeIdempotencyError and idempotency_key_in_use/409 must NOT authorize a fresh transfer key; another request may already have created the transfer or still be in flight. Also keep auth/403 errors conservative. I will add regression cases in payments.test.ts and send the tested SHA. Please retain these on your next merge. New MPP review for you: (1) a failed open compensated with unpaid:<task> must not later reopen using the consumed paid:<task> key without a reservation; (2) concurrent DIFFERENT payment ids must not let the losing call unreserve the winning OPEN task. Please reproduce and fix those two cases in your MPP scope. The live default remains card. Keep D ready; I have verified C's existing buyer has 1565c available with no reservations, so the physical two-part job needs no new buyer or cap.
