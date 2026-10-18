@@ -21,10 +21,14 @@ import {
   LEASE_SECONDS,
   MAX_PRICE_CENTS,
   MODEL_ALLOWLIST,
+  APPROVE_REASON_CODES,
   MarketplaceError,
   ModelInfo,
+  REJECT_REASON_CODES,
   Rubric,
   isAllowlistedModel,
+  isInfraReason,
+  publicReason,
   isPast,
   nowIso,
   plusSecondsIso,
@@ -48,6 +52,8 @@ import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
 import { kekOpen, kekSeal } from "./kek.js";
 import { payments } from "./payments.js";
+import { deferReview, reviewDue, reviewOf } from "./review.js";
+import { RESUME_AFTER_S, finalizeSettlement, outcomeForStatus, recordIntent, retryPendingTransfers, settlementOf } from "./settlement.js";
 
 const JUDGING_TIMEOUT_S = 10 * 60;
 
@@ -122,7 +128,29 @@ export function toTaskPublic(t: TaskRow): TaskPublic {
       payment_link: t.payment_link,
     },
     inkbox_context_id: t.inkbox_context_id,
+    review: reviewOf(t),
+    replacement_status: replacementStatusOf(t),
+    job_id: t.job_id ?? null,
+    part_key: t.part_key ?? null,
+    part_label: t.part_label ?? null,
+    attempt: t.attempt ?? null,
   };
+}
+
+function replacementStatusOf(t: TaskRow): TaskPublic["replacement_status"] {
+  if (t.replacement_status) return t.replacement_status as TaskPublic["replacement_status"];
+  return t.status === "APPROVED" ? "NOT_NEEDED" : null;
+}
+
+/** Verdict fields safe to show anyone who may see the task (contract §8.1): the reason text comes from the code. */
+export function publicVerdict(v: VerdictRow) {
+  return { verdict_id: v.id, task_id: v.task_id, result_id: v.result_id, verdict: v.verdict, reason_code: v.reason_code, reason_public: publicReason(v.reason_code), score: v.score, created_at: v.created_at };
+}
+
+/** Settlement without its internal decision record (which carries judge ids and buyer ciphertext). */
+export function publicSettlement(s: SettlementRow) {
+  const { decision: _d, ...rest } = s;
+  return rest;
 }
 
 export function toSellerPublic(s: SellerRow, a: AgentRow): SellerPublic {
@@ -309,7 +337,8 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
   }
   // Reserve against the cap atomically before any money moves, so concurrent
   // posts from one buyer cannot jointly exceed what the human approved.
-  const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true });
+  const id = newId("task");
+  const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true, key: `reserve:${id}` });
   if (reservation.refused) {
     const b = reservation.buyer!;
     const projected = b.reserved_cents + b.spent_cents + input.max_price_cents;
@@ -319,9 +348,8 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
       { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
-  const unreserve = () => adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents });
+  const unreserve = () => adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
 
-  const id = newId("task");
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
   const plaintext: ServerPlaintext = { prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
@@ -351,14 +379,37 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
     payment_link: hold.payment_link,
     claim_count: 0,
   };
-  const inserted = unwrap(await db().from("tasks").insert(row).select()) as TaskRow[];
-  const task = inserted[0]!;
+  let task: TaskRow;
+  try {
+    task = (unwrap(await db().from("tasks").insert(row).select()) as TaskRow[])[0]!;
+  } catch (err) {
+    await compensateHold(row, hold.payment_state, unreserve);
+    throw err;
+  }
   await logEvent("task.posted", {
     task_id: id,
     agent_id: buyer.id,
     meta: { allowed_models: input.allowed_models, max_price_cents: input.max_price_cents, rubric_kind: input.rubric.kind, payment_state: hold.payment_state },
   });
   return { task: toTaskPublic(task), payment_note: hold.note, payment_label: payments().label };
+}
+
+/**
+ * post_task placed a hold but could not store the task (contract §9, P1):
+ * cancel the hold and give the reservation back before reporting the error.
+ */
+async function compensateHold(row: Record<string, unknown>, paymentState: string, unreserve: () => Promise<unknown>): Promise<void> {
+  const taskId = String(row.id);
+  if (paymentState !== "HELD" && paymentState !== "MOCK") return; // unpaid mpp tasks reserved nothing
+  try {
+    await payments().release({ ...row, status: "CANCELLED" } as unknown as TaskRow, "task could not be stored");
+  } catch {
+    // The reservation stays while the hold may still exist; the error below is reported to the buyer.
+    console.error(`[post_task] ${taskId}: hold could not be released after a failed insert; reservation kept`);
+    return;
+  }
+  await unreserve();
+  await logEvent("task.post_compensated", { task_id: taskId, agent_id: String(row.buyer_id), meta: { payment_state: paymentState } });
 }
 
 export async function listTasksForBuyer(buyer: AgentRow, status?: TaskStatus): Promise<TaskPublic[]> {
@@ -368,15 +419,14 @@ export async function listTasksForBuyer(buyer: AgentRow, status?: TaskStatus): P
   return (unwrap(await q) as TaskRow[]).map(toTaskPublic);
 }
 
-export async function getTaskForActor(actor: AgentRow, taskId: string): Promise<{ task: TaskPublic; verdict: Omit<VerdictRow, "replacement_enc_buyer"> | null; settlement: SettlementRow | null }> {
+export async function getTaskForActor(actor: AgentRow, taskId: string): Promise<{ task: TaskPublic; verdict: ReturnType<typeof publicVerdict> | null; settlement: ReturnType<typeof publicSettlement> | null }> {
   await sweep();
   const task = await mustGetTask(taskId);
   if (actor.kind === "buyer" && task.buyer_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.", { next_action: "Call list_my_tasks for your own task ids." });
   if (actor.kind === "seller" && task.seller_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "You do not hold this task's claim.", { next_action: "Call list_open_tasks for tasks you can claim." });
   const verdict = await latestVerdict(taskId);
   const settlement = await settlementFor(taskId);
-  const publicVerdict = verdict ? (({ replacement_enc_buyer: _r, ...rest }) => rest)(verdict) : null;
-  return { task: toTaskPublic(task), verdict: publicVerdict, settlement };
+  return { task: toTaskPublic(task), verdict: verdict ? publicVerdict(verdict) : null, settlement: settlement ? publicSettlement(settlement) : null };
 }
 
 export async function getResultForBuyer(buyer: AgentRow, taskId: string) {
@@ -403,8 +453,10 @@ export async function getResultForBuyer(buyer: AgentRow, taskId: string) {
       await logEvent("result.decrypt_failed", { task_id: taskId, agent_id: buyer.id, meta: { error: (err as Error).message } });
     }
   }
+  const replacement_status = replacementStatusOf(task);
   let replacement_answer: string | null = null;
-  if (verdict?.replacement_enc_buyer) {
+  // Rows written before v0.3 have no stored status; an envelope on the verdict means it was delivered.
+  if (verdict?.replacement_enc_buyer && (replacement_status === "DELIVERED" || !task.replacement_status)) {
     try {
       const parsed = JSON.parse(fromUtf8(open(kp, verdict.replacement_enc_buyer))) as { answer: string };
       replacement_answer = parsed.answer;
@@ -417,16 +469,26 @@ export async function getResultForBuyer(buyer: AgentRow, taskId: string) {
     result: result
       ? { result_id: result.id, model_id: result.model_id, runtime_ms: result.runtime_ms, commitment_sha256: result.commitment_sha256, commitment_verified, answer, result_enc_buyer: result.result_enc_buyer }
       : null,
-    verdict: verdict ? { verdict: verdict.verdict, reason_code: verdict.reason_code, reason_public: verdict.reason_public, score: verdict.score, created_at: verdict.created_at } : null,
+    verdict: verdict ? { verdict: verdict.verdict, reason_code: verdict.reason_code, reason_public: publicReason(verdict.reason_code), score: verdict.score, created_at: verdict.created_at } : null,
+    replacement_status,
     replacement_answer,
-    settlement,
-    guidance:
-      task.status === "APPROVED"
-        ? "Seller result approved by the judge; `answer` is the seller's output."
-        : task.status === "REJECTED"
-          ? "Seller result rejected; use `replacement_answer` (judge-produced) if present, otherwise post a new task."
-          : `Task is ${task.status}; call get_result again later.`,
+    settlement: settlement ? publicSettlement(settlement) : null,
+    guidance: resultGuidance(task, replacement_status, !!replacement_answer),
   };
+}
+
+function resultGuidance(task: TaskRow, replacement: TaskPublic["replacement_status"], haveReplacement: boolean): string {
+  if (task.status === "APPROVED") return "Seller result approved by the judge; `answer` is the seller's output.";
+  if (task.status === "REJECTED") {
+    if (haveReplacement) return "Seller result rejected; the hold was released, so you paid nothing. `replacement_answer` is the judge's own answer.";
+    if (replacement === "PENDING") return "Seller result rejected; the hold was released. A judge-produced replacement is still being prepared; call get_result again later.";
+    return "Seller result rejected; the hold was released. No replacement answer is available; post a new task if you still need one.";
+  }
+  const review = reviewOf(task);
+  if (review.status === "RETRY_PENDING" || review.status === "JUDGE_UNAVAILABLE") {
+    return `The judge could not complete the review (${review.status}); it is retried automatically${review.retry_at ? ` after ${review.retry_at}` : ""}. Nothing has been charged.`;
+  }
+  return `Task is ${task.status}; call get_result again later. A commitment-verified answer before APPROVED is intact but not yet judged.`;
 }
 
 export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskPublic> {
@@ -437,13 +499,28 @@ export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskP
       next_action: "A claimed task settles through the judge; poll get_task / get_result instead.",
     });
   }
-  const rel = await payments().release(task, "cancelled by buyer");
-  const rows = unwrap(await db().from("tasks").update({ status: "CANCELLED", payment_state: rel.payment_state, plaintext_enc_server: null, updated_at: nowIso() }).eq("id", taskId).eq("status", task.status).select()) as TaskRow[];
+  // Close the listing first (no claim can win after this), then settle durably (contract §9).
+  const rows = unwrap(
+    await db().from("tasks").update({ status: "CANCELLED", settle_pending: true, plaintext_enc_server: null, updated_at: nowIso() }).eq("id", taskId).eq("status", task.status).select(),
+  ) as TaskRow[];
   if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task changed state while cancelling; read it again.", { next_action: "Call get_task, then cancel_task again if it is still OPEN." });
-  await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel.note });
-  await adjustBuyerBalance(buyer.id, { reserved: -task.max_price_cents });
   await logEvent("task.cancelled", { task_id: taskId, agent_id: buyer.id });
-  return toTaskPublic(rows[0]!);
+  return toTaskPublic(await settleClosed(rows[0]!, "CANCEL"));
+}
+
+/**
+ * Settle a task already moved to CANCELLED/EXPIRED. A provider failure leaves
+ * the decision recorded for the sweep instead of failing the caller.
+ */
+async function settleClosed(task: TaskRow, outcome: "CANCEL" | "EXPIRE", reason?: string): Promise<TaskRow> {
+  await recordIntent(task, { outcome, seller_payout_cents: 0, release_reason: reason ?? null });
+  try {
+    return (await finalizeSettlement(task.id)).task;
+  } catch (err) {
+    if (!(err instanceof MarketplaceError && err.code === "PAYMENT_FAILED")) throw err;
+    warnOnce(`settle:${task.id}`, `[settle] ${task.id} ${outcome}: hold release not confirmed; housekeeping will retry`);
+    return (await getTask(task.id)) ?? task;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -682,8 +759,11 @@ export interface ReviewPackage {
 
 export async function fetchReviewPackage(judge: AgentRow): Promise<ReviewPackage | null> {
   await sweep();
-  const candidates = unwrap(await db().from("tasks").select("*").eq("status", "SUBMITTED").order("updated_at", { ascending: true }).limit(5)) as TaskRow[];
+  const now = Date.now();
+  const candidates = (unwrap(await db().from("tasks").select("*").eq("status", "SUBMITTED").order("updated_at", { ascending: true }).limit(25)) as TaskRow[]).filter((t) => reviewDue(t, now));
   for (const t of candidates) {
+    // A recorded decision is finished by housekeeping, never judged twice.
+    if (await settlementOf(t.id)) continue;
     const rows = unwrap(await db().from("tasks").update({ status: "JUDGING", judge_id: judge.id, updated_at: nowIso() }).eq("id", t.id).eq("status", "SUBMITTED").select()) as TaskRow[];
     if (!rows.length) continue;
     const task = rows[0]!;
@@ -715,7 +795,8 @@ export interface SubmitVerdictInput {
   result_id: string;
   verdict: Verdict;
   reason_code: VerdictReasonCode;
-  reason_public: string;
+  /** Accepted for v0.2 judges; never stored or published (contract §8.1). */
+  reason_public?: string;
   score?: number;
   replacement_enc_buyer?: Envelope;
 }
@@ -724,8 +805,11 @@ export async function submitVerdict(judge: AgentRow, input: SubmitVerdictInput) 
   const task = await mustGetTask(input.task_id);
   const existing = await settlementFor(task.id);
   if (existing) {
+    // A decision is recorded: finish it, whatever this call says (contract §9).
+    const r = existing.finalized_at || !existing.outcome ? null : await finalizeSettlement(task.id);
     const v = await latestVerdict(task.id);
-    return { idempotent: true, task: toTaskPublic(task), verdict: v && { verdict: v.verdict, reason_code: v.reason_code }, settlement: existing, seller_status: null as string | null };
+    const now = r?.task ?? (await mustGetTask(task.id));
+    return { idempotent: true, resumed: !!r?.finishedNow, deferred: false, task: toTaskPublic(now), review: reviewOf(now), verdict: v ? publicVerdict(v) : null, settlement: publicSettlement(r?.settlement ?? existing), seller_status: r?.sellerStatus ?? null };
   }
   if (task.status !== "JUDGING" && task.status !== "SUBMITTED") {
     throw new MarketplaceError("INVALID_STATE", `Task is ${task.status}; verdicts apply to JUDGING tasks.`, { next_action: "Call fetch_review_package for the next task waiting for review." });
@@ -733,112 +817,56 @@ export async function submitVerdict(judge: AgentRow, input: SubmitVerdictInput) 
   const res = await one<ResultRow>(await db().from("results").select("*").eq("id", input.result_id).eq("task_id", task.id).limit(1));
   if (!res) throw new MarketplaceError("NOT_FOUND", `Result ${input.result_id} not found for task ${task.id}.`, { next_action: "Use the result_id from fetch_review_package." });
 
-  // Payment failures leave the task reviewable and do not publish a verdict.
-  // Retrying the same rail operation uses its task-scoped Stripe idempotency key.
-  const sellerAgent = task.seller_id ? await getAgent(task.seller_id) : null;
-  const price = task.price_cents ?? 0;
-  let cap: Awaited<ReturnType<ReturnType<typeof payments>["capture"]>> | undefined;
-  let rel: Awaited<ReturnType<ReturnType<typeof payments>["release"]>> | undefined;
-  try {
-    if (input.verdict === "APPROVE") cap = await payments().capture(task, sellerAgent, price);
-    else rel = await payments().release(task, "judge rejected result");
-  } catch {
-    throw new MarketplaceError("PAYMENT_FAILED", "Settlement could not be completed; the task remains pending review.", {
-      retryable: true,
-      next_action: "Retry submit_verdict with the same task, result and verdict after checking the payment provider.",
+  // Judge infrastructure failure: retry later, no verdict, no settlement, no strike (contract §8.2).
+  if (isInfraReason(input.reason_code)) {
+    const d = await deferReview(judge, task, input.reason_code);
+    const seller = task.seller_id ? await getSeller(task.seller_id) : null;
+    return { idempotent: false, resumed: false, deferred: true, task: toTaskPublic(d.task), review: d.review, verdict: null, settlement: null, seller_status: seller?.status ?? null };
+  }
+  const allowed = input.verdict === "APPROVE" ? APPROVE_REASON_CODES : REJECT_REASON_CODES;
+  if (!allowed.includes(input.reason_code)) {
+    throw new MarketplaceError("VALIDATION_ERROR", `${input.reason_code} cannot accompany ${input.verdict}.`, {
+      next_action: `Use one of ${allowed.join(", ")} for ${input.verdict}, or a judge infrastructure code to defer the review.`,
     });
   }
-
-  const verdictId = newId("verdict");
-  unwrap(
-    await db().from("verdicts").insert({
-      id: verdictId,
-      task_id: task.id,
-      result_id: res.id,
-      judge_id: judge.id,
-      verdict: input.verdict,
-      reason_code: input.reason_code,
-      reason_public: input.reason_public,
-      score: input.score ?? null,
-      replacement_enc_buyer: input.replacement_enc_buyer ?? null,
-    }),
-  );
-
-  const seller = task.seller_id ? await getSeller(task.seller_id) : null;
-  let sellerStatus: string | null = seller?.status ?? null;
-  let settlement: SettlementRow;
-  let finalStatus: TaskStatus;
-
-  if (input.verdict === "APPROVE") {
-    settlement = await recordSettlement(task, {
-      kind: task.payment_mode,
-      seller_payout_cents: price,
-      buyer_refund_cents: task.max_price_cents - price,
-      stripe_capture_id: cap!.stripe_capture_id,
-      stripe_transfer_id: cap!.stripe_transfer_id,
-      note: cap!.note,
-    });
-    finalStatus = "APPROVED";
-    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: cap!.payment_state, updated_at: nowIso() }).eq("id", task.id));
-    if (seller) unwrap(await db().from("sellers").update({ approvals: seller.approvals + 1 }).eq("agent_id", seller.agent_id));
-    await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents, spent: price });
-  } else {
-    settlement = await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel!.note });
-    finalStatus = "REJECTED";
-    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: rel!.payment_state, updated_at: nowIso() }).eq("id", task.id));
-    if (seller) {
-      const strikes = seller.strikes + 1;
-      sellerStatus = strikes >= env().SUSPEND_AFTER_STRIKES ? "SUSPENDED" : seller.status;
-      unwrap(await db().from("sellers").update({ rejections: seller.rejections + 1, strikes, status: sellerStatus }).eq("agent_id", seller.agent_id));
-      if (sellerStatus === "SUSPENDED") await logEvent("seller.suspended", { task_id: task.id, agent_id: seller.agent_id, meta: { strikes, threshold: env().SUSPEND_AFTER_STRIKES } });
+  if (input.replacement_enc_buyer) {
+    const buyer = await getAgent(task.buyer_id);
+    if (buyer?.buyer_key_id && input.replacement_enc_buyer.recipient_key_id !== buyer.buyer_key_id) {
+      throw new MarketplaceError("VALIDATION_ERROR", `replacement_enc_buyer must be sealed to ${buyer.buyer_key_id}.`, { next_action: "Seal to buyer_public_key from fetch_review_package and resubmit." });
     }
-    await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents });
   }
-  await logEvent("verdict.recorded", { task_id: task.id, agent_id: judge.id, meta: { verdict: input.verdict, reason_code: input.reason_code, score: input.score ?? null, seller_payout_cents: settlement.seller_payout_cents } });
-  const buyer = await getAgent(task.buyer_id);
-  await inkbox.notify({ type: "verdict", task_id: task.id, to_handle: buyer?.inkbox_handle ?? null, text: `Judge ${input.verdict} for ${task.id}: ${input.reason_public}`, context_id: task.inkbox_context_id });
-  const updated = await mustGetTask(task.id);
-  return { idempotent: false, task: toTaskPublic(updated), verdict: { verdict_id: verdictId, verdict: input.verdict, reason_code: input.reason_code }, settlement, seller_status: sellerStatus };
+
+  // Record the decision first; then money, verdict row, task, reputation and balances, each exactly once.
+  await recordIntent(task, {
+    outcome: input.verdict,
+    seller_payout_cents: input.verdict === "APPROVE" ? task.price_cents ?? 0 : 0,
+    result_id: res.id,
+    reason_code: input.reason_code,
+    judge_id: judge.id,
+    score: input.score ?? null,
+    replacement_enc_buyer: input.replacement_enc_buyer ?? null,
+  });
+  const r = await finalizeSettlement(task.id);
+  const v = await latestVerdict(task.id);
+  return { idempotent: !r.finishedNow, resumed: false, deferred: false, task: toTaskPublic(r.task), review: reviewOf(r.task), verdict: v ? publicVerdict(v) : null, settlement: publicSettlement(r.settlement), seller_status: r.sellerStatus };
 }
 
 // ---------------------------------------------------------------------------
-// Settlement + expiry
+// Expiry (settlement itself lives in settlement.ts)
 // ---------------------------------------------------------------------------
-
-async function recordSettlement(task: TaskRow, s: { kind: string; seller_payout_cents: number; buyer_refund_cents: number; stripe_capture_id?: string | null; stripe_transfer_id?: string | null; note?: string | null }): Promise<SettlementRow> {
-  const existing = await settlementFor(task.id);
-  if (existing) return existing;
-  const rows = unwrap(
-    await db().from("settlements").insert({
-      id: newId("settle"),
-      task_id: task.id,
-      kind: s.kind === "card" ? "STRIPE_TEST" : s.kind.toUpperCase(),
-      state: "RECORDED",
-      seller_payout_cents: s.seller_payout_cents,
-      buyer_refund_cents: s.buyer_refund_cents,
-      stripe_capture_id: s.stripe_capture_id ?? null,
-      stripe_transfer_id: s.stripe_transfer_id ?? null,
-      note: s.note ?? null,
-    }).select(),
-  ) as SettlementRow[];
-  return rows[0]!;
-}
 
 async function finalizeExpired(task: TaskRow, reason: string): Promise<TaskRow> {
-  const rel = task.payment_state === "HELD" || task.payment_state === "MOCK" || task.payment_state === "PAID" ? await payments().release(task, reason) : null;
   const rows = unwrap(
     await db()
       .from("tasks")
-      .update({ status: "EXPIRED", payment_state: rel?.payment_state ?? task.payment_state, plaintext_enc_server: null, payload_enc_seller: null, claim_id: null, seller_id: null, lease_expires_at: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
+      .update({ status: "EXPIRED", settle_pending: true, plaintext_enc_server: null, payload_enc_seller: null, claim_id: null, seller_id: null, lease_expires_at: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
       .eq("id", task.id)
       .eq("status", task.status)
       .select(),
   ) as TaskRow[];
   if (!rows.length) return task;
-  await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: `expired: ${reason}` });
-  await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents });
   await logEvent("task.expired", { task_id: task.id, meta: { reason, previous_status: task.status } });
-  return rows[0]!;
+  return settleClosed(rows[0]!, "EXPIRE", reason);
 }
 
 async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
@@ -854,10 +882,10 @@ async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
   return rows[0] ?? task;
 }
 
-export async function expireStale(): Promise<{ expired: number; reopened: number; requeued: number; failed: number }> {
+export async function expireStale(): Promise<{ expired: number; reopened: number; requeued: number; resumed: number; transfers_retried: number; failed: number }> {
   await ensureSchema();
   const now = nowIso();
-  let expired = 0, reopened = 0, requeued = 0, failed = 0;
+  let expired = 0, reopened = 0, requeued = 0, resumed = 0, failed = 0;
   // One task whose Stripe release or update fails must not block the rest of the sweep.
   const each = async (t: TaskRow, fn: () => Promise<unknown>) => {
     try {
@@ -878,10 +906,30 @@ export async function expireStale(): Promise<{ expired: number; reopened: number
   }
   const stuck = unwrap(await db().from("tasks").select("*").eq("status", "JUDGING").lt("updated_at", new Date(Date.now() - JUDGING_TIMEOUT_S * 1000).toISOString()).limit(20)) as TaskRow[];
   for (const t of stuck) {
+    if (await settlementOf(t.id)) continue; // decided; resumed below instead of re-judged
     const ok = await each(t, async () => unwrap(await db().from("tasks").update({ status: "SUBMITTED", judge_id: null, updated_at: nowIso() }).eq("id", t.id).eq("status", "JUDGING")));
     if (ok) requeued++;
   }
-  return { expired, reopened, requeued, failed };
+  // Finish settlements a crash or provider outage left half done (contract §9).
+  const cutoff = new Date(Date.now() - RESUME_AFTER_S * 1000).toISOString();
+  const unfinished = unwrap(await db().from("settlements").select("task_id").is("finalized_at", null).lt("created_at", cutoff).limit(20)) as { task_id: string }[];
+  for (const u of unfinished) {
+    if (await each({ id: u.task_id, status: "SETTLING" } as unknown as TaskRow, () => finalizeSettlement(u.task_id))) resumed++;
+  }
+  const closing = unwrap(await db().from("tasks").select("*").is("settle_pending", true).lt("updated_at", cutoff).limit(20)) as TaskRow[];
+  for (const t of closing) {
+    const outcome = outcomeForStatus(t.status);
+    if (!outcome || (await settlementOf(t.id))) continue; // an intent exists: handled above
+    if (await each(t, async () => { await recordIntent(t, { outcome, seller_payout_cents: 0 }); await finalizeSettlement(t.id); })) resumed++;
+  }
+  let transfers_retried = 0;
+  try {
+    transfers_retried = (await retryPendingTransfers()).attempted;
+  } catch (err) {
+    failed++;
+    warnOnce(`transfers:${(err as Error).message}`, `[transfers] retry pass failed: ${(err as Error).message}`);
+  }
+  return { expired, reopened, requeued, resumed, transfers_retried, failed };
 }
 
 const warned = new Set<string>();
@@ -930,8 +978,10 @@ export async function dashboard() {
   const tasks = (unwrap(await db().from("tasks").select("*").order("created_at", { ascending: false }).limit(40)) as TaskRow[]).map(toTaskPublic);
   const sellers = await listSellers();
   const events = unwrap(await db().from("events").select("*").order("created_at", { ascending: false }).limit(60));
-  const verdicts = (unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,reason_public,score,created_at").order("created_at", { ascending: false }).limit(40)) as Omit<VerdictRow, "replacement_enc_buyer" | "judge_id" | "result_id">[]);
-  const settlements = unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[];
+  // Stored reason_public is never read: rows written before v0.3 may hold judge free text (contract §8.1).
+  const verdicts = (unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,score,created_at").order("created_at", { ascending: false }).limit(40)) as Pick<VerdictRow, "id" | "task_id" | "verdict" | "reason_code" | "score" | "created_at">[])
+    .map((v) => ({ ...v, reason_public: publicReason(v.reason_code) }));
+  const settlements = (unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[]).map(publicSettlement);
   return {
     generated_at: nowIso(),
     payments: { mode: payments().mode, label: payments().label },

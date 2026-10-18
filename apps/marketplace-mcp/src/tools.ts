@@ -6,7 +6,10 @@
 import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import {
+  APPROVE_REASON_CODES,
   CONTRACT_VERSION,
+  INFRA_REASON_CODES,
+  REJECT_REASON_CODES,
   Envelope,
   LEASE_SECONDS,
   MAX_PRICE_CENTS,
@@ -25,6 +28,7 @@ import { dbLabel } from "./db.js";
 import { env } from "./env.js";
 import { inkbox } from "./inkbox.js";
 import { payments } from "./payments.js";
+import { fetchReplacementPackage, submitReplacement } from "./review.js";
 import * as svc from "./service.js";
 
 type ToolResult = {
@@ -422,13 +426,13 @@ export function registerTools(server: MCPServer): void {
     {
       name: "submit_verdict",
       description:
-        "Judge: record APPROVE (captures the buyer's hold for the seller's price and pays the seller) or REJECT (releases the hold, strikes the seller, optionally attaches a replacement answer encrypted to the buyer). Idempotent per task.",
+        "Judge: record APPROVE (captures the buyer's hold for the seller's price and pays the seller) or REJECT (releases the hold, strikes the seller, optionally attaches a replacement answer encrypted to the buyer). If the judge model failed (unavailable, timeout, unreadable grade), send a judge infrastructure reason_code instead: the review is deferred and retried, with no strike and no money moved. Idempotent per task: a repeated call finishes the first recorded decision. The public explanation is chosen by the server from reason_code.",
       inputSchema: z.object({
         task_id: z.string(),
         result_id: z.string(),
         verdict: Verdict,
-        reason_code: VerdictReasonCode.describe(`One of ${VERDICT_REASON_CODES.join(", ")}`),
-        reason_public: z.string().max(400).describe("Shown to buyer and seller; must not quote private text."),
+        reason_code: VerdictReasonCode.describe(`APPROVE: ${APPROVE_REASON_CODES.join(", ")}. REJECT: ${REJECT_REASON_CODES.join(", ")}. Defer (any verdict): ${INFRA_REASON_CODES.join(", ")}.`),
+        reason_public: z.string().max(400).optional().describe("Ignored: the server publishes a fixed explanation for reason_code. Accepted so older judges keep working."),
         score: z.number().min(0).max(1).optional(),
         replacement_enc_buyer: Envelope.optional(),
         ...apiKeyField,
@@ -439,6 +443,41 @@ export function registerTools(server: MCPServer): void {
         const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
         const { api_key: _k, ...input } = p;
         return svc.submitVerdict(judge, input);
+      }),
+  );
+
+  server.tool(
+    {
+      name: "fetch_replacement_package",
+      description:
+        "Judge: take the oldest REJECTED task whose buyer has not yet received a judge-produced answer (leased to you for 5 minutes). Returns the judge copy of the task and the buyer's public key; produce the answer, seal it to the buyer and call submit_replacement. Null when nothing is waiting.",
+      inputSchema: z.object({ ...apiKeyField }),
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
+        return { package: await fetchReplacementPackage(judge), judge_key_id: env().JUDGE_KEY_ID };
+      }),
+  );
+
+  server.tool(
+    {
+      name: "submit_replacement",
+      description:
+        "Judge: deliver the replacement answer for a REJECTED task (replacement_enc_buyer sealed to the buyer), or report that the judge model could not produce one (reason_code JUDGE_UNAVAILABLE / JUDGE_TIMEOUT / JUDGE_MALFORMED; retried with backoff, UNAVAILABLE after 5 attempts). Never moves money or changes reputation. Idempotent once delivered.",
+      inputSchema: z.object({
+        task_id: z.string(),
+        result_id: z.string(),
+        replacement_enc_buyer: Envelope.optional(),
+        reason_code: VerdictReasonCode.optional(),
+        ...apiKeyField,
+      }),
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
+        const { api_key: _k, ...input } = p;
+        return submitReplacement(judge, input);
       }),
   );
 }

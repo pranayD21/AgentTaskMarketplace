@@ -127,9 +127,57 @@ export const VERDICT_REASON_CODES = [
   "LLM_RUBRIC_PASS",
   "LLM_RUBRIC_FAIL",
   "JUDGE_ERROR",
+  "JUDGE_UNAVAILABLE",
+  "JUDGE_TIMEOUT",
+  "JUDGE_MALFORMED",
 ] as const;
 export const VerdictReasonCode = z.enum(VERDICT_REASON_CODES);
 export type VerdictReasonCode = z.infer<typeof VerdictReasonCode>;
+
+/** Quality codes that may accompany APPROVE / REJECT (contract §8.2). */
+export const APPROVE_REASON_CODES: readonly VerdictReasonCode[] = ["RUBRIC_MATCH", "LLM_RUBRIC_PASS"];
+export const REJECT_REASON_CODES: readonly VerdictReasonCode[] = ["RUBRIC_MISMATCH", "LLM_RUBRIC_FAIL", "COMMITMENT_MISMATCH", "EMPTY_ANSWER"];
+/** Judge infrastructure failures: a retry, never a verdict, never a strike. */
+export const INFRA_REASON_CODES: readonly VerdictReasonCode[] = ["JUDGE_ERROR", "JUDGE_UNAVAILABLE", "JUDGE_TIMEOUT", "JUDGE_MALFORMED"];
+export function isInfraReason(code: string): boolean {
+  return (INFRA_REASON_CODES as readonly string[]).includes(code);
+}
+
+/**
+ * The only public explanation of a verdict (contract §8.1). The server picks
+ * it from the reason code; judge-written text is never published.
+ */
+export const PUBLIC_REASON: Record<VerdictReasonCode, string> = {
+  RUBRIC_MATCH: "The answer contained the buyer's expected text.",
+  RUBRIC_MISMATCH: "The answer did not contain the buyer's expected text.",
+  COMMITMENT_MISMATCH: "The delivered result did not match the seller's commitment.",
+  EMPTY_ANSWER: "The seller returned an empty answer.",
+  LLM_RUBRIC_PASS: "The judge model found that the answer meets the buyer's criteria.",
+  LLM_RUBRIC_FAIL: "The judge model found that the answer does not meet the buyer's criteria.",
+  JUDGE_ERROR: "The judge could not complete the review; it will be retried.",
+  JUDGE_UNAVAILABLE: "The judge model was unavailable; the review will be retried.",
+  JUDGE_TIMEOUT: "The judge timed out; the review will be retried.",
+  JUDGE_MALFORMED: "The judge returned an unreadable grade; the review will be retried.",
+};
+
+export function publicReason(code: string): string {
+  return (PUBLIC_REASON as Record<string, string>)[code] ?? "Reviewed by the judge.";
+}
+
+export const REVIEW_STATUSES = ["NOT_SUBMITTED", "PENDING", "RETRY_PENDING", "JUDGE_UNAVAILABLE", "FINAL"] as const;
+export const ReviewStatus = z.enum(REVIEW_STATUSES);
+export type ReviewStatus = z.infer<typeof ReviewStatus>;
+
+export const REPLACEMENT_STATUSES = ["NOT_NEEDED", "PENDING", "DELIVERED", "UNAVAILABLE"] as const;
+export const ReplacementStatus = z.enum(REPLACEMENT_STATUSES);
+export type ReplacementStatus = z.infer<typeof ReplacementStatus>;
+
+/** Deferred reviews: 30 s doubling to 10 min; JUDGE_UNAVAILABLE after this many. */
+export const MAX_REVIEW_ATTEMPTS = 6;
+export const MAX_REPLACEMENT_ATTEMPTS = 5;
+export function retryDelaySeconds(attempts: number): number {
+  return Math.min(30 * 2 ** Math.max(0, attempts - 1), 600);
+}
 
 /** Output of the runner's judge-task export. */
 export const JudgeTaskOutput = z.object({
@@ -199,8 +247,84 @@ export const TaskPublic = z.object({
     payment_link: z.string().nullable(),
   }),
   inkbox_context_id: z.string().nullable(),
+  // v0.3 (contract §8, §10). Optional so clients still parse a v0.2 server.
+  review: z.object({ status: ReviewStatus, attempts: z.number().int(), retry_at: z.string().nullable() }).optional(),
+  replacement_status: ReplacementStatus.nullable().optional(),
+  job_id: z.string().nullable().optional(),
+  part_key: z.string().nullable().optional(),
+  part_label: z.string().nullable().optional(),
+  attempt: z.number().int().nullable().optional(),
 });
 export type TaskPublic = z.infer<typeof TaskPublic>;
+
+// ---------------------------------------------------------------------------
+// Jobs: a buyer request split into parts (contract §10)
+// ---------------------------------------------------------------------------
+
+export const JOB_STATUSES = ["EMPTY", "IN_PROGRESS", "COMPLETE", "PARTIAL_FAILURE"] as const;
+export const JobStatus = z.enum(JOB_STATUSES);
+export type JobStatus = z.infer<typeof JobStatus>;
+
+export const PART_KEY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+export const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,64}$/;
+
+export const JobProgress = z.object({
+  parts: z.number().int(),
+  approved: z.number().int(),
+  rejected: z.number().int(),
+  in_progress: z.number().int(),
+  open: z.number().int(),
+  failed_latest: z.number().int(),
+});
+export type JobProgress = z.infer<typeof JobProgress>;
+
+export const JobPublic = z.object({
+  job_id: z.string(),
+  buyer_id: z.string(),
+  label_public: z.string().nullable(),
+  budget_cents: z.number().int(),
+  reserved_cents: z.number().int(),
+  spent_cents: z.number().int(),
+  status: JobStatus,
+  created_at: z.string(),
+  progress: JobProgress,
+});
+export type JobPublic = z.infer<typeof JobPublic>;
+
+// ---------------------------------------------------------------------------
+// Benchmark usage records (contract §11). Unmeasured quantities are null, never 0.
+// ---------------------------------------------------------------------------
+
+export const UsageRecord = z.object({
+  schema: z.literal("atm.usage.v1"),
+  run_id: z.string().min(1),
+  case_id: z.string().min(1),
+  arm: z.enum(["local", "marketplace", "baseline"]),
+  component: z.enum(["buyer", "seller", "judge", "replacement", "hosting", "payment"]),
+  task_id: z.string().nullable().optional(),
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  model_version: z.string().nullable().optional(),
+  started_at: z.string(),
+  ended_at: z.string(),
+  latency_ms: z.number().nonnegative(),
+  load_ms: z.number().nonnegative().nullable().optional(),
+  input_tokens: z.number().int().nonnegative().nullable().optional(),
+  output_tokens: z.number().int().nonnegative().nullable().optional(),
+  cache_read_tokens: z.number().int().nonnegative().nullable().optional(),
+  cache_write_tokens: z.number().int().nonnegative().nullable().optional(),
+  retries: z.number().int().nonnegative(),
+  success: z.boolean(),
+  energy_wh: z.number().nonnegative().nullable().optional(),
+  energy_basis: z.enum(["measured", "estimated"]).nullable().optional(),
+  hardware: z.string().nullable().optional(),
+  cost_usd: z.number().nonnegative().nullable().optional(),
+  cost_basis: z.enum(["invoice", "list_price", "estimate"]).nullable().optional(),
+  price_source: z.string().nullable().optional(),
+  price_date: z.string().nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
+export type UsageRecord = z.infer<typeof UsageRecord>;
 
 /**
  * Where a claim's seller envelope key came from: a key presented with this
@@ -270,6 +394,7 @@ export const ERROR_CODES = {
   CLAIM_CONFLICT: 409,
   MODEL_NOT_ALLOWED: 409,
   INVALID_STATE: 409,
+  JOB_BUDGET_EXCEEDED: 409,
   LEASE_EXPIRED: 410,
   SELLER_SUSPENDED: 403,
   INTERNAL_ERROR: 500,
