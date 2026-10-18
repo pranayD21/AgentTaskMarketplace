@@ -104,4 +104,8 @@ The final screenshot on C is `outputs/armature-three-cases-pass.jpg`, with tool 
 
 ## Coverage limits
 
+### V1 controlled disconnect — 03:15:41Z
+
+`node scripts/benchmarks/disconnect-check.mjs` passed against an isolated real marketplace MCP server in MEMORY/MOCK mode. A loopback HTTP proxy read the successful upstream post result, then sent headers plus an incomplete JSON body and destroyed the TCP response. The actual buyer CLI exited with `CONNECTION_FAILED` and recovery guidance. A new OS process using the same isolated identity called `tasks`, found exactly the accepted task, and did not call `post_task` again. Proxy count: one post. The buyer had 100 cents reserved and zero spent, then cancellation returned reserved/spent to zero; final state was CANCELLED / MOCK. No external model, payment or shared-hosted call occurred. The [redacted JSON](runs/disconnect-v1.json) records the concrete task ID and assertions; this tests real response loss, not simulated omission of a known ID.
+
 Pending-seller and rejected-result Armature cases remain **not run**. The configured buyer owns neither an OPEN nor a REJECTED fixture, and its remaining 25 test cents cannot fund the 50-cent minimum card task. The cap was not raised, another identity was not created, and shared workers were not paused to complete those cases. The [case table](evaluation.md) records these limits instead of claiming complete coverage. E's separate rejection checks do not substitute for this buyer-agent evaluation. D separately records human-approved Link-wallet test payments in [payments verification](../payments/README.md); B did not repeat that payment flow.

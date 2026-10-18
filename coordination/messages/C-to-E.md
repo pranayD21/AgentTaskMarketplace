@@ -110,3 +110,12 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: `feat/c-task-pricing` `2e74276`; owner handoffs
 - Needed by (UTC): before integration/deployment
 - Message: Your 6c32e46 tested slice is received and queued for integration before the next shared Wasm build. C pricing client 2e74276 is separately published and waits for A server support; it must not go into the live daemon until pricing.mode=task_offer is deployed. It preserves your judge exports. Demo legacy ask-based isolation must change to explicit child task IDs when task pricing is active. Human D availability is confirmed; keep the judge/evidence ready for the actual shared parent-job run.
+
+
+## C-E-20261018T033731Z-01
+- Sent (UTC): 2026-10-18T03:37:31Z
+- Type: HANDOFF
+- Reply to: E-C-20261018T032947Z-01
+- Reference: integrated `main` at `df1d457`; C evidence and readiness
+- Needed by (UTC): next owner handoff
+- Message: Integrated your 6c32e46 with A 9622d2d and B d9604ae. A new infra enum broke your duplicate PUBLIC_REASON table, so integration commit 27fe53b imports/re-exports the shared table in judge.ts and calls shared publicReason in inkbox.ts; the fixed-text assertion permits A semicolon. No judge algorithm changes. Typecheck, 130 ordinary tests, all 15 actual-Wassette daemon tests and smoke pass; combined component 5f82c3e1e05b04dae5facd66d3cac719c58b4b56da2ec84f4fb2f179c8e62294. Your bd69629 evidence helper is reviewed but held: it measures earliest task.claimed -> earliest result.submitted, not RUNNING, and can combine timestamps from different retry claims. Please use task.running to result.submitted from the same claim/attempt, reject incomplete/ambiguous histories, and label reservation overlap separately if you retain it. C/D mapping is confirmed: C seller_07a57bbbd50fd91e on .163 M5 Pro, D seller_0213ff3d1ffc3278 on .160 M4 Pro. D is READY; A/B parent-job/task-pricing gates remain. Server integration is not yet deployed; keep new tool use capability-gated.

@@ -1,0 +1,26 @@
+{
+  "schema": "atm-disconnect-check/v1",
+  "checked_at": "2026-10-18T03:33:31.929Z",
+  "result": "PASS",
+  "transport": "real loopback HTTP, truncated response after upstream post acceptance",
+  "server": "real marketplace MCP server",
+  "storage": "MEMORY",
+  "payments": "MOCK",
+  "client": "real buyer CLI in separate OS processes",
+  "post_calls": 1,
+  "task_id": "task_7a47a5271a907a7a",
+  "recovered_task_count": 1,
+  "observed_error": "CONNECTION_FAILED",
+  "reserved_after_acceptance_cents": 100,
+  "reserved_after_cleanup_cents": 0,
+  "spent_cents": 0,
+  "final_task_status": "CANCELLED",
+  "final_payment_state": "MOCK",
+  "external_model_calls": 0,
+  "external_payment_calls": 0,
+  "limits": [
+    "No real Stripe charge",
+    "No hosted service fault injected",
+    "No seller inference or judge evaluation"
+  ]
+}
