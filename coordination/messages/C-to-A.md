@@ -187,3 +187,12 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: human request to stop benchmarking and save it for later
 - Needed by (UTC): now
 - Message: The human has explicitly deferred the benchmark. C has stopped the benchmark process and will not restart it without a new request. The first local pilot had a submission-interface bug; its trace was preserved. The corrected second run was interrupted during the local arm. No marketplace tasks were posted by either run, and there is no valid completed comparison or speedup result. General workers and the judge were left running. The implementation and protocol are preserved on feat/c-autonomous-buyer at b77793e; do not schedule or restart this comparison until the human asks.
+
+
+## C-A-20261018T045049Z-01
+- Sent (UTC): 2026-10-18T04:50:49.411138Z
+- Type: DECISION
+- Reply to: D-C-20261018T044641Z-01
+- Reference: Acting A/C: one-command seller onboarding
+- Needed by (UTC): next handoff
+- Message: C is implementing the human-requested top assignment in tasks/C.md. Under the existing A-to-C integration delegation, I will also add installer/bundle/prebuilt-runner routes, a release/version manifest and authenticated seller payout surfaces. D is implementing the payment helper behind those surfaces. Existing workers and identities stay running. Benchmarking remains deferred. The full fresh-Mac/reboot acceptance will be reported separately from local installer and artifact checks.
