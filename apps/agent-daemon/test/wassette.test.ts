@@ -34,6 +34,7 @@ it.skipIf(!process.env.ATM_TEST_WASSETTE)("runs fresh-instance cycles, denies Ol
   try {
     const first = await runtime.runCycle(opts);
     expect(service.summary().outputVerified).toBe(true);
+    expect(first.seller_usage).toMatchObject({ source: "ollama", output_tokens: 2, input_tokens: null });
     service.reset();
     const second = await runtime.runCycle(opts);
     expect(first.key_id).not.toBe(second.key_id);
@@ -67,3 +68,23 @@ it.skipIf(!process.env.ATM_TEST_WASSETTE)("runs fresh-instance cycles, denies Ol
     console.log("Wassette evidence: fresh per-call keys; verified result bytes; Ollama denial and release; killed child and reconnect; timeout release; one race winner.");
   } finally { await runtime.close(); await denied.close(); await competitor.close(); await marketplace.close(); await ollama.close(); }
 }, 180_000);
+
+
+it.skipIf(!process.env.ATM_TEST_WASSETTE)("keeps inference usage after a failed submission and runs a private canary in real Wassette", async () => {
+  const service = fixture({ fail: "submit_result" });
+  const marketplace = await serve(service.fetch);
+  let canary = false;
+  const ollama = await serve((async (url: unknown, init?: RequestInit) => {
+    if (String(url).endsWith("/api/chat")) return Response.json({ message: { content: canary ? "4" : "Paris" }, eval_count: 2, prompt_eval_count: 10, total_duration: 1_000_000 });
+    return service.fetch(url as string, init);
+  }) as typeof fetch, "localhost");
+  const runtime = new WassetteRuntime("seller", undefined, { apiKey: "fixture", marketplaceUrl: `${marketplace.url}/mcp`, ollamaUrl: ollama.url });
+  try {
+    await expect(runtime.runCycle({ marketplace_url: `${marketplace.url}/mcp`, ollama_url: ollama.url, task_id: "task_fixture", model_id: "qwen3:8b", max_runtime_s: 180 }))
+      .rejects.toMatchObject({ code: "LEASE_EXPIRED", seller_usage: { input_tokens: 10, output_tokens: 2, total_duration_ms: 1 } });
+    canary = true;
+    const calls = service.calls.length;
+    expect(await runtime.modelCanary({ ollama_url: ollama.url, model_id: "qwen3:8b" })).toMatchObject({ passed: true, seller_usage: { input_tokens: 10 } });
+    expect(service.calls).toHaveLength(calls);
+  } finally { await runtime.close(); await marketplace.close(); await ollama.close(); }
+}, 90_000);
