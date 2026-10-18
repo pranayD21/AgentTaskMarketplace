@@ -53,3 +53,5 @@ The existing host can inspect Wasm memory and Ollama inference. A future design 
 Before releasing a task key, the buyer or trusted release service would verify an attestation bound to a fresh nonce, the runner/model measurement and that task's public key. Bind task, claim, runtime measurement and result commitment together, reject replayed/expired evidence, and define key revocation. Buyer-held decryption keys would also remove the current server's ability to read results. E needs an equivalent analysis for judge execution.
 
 Acceptance would require a tested chain of attestation verification, key release and confidential model execution on selected hardware. A local canary or self-reported digest cannot substitute for that evidence. This is a design outline; no such environment is implemented here.
+
+Task-price attempts include `offered_price_cents`, the public offer observed before claiming. This is a proposed payment, not proof of spend or a resource cost. Reconcile actual payment with the server settlement and keep it separate from token/energy costs.

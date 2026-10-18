@@ -4,7 +4,7 @@ import type { SellerUsage } from "./seller-measurements.js";
 import { FetchMarketplace, safeFailureCode } from "./marketplace.js";
 
 export interface SellerRegistration {
-  models: ModelInfo[];
+  models: (Omit<ModelInfo, "ask_cents"> & { ask_cents?: number })[];
   runtime: "wassette" | "node-unsandboxed";
   runner_wasm_sha256?: string;
   wassette_version?: string;
@@ -16,6 +16,8 @@ export interface RunCycleOpts {
   task_id: string;
   model_id: string;
   max_runtime_s: number;
+  /** The posted offer observed by the seller. Check before starting inference. */
+  expected_price_cents?: number;
   /** Only for servers that still require a registered key. */
   legacy_registration?: SellerRegistration;
 }
@@ -27,12 +29,14 @@ export interface RunCycleOutput {
   runtime_ms: number;
   tokens_out?: number;
   key_id: string;
+  price_cents: number;
   seller_usage?: SellerUsage | null;
 }
 
 /** A fresh runner and key stay alive for the complete claim-to-submit call. */
 export async function runCycle(host: RunnerHost, opts: RunCycleOpts): Promise<RunCycleOutput> {
   if (!Number.isFinite(opts.max_runtime_s) || opts.max_runtime_s <= 0) throw new Error("INVALID_RUNTIME_LIMIT");
+  if (opts.expected_price_cents !== undefined && (!Number.isSafeInteger(opts.expected_price_cents) || opts.expected_price_cents <= 0)) throw new Error("INVALID_TASK_PRICE");
   const apiKey = await host.getSecret("AGENT_API_KEY");
   if (!apiKey) throw new Error("MISSING_AGENT_API_KEY");
   const mp = new FetchMarketplace(opts.marketplace_url, apiKey, host.fetch);
@@ -51,6 +55,7 @@ export async function runCycle(host: RunnerHost, opts: RunCycleOpts): Promise<Ru
   try {
     const claim = ClaimPublic.parse(raw);
     if (claim.task_id !== opts.task_id || claim.model_id !== opts.model_id) throw new Error("CLAIM_MISMATCH");
+    if (opts.expected_price_cents !== undefined && claim.price_cents !== opts.expected_price_cents) throw new Error("TASK_PRICE_CHANGED");
     const leaseRemaining = Date.parse(claim.lease_expires_at) - host.now();
     if (!Number.isFinite(leaseRemaining) || leaseRemaining < 40_000) throw new MarketplaceError("LEASE_EXPIRED", "LEASE_EXPIRED");
     await mp.call("start_task", { task_id: opts.task_id, claim_id: claim.claim_id });
@@ -75,7 +80,7 @@ export async function runCycle(host: RunnerHost, opts: RunCycleOpts): Promise<Ru
       commitment_sha256: out.commitment_sha256, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out,
     });
     if (!submitted.result_id) throw new Error("MISSING_RESULT_ID");
-    return { task_id: opts.task_id, claim_id: claim.claim_id, result_id: submitted.result_id, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out, key_id: key.key_id, seller_usage: out.seller_usage };
+    return { task_id: opts.task_id, claim_id: claim.claim_id, result_id: submitted.result_id, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out, key_id: key.key_id, price_cents: claim.price_cents, seller_usage: out.seller_usage };
   } catch (error) {
     if (claimId) await mp.call("release_task", { task_id: opts.task_id, claim_id: claimId, reason: safeFailureCode(error) }).catch(() => {});
     throw error;

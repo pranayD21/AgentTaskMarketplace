@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { MeasurementRecorder } from "./measurements.js";
 import { listOllamaModels } from "./ollama.js";
 import { sellerLoop } from "./seller.js";
+import { requireTaskPricing } from "./task-pricing.js";
 import { safeFailureCode } from "@atm/runner-core";
 import { parseArgs } from "node:util";
 import { Marketplace } from "./marketplace.js";
@@ -19,7 +20,7 @@ const { values: args } = parseArgs({
     role: { type: "string", default: "seller" },
     runtime: { type: "string", default: process.env.ATM_RUNTIME ?? "wassette" },
     model: { type: "string", multiple: true },
-    "ask-cents": { type: "string", default: "75" },
+    "ask-cents": { type: "string" }, // Deprecated; accepted only to explain migration to existing scripts.
     "display-name": { type: "string" },
     "poll-ms": { type: "string", default: "5000" },
     "state-file": { type: "string" },
@@ -36,7 +37,6 @@ const { values: args } = parseArgs({
 });
 if (!["seller", "judge"].includes(args.role) || !["wassette", "node"].includes(args.runtime)) throw new Error("Use --role seller|judge and --runtime wassette|node");
 if (!Number.isInteger(Number(args["poll-ms"])) || Number(args["poll-ms"]) < 100) throw new Error("poll-ms must be an integer >= 100");
-if (!Number.isInteger(Number(args["ask-cents"])) || Number(args["ask-cents"]) < 0) throw new Error("ask-cents must be a nonnegative integer");
 if (args["deny-ollama"] && (args.runtime !== "wassette" || args.role !== "seller")) throw new Error("deny-ollama requires the Wassette seller");
 if (args["deny-marketplace"] && (args.runtime !== "wassette" || args.role !== "judge")) throw new Error("deny-marketplace requires the Wassette judge");
 if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.role !== "seller") throw new Error("seller measurement/canary options require --role seller");
@@ -163,11 +163,16 @@ try {
       } catch (error) { finish?.({ status: "failed", error_code: safeFailureCode(error) }); throw error; }
     }
   } else {
+    if (role === "seller") {
+      if (args["ask-cents"] !== undefined) log("--ask-cents is obsolete and ignored. Claiming accepts the task's posted price.");
+      try { requireTaskPricing(await mp.call("marketplace_info")); }
+      catch (error) { log("Seller startup requires a server advertising pricing.mode=task_offer. Update the server before starting this seller."); throw error; }
+    }
     const state = await ensureAgent(mp);
     log(`agent ${state.agent_id} (${state.display_name})`);
     rt = await makeRuntime(state.api_key);
     if (role === "seller") await sellerLoop(mp, rt, {
-      marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs, askCents: Number(args["ask-cents"]),
+      marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs,
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       measurements: measurementFile ? new MeasurementRecorder({ file: measurementFile, computerId: args["computer-id"]!, sellerId: state.agent_id === "env" ? null : state.agent_id,
         estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined,

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { safeSellerUsage, safeFailureCode, type SellerUsage } from "@atm/runner-core";
 import type { RuntimeInfo } from "./runtime/types.js";
 
-export interface Attempt { kind: "task_attempt" | "model_canary"; model_id: string; task_id?: string; model_digest?: string; job_id?: string | null; part_key?: string | null; task_attempt?: number | null }
+export interface Attempt { kind: "task_attempt" | "model_canary"; model_id: string; task_id?: string; model_digest?: string; job_id?: string | null; part_key?: string | null; task_attempt?: number | null; offered_price_cents?: number }
 export interface AttemptResult {
   status: "submitted" | "failed" | "passed";
   claim_id?: string; result_id?: string; runtime_ms?: number;
@@ -45,6 +45,7 @@ export class MeasurementRecorder {
       seller_id: safeId(this.opts.sellerId), task_id: safeId(attempt.task_id),
       job_id: safeId(attempt.job_id), part_key: typeof attempt.part_key === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(attempt.part_key) ? attempt.part_key : null,
       task_attempt: Number.isSafeInteger(attempt.task_attempt) && (attempt.task_attempt ?? 0) >= 1 ? attempt.task_attempt : null,
+      offered_price_cents: Number.isSafeInteger(attempt.offered_price_cents) && (attempt.offered_price_cents ?? 0) > 0 ? attempt.offered_price_cents : null,
       model_id: /^[A-Za-z0-9._:/-]{1,150}$/.test(attempt.model_id) ? attempt.model_id : null,
       model_digest: digest(attempt.model_digest), runtime: info.runtime, wassette_version: info.wassette_version && /^[0-9.]{1,30}$/.test(info.wassette_version) ? info.wassette_version : null, component_sha256: digest(info.wasm_sha256),
       started_at: new Date(start).toISOString(),

@@ -11,6 +11,11 @@
 
 Evidence: [local arm](evidence/bounded-v1-local-warm.json), [usage rows](evidence/bounded-v1-local-warm.json.usage.jsonl), [C's isolated disconnect run](evidence/disconnect-c-20261018.json). The earlier entries below retain their original timestamps and limitations.
 
+## Task-offer client, awaiting server deployment
+
+C changed the seller to advertise capabilities without ask prices, require the server's `pricing.mode = "task_offer"` capability, prioritize valid posted offers, and check the claim price before inference. Existing `--ask-cents` launch arguments are ignored with a migration notice. A owns the shared contract/server and B the buyer UI; this client slice alone does not change the hosted server.
+
+Workspace typecheck passed. Runner-core passed 27 tests, and `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test` passed all 22 daemon tests. Both Node and actual Wassette tests prove that a changed-price claim is released before model execution. Component SHA-256: `03b17dc131c754817446167277e5dbc8402890b4b1234e0b0abad6a8b48b45db`. The full task-offer smoke/deployment check is pending A's server slice. No new marketplace task or paid API call was made for these checks.
 
 ## C runtime follow-up, October 17, 2026, 20:22 PDT
 
