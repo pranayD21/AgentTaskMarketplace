@@ -18,7 +18,11 @@ if ! command -v brew >/dev/null 2>&1 && [[ ! -x /opt/homebrew/bin/brew ]]; then
 fi
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 command -v brew >/dev/null || fail 'Complete Homebrew setup and run this command again.'
-brew install node pnpm ollama wassette
+ATM_MISSING=()
+for ATM_TOOL in node pnpm ollama wassette; do
+  if ! command -v "$ATM_TOOL" >/dev/null 2>&1; then ATM_MISSING+=("$ATM_TOOL"); fi
+done
+if [[ ${#ATM_MISSING[@]} -gt 0 ]]; then brew install "${ATM_MISSING[@]}"; fi
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22||(a===22&&b<22))process.exit(1)' || fail 'Node 22.22 or newer is required.'
 wassette --version | /usr/bin/grep -Eq '(^|[[:space:]])0\.8\.' || fail 'This release requires Wassette 0.8.x. No seller identity has been created.'
 mkdir -p "$ATM_ROOT"

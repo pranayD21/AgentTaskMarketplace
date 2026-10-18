@@ -209,6 +209,10 @@ describe("migrations", () => {
   it("every startup patch that adds a column or index is also in db/schema.sql", () => {
     const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8").toLowerCase();
     for (const stmt of SCHEMA_PATCHES.filter((p) => /^(alter|create)/i.test(p))) {
+      if (/^alter table \w+ enable row level security$/i.test(stmt)) {
+        expect(schema, stmt).toContain(stmt.toLowerCase());
+        continue;
+      }
       const name = /function (\w+)/i.exec(stmt)?.[1] ?? /add column if not exists (\w+)/i.exec(stmt)?.[1] ?? /(?:index|table) if not exists (\w+)/i.exec(stmt)?.[1];
       expect(name, stmt).toBeTruthy();
       expect(schema, stmt).toContain(name!.toLowerCase());
