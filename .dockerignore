@@ -1,0 +1,12 @@
+.git
+**/node_modules
+**/dist
+**/build
+**/.mcp-use
+**/.atm-state
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.log
+**/coverage

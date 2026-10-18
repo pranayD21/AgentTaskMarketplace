@@ -12,7 +12,7 @@ pnpm deploy:manufact --json
 
 Login asks the human to approve a device code. `deploy:manufact` prepares `.env.manufact`, builds the server, and uploads the workspace source. The deployment ID means the build has started; it does not mean the endpoint is healthy yet.
 
-The script uses the repository root because the server depends on `workspace:*` packages. It supplies explicit cloud build and start commands, binds to `0.0.0.0`, and serves port 3000. CLI 4.4.1 does not accept `deploy --port`; the port belongs to the start command. The Mac-only Wasm build helper is optional so installing the server on Linux does not require a Mac binary.
+The script uses the repository root because the server depends on `workspace:*` packages. The root Dockerfile builds only the marketplace server, binds to `0.0.0.0`, and serves port 3000. Manufact ignored build/start overrides on the first managed upload and ran the workspace-wide build; the explicit Dockerfile avoids invoking the local Wasm toolchain in the cloud. CLI 4.4.1 does not accept `deploy --port`; the port belongs to the start command. The Mac-only Wasm build helper is optional so installing the server on Linux does not require a Mac binary.
 
 `.env.manufact` is ignored by Git, has permissions 600, and contains an allowlist of server settings. It excludes the judge private key, Anthropic key, seller/buyer API keys, and local service URLs. `BASE_URL` is omitted so the server derives its public origin from Manufact’s `MCP_URL`. Do not pass the full developer `.env` to cloud deployment.
 
