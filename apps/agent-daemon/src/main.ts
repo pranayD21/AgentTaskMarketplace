@@ -114,8 +114,13 @@ async function judgeLoop(rt: Runtime) {
       const out = await rt.judgeCycle({ marketplace_url: MARKETPLACE_URL, judge_model: process.env.JUDGE_MODEL });
       if (out.idle) { if (args.once) { log("idle: nothing to review"); return; } await sleep(pollMs); continue; }
       recordJudgeUsage(out.task_id, out.result_id, out.usage);
-      if (out.deferred) {
-        log(`DEFERRED ${out.task_id} / ${out.result_id}: ${out.failure_code} — judge infrastructure failure; no verdict submitted, seller not penalised, task returns to review after the server's JUDGING timeout | ${usageSummary(out.usage)}`);
+      if (out.kind === "deferred") {
+        const how = out.reported_code
+          ? `reported ${out.reported_code}; server review ${out.review?.status ?? "?"} (attempt ${out.review?.attempts ?? "?"}, retry at ${out.review?.retry_at ?? "?"})`
+          : "nothing sent (server predates v0.3); task returns to review after the server's JUDGING timeout";
+        log(`DEFERRED ${out.task_id} / ${out.result_id}: ${out.failure_code} — judge infrastructure failure, no verdict, seller not penalised; ${how} | ${usageSummary(out.usage)}`);
+      } else if (out.kind === "replacement") {
+        log(`REPLACEMENT ${out.task_id} / ${out.result_id}: ${out.outcome === "delivered" ? "delivered to the buyer" : `not produced (${out.failure_code}); reported for retry`} | status ${out.replacement_status ?? "?"} | no money or reputation change | ${usageSummary(out.usage)}`);
       } else {
         log(`${out.verdict} ${out.task_id} / ${out.result_id}: ${out.reason_code}${out.score !== undefined ? ` (score ${out.score})` : ""} — ${out.reason_public} | replacement ${out.replacement_status}${out.replacement_failure_code ? ` (${out.replacement_failure_code})` : ""} | payout ${out.seller_payout_cents ?? "?"}c | seller ${out.seller_status ?? "n/a"} | ${usageSummary(out.usage)}`);
       }

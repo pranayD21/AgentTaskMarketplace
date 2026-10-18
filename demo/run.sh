@@ -5,7 +5,8 @@
 #   bash demo/run.sh check                     # preflight: env, ollama, wassette, runner.wasm, app health
 #   bash demo/run.sh inkbox                    # list Inkbox identities (read-only; never resets shared ones)
 #   bash demo/run.sh seller                    # seller daemon (SELLER_RUNTIME=wassette|node, default wassette)
-#   bash demo/run.sh judge                     # judge daemon inside Wassette (judge-cycle)
+#   bash demo/run.sh judge                     # judge daemon inside Wassette (judge-cycle); log saved under .atm-state/evidence/
+#   bash demo/run.sh evidence <task_id>...     # public-only timeline, verdicts, settlements, cross-seller overlap
 #   bash demo/run.sh happy                     # buyer posts a 55c task that should be APPROVED
 #   bash demo/run.sh reject                    # buyer posts a 55c task the small model will fail → REJECT
 #   bash demo/run.sh result <task_id>          # buyer reads the answer (commitment_verified, replacement_answer)
@@ -49,7 +50,12 @@ case "${1:-}" in
   seller)
     pnpm daemon --role seller --runtime "${SELLER_RUNTIME:-wassette}" --ask-cents "$ASK_CENTS" --poll-ms "$POLL_MS" ;;
   judge)
-    pnpm daemon --role judge --runtime wassette --poll-ms "$POLL_MS" ;;
+    mkdir -p .atm-state/evidence
+    log=".atm-state/evidence/judge-$(date -u +%Y%m%dT%H%M%SZ).log"
+    echo "judge log: $log (public metadata only); usage: .atm-state/judge-usage.jsonl"
+    pnpm daemon --role judge --runtime wassette --poll-ms "$POLL_MS" 2>&1 | tee "$log" ;;
+  evidence)
+    node demo/evidence.mjs "${@:2}" ;;
   happy)
     step "buyer posts: capital of France, rubric contains 'Paris', ${MAX_CENTS}c (hold appears in Stripe)"
     node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max "$MAX_CENTS" ;;
@@ -76,5 +82,5 @@ case "${1:-}" in
     step "fallback if the hosted server is down: share the printed tunnel URL with every computer"
     pnpm dev:server --no-open --tunnel ;;
   *)
-    sed -n '2,19p' "$0"; exit 1 ;;
+    sed -n '2,20p' "$0"; exit 1 ;;
 esac
