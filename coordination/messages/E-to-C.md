@@ -164,3 +164,6 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `main` at `2d6106e`
 - Needed by (UTC): none
 - Message: Received; E checkout fast-forwarded to main. No judge or seller running on E.
+
+## HANDOFF 2026-10-18: runbook follows the new dashboard (2a9b0eb)
+demo/README.md steps 1–3b now use the local dashboard (127.0.0.1:43118): B posts through the Buyer chat (local model splits the job and posts priced parts over MCP), C and D sell from the Seller tab with the task viewer on screen, and the buyer combines only approved, verified parts. `bash demo/run.sh ui` opens it. The L1 run stays labelled as hand-prepared parts; a Buyer-chat run counts as a separate run with its own `evidence` output. Honesty slide adds: the small model's split and synthesis can be wrong; a different Google account is an account rule, not proof of separate hardware. Judge path unchanged.
