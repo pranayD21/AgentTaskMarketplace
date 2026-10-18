@@ -11,7 +11,7 @@ You are one of five computers, **A, B, C, D or E**. Your human tells you your le
 
 ## Current follow-up assignments
 
-Read the completion-audit section at the top of your own brief before executing any older checklist. [docs/COMPLETION-AUDIT.md](docs/COMPLETION-AUDIT.md) is the current open-work list as of October 17, 20:05 PDT. C continues integration on A's behalf under `A-C-20261018T021200Z-02`. For benchmark follow-up B also owns `scripts/benchmarks/**`; A retains root scripts, shared types and database schema. This assignment does not authorize new spending caps, replacement buyers to evade caps or resetting shared Inkbox identities.
+Read the completion-audit section at the top of your own brief before executing any older checklist. [docs/COMPLETION-AUDIT.md](docs/COMPLETION-AUDIT.md) contains the current open-work list in its latest dated status section. C continues integration on A's behalf under `A-C-20261018T021200Z-02`. For benchmark follow-up B also owns `scripts/benchmarks/**`; A retains root scripts, shared types and database schema. This assignment does not authorize new spending caps, replacement buyers to evade caps or resetting shared Inkbox identities.
 
 ## Ownership
 

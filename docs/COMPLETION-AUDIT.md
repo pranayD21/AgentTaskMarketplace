@@ -1,12 +1,25 @@
 # Completion audit and remaining assignments
 
-## Follow-up status, October 17, 20:37 PDT
+## A/C delivery status, October 17, 21:05 PDT
 
-C has completed runtime usage capture, safe job/part correlation, the model canary and the direct-local benchmark arm. D is available, connected and READY; its standalone approved task is verified in the hosted dashboard. The physical parent-job demonstration remains open. A's J/P server slice, E's judge/Inkbox slice and B's benchmark/disconnect slice are integrated and pass the combined checks; their new server behavior is not yet deployed. D provider review, A/B parent-job implementation, hosted checks and E's final evidence remain open. See [C verification](../apps/agent-daemon/VERIFICATION.md).
+A and C's code is merged and deployed. Health at 04:04:05 UTC verified contract `0.3`, pricing `task_offer` and source `920c0525fb7f688b2c0699db83fac853d779e32b`. Workspace typecheck and all 201 tests passed, including actual Wassette. The Insforge posting/budget transaction and the task-offer smoke check passed.
 
-The human also changed pricing: each task carries an offer that a seller accepts by claiming. This requirement overrides historical seller ask-price instructions. A owns the pricing contract/server and market observations, B the buyer/UI, C the seller, D settlement assertions, and E the demonstration. C's tested client is on `feat/c-task-pricing` at `2e74276`, awaiting A's matching server. Market equilibrium is a goal, not a measured result. All five briefs and C outbound channels contain this assignment.
+| Assignment | Delivered | Remaining work |
+| --- | --- | --- |
+| Task pricing | Posted offers, quote-free sellers, preserved accepted prices, cap enforcement and market observations. | B's complete buyer/UI handoff; collect market data before claiming equilibrium. |
+| J1/J2/J3 | Fixed public explanations including historical rows; infrastructure deferral; bounded replacement recovery. Tests cover privacy, outages and settlement effects. | E's final live fault/replacement rehearsal and B's status presentation. |
+| P1/P2 | Atomic pending-post reservation, idempotent hold recovery, resumable settlement, transfer leases and provider reconciliation. D's MPP payment reservation fixes are included. | No production crash was injected; operate with the documented reconciliation limits. |
+| F1 | Job/part contract, private payload boundaries, idempotent posting, job budgets and runtime correlation. | B's automatic decomposition/aggregation and grouped dashboard. |
+| B1 | Shared usage schema, C runtime/hardware measurements and direct-local benchmark arm. | B/D complete paired closed-source and marketplace runs, accounting and comparison. |
+| L1/D1 | Hosted v0.3 and updated C seller/judge are running; D's physical-machine setup was verified earlier. | New two-part C/D overlap and final recording are pending D's general-worker readiness reply. |
+| I1 | Inkbox state/context persistence is integrated. | E's restart/live seller-thread proof remains limited by the three-identity free tier. |
+| X1 | Confidential-compute design and honest security boundaries. Local model canary implemented. | Attested confidential inference is later scope; Wasm and model hashes do not hide inputs from the host owner. |
 
-The original audit below remains the requirement checklist. Completed slices do not close items that still require deployment, physical execution or cost evidence.
+C's general seller remains running at the human's request. The two-part rehearsal will use the existing C buyer and 120 cents of its existing cap. No Armature cap bypass, replacement buyer or paid benchmark run is authorized by this plan.
+
+## Historical audit, October 17 at 20:05 PDT
+
+The checklist below records the original findings and acceptance criteria. The current status above takes precedence.
 
 Audited October 17, 2026, 20:05 PDT (October 18, 03:05 UTC). Code snapshot: `82d0aa2` on `main`; subsequent main commits through `b32a621` add coordination messages only. This report compares the user's original pasted discussion, the later requests for live work across computers and cost benchmarking, the agreed [hackathon plan](PLAN.md), source code, and the A–E handoffs.
 
@@ -24,7 +37,7 @@ This audit assigns work; it does not claim those fixes are implemented or that a
 - Incoming handoff received before publication: B has a buyer recovery-guidance fix and updated evaluation documentation ready in [PR #3](https://github.com/pranayD21/AgentTaskMarketplace/pull/3), branch `feat/b-buyer` at `39eaa4e`. B reports 82 passing tests, including three new isolated interrupted/malformed-response cases. These are branch results, not the audited main test count. C still needs to review, verify and integrate this handoff; it does not establish a real post-acceptance disconnect test. E acknowledged the handoff.
 - The payment and Inkbox restart risks below were identified from source. Their acceptance tests still need to be written; no production failure was injected.
 
-## Original requirements and current state
+## Requirements at the original audit snapshot
 
 | Requirement | Status and evidence | Remaining owner |
 | --- | --- | --- |

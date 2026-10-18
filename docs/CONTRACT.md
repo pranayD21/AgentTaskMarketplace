@@ -147,7 +147,7 @@ New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge);
 - Retrying `submit_verdict` for a task with a recorded decision follows that decision, whatever the new call says. The response is `{idempotent: true, resumed: <bool>}`. Housekeeping (`expire_stale`, and every sweep) resumes unfinished settlements older than 2 minutes.
 - Exactly-once effects:
   - Stripe calls reuse the task-scoped idempotency keys `atm:<task>:capture|cancel|transfer`.
-  - Buyer balance changes carry a key (`settle:<task>`, `reserve:<task>`, `unreserve:<task>`, `paid:<task>`), recorded in `agents.balance_keys` in the same compare-and-swap write. A monotonically increasing `balance_revision` guards against a balance returning to an earlier value.
+  - Buyer balance changes carry a key (`settle:<task>`, `reserve:<task>`, `unreserve:<task>`, `paid:<task>:<payment_intent>`), recorded in `agents.balance_keys` in the same compare-and-swap write. A monotonically increasing `balance_revision` guards against a balance returning to an earlier value.
   - Seller `approvals` / `rejections` / `strikes` are **recomputed** from final verdicts, not incremented. Infrastructure codes never count.
 - Durable posting: `atm_prepare_task` creates an unclaimable task (`AWAITING_PAYMENT`, payment state `POSTING`) and reserves the buyer/job budgets in one database transaction before calling the provider. An insert or budget-write failure rolls everything back, so it cannot orphan a hold. MPP listings reserve when paid.
 - A card hold uses the stable task key `atm:<task>:hold`. Publication changes `post_state: HOLDING → READY` with a state guard. Unknown provider/database outcomes keep the task and reservation visible; housekeeping resumes the same post after two minutes. A duplicate request returns that task.
@@ -201,7 +201,7 @@ Every quantity that was not measured is **`null`, never 0**. `cost_usd` is a res
 `tasks.inkbox_thread_owner` (the handle whose A2A context is `inkbox_context_id`) and `tasks.inkbox_buyer_context_id` persist what `inkbox.ts` held in memory. `inkbox.notify` receives and returns them, so a server restart between claim and verdict keeps both threads. E wires `inkbox.ts`; A adds the columns and passes them through.
 
 
-## 13. Task offers (implemented; deployment pending)
+## 13. Task offers (deployed, October 18 at 04:04 UTC)
 
 The human assigned A and C work to C on October 17. This decision replaces seller ask pricing.
 

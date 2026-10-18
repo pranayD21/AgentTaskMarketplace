@@ -1,8 +1,12 @@
 # Computer C — seller runtime and the Wasm sandbox
 
-## Current C handoff, October 17, 20:37 PDT
+## Current C handoff, October 17, 21:05 PDT
 
-D has joined and replied READY. The missing-machine blocker is resolved; the parent-job demonstration still needs A/B server and buyer work. C measurements/canary are complete, the direct-local benchmark is recorded (6/12 quality passes), and the A/B/E slices are integrated and tested. Read [C verification](../apps/agent-daemon/VERIFICATION.md) for exact evidence and remaining gates. The task-pricing client is ready on `feat/c-task-pricing` at `2e74276`, but must wait for A's server contract before merging/deployment. Keep the shared workers and existing identities available.
+Task pricing, usage capture, safe job/part correlation, the local model canary and the direct-local benchmark arm are delivered. A/C code and tested B/D/E slices are merged; hosted source `920c052` reports contract 0.3 and task-offer pricing. The final workspace run passed typecheck and 201 tests including actual Wassette. Component SHA-256: `a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34`.
+
+The human requested that C's general worker stay running. It resumed at 04:03 UTC as existing seller `seller_07a57bbbd50fd91e`, with task-offer pricing, Wassette and 5000 ms polling. C's existing judge `judge_00b762de5b57f6fa` resumed with the updated component at 04:04 UTC. Preserve both identities. D has been asked to start its general worker before a two-part 120c rehearsal; the C/D execution overlap is still unverified. Do not pause C for a pinned-part experiment.
+
+B still owns automatic decomposition/aggregation, grouped UI and the full paired cost comparison. E owns final recording and Inkbox live evidence. See [C verification](../apps/agent-daemon/VERIFICATION.md) and [the current audit](../docs/COMPLETION-AUDIT.md); the older checklists below are history.
 
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)
 

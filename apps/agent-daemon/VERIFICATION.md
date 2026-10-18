@@ -4,9 +4,9 @@
 
 The human assigned both A and C work to this computer. Task offers, parent jobs, E's review/replacement loop and D's checked transfer reconciliation are integrated. A/C added transactional task/budget creation before holds, durable post recovery, payout leases with stable retry keys, balance revisions and deterministic verdict ids. The seller UI compatibility edit removes its ask quote.
 
-Verification: workspace typecheck; 189 tests (crypto 7, web 17, core 49, daemon 22 including real Wassette, server 94); smoke APPROVED twice at 100c per task, commitment verification, reserved 0c/spent 200c MOCK. Component SHA-256 `a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34`. The additive schema was applied to Insforge; `node scripts/verify-postgres-posting.mjs` passed the actual atomic posting function and removed its synthetic fixtures. Insforge disallows transaction-control statements, so the check uses exact fixture cleanup instead of a rollback wrapper. No payment calls in that verification.
+Verification: workspace typecheck; 201 tests (crypto 7, web 17, core 49, daemon 22 including real Wassette, server 106); smoke APPROVED twice at 100c per task, commitment verification, reserved 0c/spent 200c MOCK. Component SHA-256 `a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34`. The additive schema was applied to Insforge; `node scripts/verify-postgres-posting.mjs` passed the actual atomic posting function and removed its synthetic fixtures. Insforge disallows transaction-control statements, so the check uses exact fixture cleanup instead of a rollback wrapper. No payment calls in that verification.
 
-Deployment remains pending D's idempotent hold/error metadata; B's grouped job UI and physical C/D execution are not yet verified. Historical evidence below retains its original scope.
+D's idempotent hold/error metadata and per-payment MPP reservation fix are integrated. Hosted health at 04:04:05 UTC verified source `920c052`, contract 0.3 and task-offer pricing. C's general seller and judge are running with existing identities. B's grouped job UI and physical C/D execution are not yet verified. Historical evidence below retains its original scope.
 
 ## C follow-up status, October 17, 20:37 PDT
 

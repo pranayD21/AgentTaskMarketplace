@@ -1,5 +1,12 @@
 # Computer A — marketplace server, contract, integration, Manufact deployment
 
+## Current A handoff, October 17, 21:05 PDT
+
+The human assigned A and C to the same integrator. A's server, shared contract/schema, task pricing, durable posting, settlement recovery, jobs, usage schema, public-verdict privacy and Manufact deployment are complete and integrated. Hosted health verifies source `920c052`, contract 0.3 and task-offer pricing. Typecheck and 201 tests passed, including actual Wassette; real Insforge transactional posting and task-offer smoke passed. Keep the existing service and identities running.
+
+Remaining shared gates: B's decomposition/aggregation and grouped UI; D joining the general worker pool for C/D overlap proof; E's final live fault/Inkbox/recording evidence; B/D's full cost comparison. X1 confidential inference remains later scope. Read [the current audit](../docs/COMPLETION-AUDIT.md) before the historical checklist. Do not rebuild the delivered slices or duplicate the deployment.
+
+
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)
 
 The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically.
