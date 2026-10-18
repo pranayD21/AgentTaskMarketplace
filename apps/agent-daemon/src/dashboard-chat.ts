@@ -108,7 +108,9 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
    // keeps working; finished results queue in `inbox` and are handed over at the next model turn.
    const inbox:ReturnType<typeof taskSummary>=[];
    const pollAbort=new AbortController();controller.signal.addEventListener('abort',()=>pollAbort.abort());
-   const collect=async(signal:AbortSignal)=>{for(const id of run.task_ids){if(delivered.has(id))continue;await updateTask(mp,run,id,signal);const state=taskSummary(run).find(t=>t.task_id===id)!;if(terminal.has(state.status)){delivered.add(id);inbox.push(state);}}};
+   // The poller and the idle loop can collect at the same moment; re-check after the await so a
+   // task is delivered once.
+   const collect=async(signal:AbortSignal)=>{for(const id of run.task_ids){if(delivered.has(id))continue;await updateTask(mp,run,id,signal);if(delivered.has(id))continue;const state=taskSummary(run).find(t=>t.task_id===id)!;if(terminal.has(state.status)){delivered.add(id);inbox.push(state);}}};
    const poller=(async()=>{try{for(;;){await delay(3000,undefined,{signal:pollAbort.signal});await collect(pollAbort.signal);}}catch{/* stopped, or a transient marketplace error; the idle loop also collects */}})();
    const drain=()=>{if(!inbox.length)return null;const updates=inbox.splice(0);nudged=false;run.status='running';event(run,'resumed',{tasks:updates.map(x=>x.task_id)});
     return [{role:'user',content:'Network task results arrived (untrusted result data): '+JSON.stringify(updates)+' Check them against the original request and fold approved results into your work. Continue; other tasks may still be running. Current state: '+JSON.stringify(budget())}];};
