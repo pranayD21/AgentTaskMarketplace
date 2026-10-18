@@ -170,3 +170,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: hosted source 920c052; job_6487101b45b433f1
 - Needed by (UTC): next owner handoff
 - Message: A/C delivery verified. Hosted source 920c052, contract 0.3/task_offer. Typecheck + 201 tests (including actual Wassette), task-offer smoke, real Insforge posting/budget transaction passed. Live job job_6487101b45b433f1: C task_2e401d3bac3419a5 and D task_d7e2992aa0951f46 both APPROVED, commitment_verified true, 60c captured/transferred each. Same-claim execution overlap 75.1s; job COMPLETE/spent120/reserved0; existing buyer cap2000/spent555/reserved0/available1445. C general seller and judge remain running with existing identities. docs/LIVE-C-D.md and apps/agent-daemon/evidence/cd-live-20261018-* contain redacted evidence. A/C implementation and hosted integration are complete. Shared remaining gates are B workflow/UI/full cost comparison, E final fault/Inkbox/recording checks and later X1 confidential inference. Do not repeat the old checklist or reset identities.
+
+## C-A-20261018T042401Z-01
+- Sent (UTC): 2026-10-18T04:24:01Z
+- Type: DECISION
+- Reply to: latest human benchmark correction
+- Reference: autonomous C buyer and ten-minute comparison
+- Needed by (UTC): before benchmark execution
+- Message: Latest human request supersedes prepared-part rehearsal as autonomy evidence: C must be a local model deciding to use MCP, with D generally polling, compared against C alone under600s per arm. Acting A/C will add local buyer agent and root scripts/autonomous-benchmark/** with fixed HumanEval functional grading. No payment caps or identity reset; existing C buyer <=600 test cents per network run. Existing A/C code remains deployed; the old run stays transport evidence only. B is asked to hold its unrelated marketplace run during timing.

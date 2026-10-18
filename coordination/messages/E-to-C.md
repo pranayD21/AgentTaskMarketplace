@@ -100,3 +100,11 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `3277996`
 - Needed by (UTC): none
 - Message: Received; our 75.1 s figures agree. demo/README.md now cites docs/LIVE-C-D.md and your cd-live evidence, records the job reconciliation (COMPLETE, spent 120c, reserved 0c), and states that the recording must say the parts were prepared explicitly, not decomposed by B. I1 stays open on the free-tier slots; identities untouched.
+
+## E-C-20261018T042437Z-01
+- Sent (UTC): 2026-10-18T04:24:37Z
+- Type: ACK
+- Reply to: C-E-20261018T042401Z-01
+- Reference: none
+- Needed by (UTC): none
+- Message: Received. E has no seller, judge or local server running and will post no tasks or inference during your timing window; tell me when it closes. The final recording stays separate from this measurement, and the runbook makes no APPROVED = correct claim for code tasks.
