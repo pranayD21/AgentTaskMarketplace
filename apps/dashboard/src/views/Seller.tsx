@@ -7,6 +7,7 @@ import { useLiveView } from "@/hooks/live";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select } from "@/components/ui/input";
 import { AreaChart } from "@/components/ui/area-chart";
 import { fmtClock, type LiveModel } from "@/lib/live";
 import { LiveWorkspace } from "@/components/live-workspace";
@@ -24,13 +25,12 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
   const toggle = () => act(() => (running ? api.stop() : api.start()));
   const live = useLiveView(running);
 
-  // The model this computer sells with: what the worker registered, else the first installed model the network accepts.
-  const model = useMemo(() => {
-    const installed = (machine?.models ?? []).map((m) => m.name);
-    const allowed = status?.allowed_models ?? [];
-    return worker.models?.find((m) => installed.includes(m)) ?? installed.find((m) => allowed.includes(m)) ?? null;
-  }, [machine, worker.models, status?.allowed_models]);
+  // Models this computer can sell with: installed, and accepted by the network's allowlist.
+  const sellable = useMemo(() => (machine?.models ?? []).map((m) => m.name).filter((m) => (status?.allowed_models ?? []).includes(m)), [machine, status?.allowed_models]);
+  // The chosen model, else what the worker registered, else the first sellable one.
+  const model = status?.seller_model || worker.models?.find((m) => sellable.includes(m)) || sellable[0] || null;
   const loaded = Boolean(model && machine?.loaded_models?.some((m) => m.name === model));
+  const chooseModel = (value: string) => void act(() => api.sellerModel(value));
 
   return (
     <div className="scroll-thin h-full min-h-0 overflow-y-auto">
@@ -64,8 +64,16 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border bg-subtle/50 px-5 py-3.5 text-[12.5px] md:grid-cols-4">
             <Fact label="This computer" value={machine?.chip ?? "—"} hint={machine ? `${machine.cpu_cores} cores · ${gb(machine.memory_bytes)}` : "Reading hardware"} />
-            <Fact label="Local model" value={model ?? (machine ? "None installed" : "—")}
-              hint={!model ? "Prepare model downloads Qwen3 8B." : loaded ? "Loaded in memory" : "Loads when work starts"} />
+            <div className="min-w-0">
+              <dt className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Local model</dt>
+              <dd className="mt-0.5">
+                <Select aria-label="Seller model" className="h-7 text-[12.5px]" value={status?.seller_model ?? ""} disabled={running || busy || !sellable.length} onChange={(e) => chooseModel(e.target.value)}>
+                  <option value="">{sellable.length ? `Any accepted (${sellable.length})` : machine ? "None installed" : "—"}</option>
+                  {sellable.map((m) => <option key={m} value={m}>{m}</option>)}
+                </Select>
+              </dd>
+              <dd className="truncate text-[11.5px] text-muted-foreground">{running ? "Stop selling to change" : !model ? "Prepare model downloads Qwen3 8B." : loaded ? `${model} · loaded in memory` : `${model} · loads when work starts`}</dd>
+            </div>
             <Fact label="Ollama" value={machine ? (machine.ollama_online ? "Connected" : "Offline") : "—"} tone={machine && !machine.ollama_online ? "danger" : undefined}
               hint={machine?.hostname ?? "—"} />
             <Fact label="Approved tasks" value={worker.approvals ?? "—"} hint={running ? "Worker running" : "Worker stopped"} />
