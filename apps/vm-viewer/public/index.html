@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VM Live Viewer</title>
+<style>
+:root {
+  --bg:#0b0e13; --panel:#121720; --panel2:#171d28; --line:#232b38; --text:#e6e9ef; --muted:#8a94a6; --dim:#5d6677;
+  --green:#3ddc97; --amber:#f5b94a; --red:#ff6b6b; --blue:#5fa8ff; --violet:#b48cff; --cyan:#4fd1e0;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; --sans:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.45 var(--sans); }
+button { font:inherit; color:inherit; }
+.app { display:grid; grid-template-columns:260px 1fr; grid-template-rows:56px 1fr; height:100vh; }
+header { grid-column:1/3; display:flex; align-items:center; gap:14px; padding:0 18px; border-bottom:1px solid var(--line); background:#0d1118; }
+.brand { font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:10px; }
+.brand .logo { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,var(--green),var(--blue)); display:grid; place-items:center; color:#05140d; font-weight:800; font-size:13px; }
+.chip { font:12px var(--mono); padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+.chip.ok { color:var(--green); border-color:#1f4d3a; } .chip.bad { color:var(--red); border-color:#5a2626; } .chip.warn { color:var(--amber); border-color:#5a4720; }
+.spacer { flex:1; }
+aside { border-right:1px solid var(--line); overflow:auto; padding:14px 12px; background:#0d1118; }
+aside h4 { margin:4px 6px 10px; color:var(--dim); font-size:11px; letter-spacing:1.2px; text-transform:uppercase; }
+.vmcard { width:100%; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; cursor:pointer; }
+.vmcard.sel { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset; }
+.vmcard .n { font-weight:600; display:flex; align-items:center; gap:8px; }
+.vmcard .m { color:var(--muted); font:12px var(--mono); margin-top:6px; }
+.vmcard.new { animation:flash 1.2s ease-in-out 4; }
+@keyframes flash { 50% { border-color:var(--green); box-shadow:0 0 18px #3ddc9755; } }
+.dot { width:9px; height:9px; border-radius:50%; background:var(--dim); flex:none; }
+.dot.on { background:var(--green); box-shadow:0 0 8px var(--green); } .dot.busy { background:var(--amber); box-shadow:0 0 8px var(--amber); animation:pulse 1s infinite; }
+@keyframes pulse { 50% { opacity:.35; } }
+main { overflow:auto; padding:18px; display:flex; flex-direction:column; gap:14px; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; min-width:0; }
+.panel > .h { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); color:var(--muted); font-size:12px; letter-spacing:.8px; text-transform:uppercase; }
+.panel > .h b { color:var(--text); letter-spacing:0; text-transform:none; font-size:13px; }
+.panel > .b { padding:14px; }
+.empty { color:var(--dim); padding:40px; text-align:center; }
+.vmhead { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:14px; }
+.vmhead .title { font-size:22px; font-weight:700; display:flex; align-items:center; gap:10px; }
+.vmhead .sub { color:var(--muted); font:12px var(--mono); margin-top:6px; line-height:1.7; }
+.gauge .k { color:var(--muted); font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+.gauge .v { font:600 26px var(--mono); margin:2px 0 6px; } .gauge .v small { font-size:13px; color:var(--muted); font-weight:400; }
+.gauge svg { width:100%; height:42px; display:block; }
+.steps { display:grid; grid-template-columns:repeat(6,1fr); gap:0; }
+.step { position:relative; padding:4px 10px 2px 0; }
+.step .bar { height:4px; border-radius:2px; background:var(--line); margin-bottom:10px; }
+.step.done .bar { background:var(--green); } .step.active .bar { background:var(--amber); animation:pulse 1s infinite; } .step.fail .bar { background:var(--red); }
+.step .l { font-weight:600; font-size:13px; } .step .t { color:var(--muted); font:12px var(--mono); margin-top:2px; min-height:17px; }
+.step.pending .l { color:var(--dim); }
+.taskline { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; font:12px var(--mono); color:var(--muted); }
+.taskline .id { color:var(--text); }
+.grid2 { display:grid; grid-template-columns:1.25fr 1fr; gap:14px; }
+.grid3 { display:grid; grid-template-columns:1.2fr 1fr 1.2fr; gap:14px; }
+.runon { display:flex; gap:8px; flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid var(--line); font:12px var(--mono); }
+.runon span { padding:3px 8px; border-radius:6px; background:#0e1a14; border:1px solid #1d3b2e; color:#9fe3c4; }
+.phase { padding:12px 14px 6px; border-bottom:1px solid var(--line); }
+.pbar { display:flex; height:22px; border-radius:6px; overflow:hidden; background:#0b0f15; border:1px solid var(--line); }
+.pbar div { height:100%; min-width:2px; transition:width .3s; }
+.pbar .load { background:#3b4659; } .pbar .read { background:#5fa8ff; } .pbar .reason { background:#b48cff; } .pbar .ans { background:#3ddc97; }
+.pbar .live { animation:pulse 1s infinite; }
+.plegend { display:flex; gap:16px; flex-wrap:wrap; font:12px var(--mono); color:var(--muted); margin-top:8px; }
+.plegend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:-1px; }
+.tps { display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--line); }
+.tps svg { width:100%; height:46px; display:block; }
+.tps .big { font:600 22px var(--mono); } .tps .big small { font-size:12px; color:var(--muted); font-weight:400; }
+details.prompt { padding:10px 14px; border-bottom:1px solid var(--line); }
+details.prompt summary { cursor:pointer; color:var(--muted); font-size:12px; }
+details.prompt .msg { margin-top:8px; }
+.think2 { display:grid; grid-template-columns:1.15fr 1fr; min-height:420px; }
+.think2 > div { min-width:0; }
+.colh { padding:9px 14px; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; }
+.reasoning { height:420px; overflow:auto; padding:12px 14px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:8px; }
+.rstep { display:grid; grid-template-columns:26px 1fr; gap:10px; padding:9px 10px; border-radius:9px; background:#151127; border:1px solid #2c2450; font-size:13.5px; line-height:1.5; }
+.rstep.new { animation:fadein .35s ease 1 both; }
+.rstep .num { width:24px; height:24px; border-radius:50%; background:#2c2450; color:#d6c4ff; font:600 11px var(--mono); display:grid; place-items:center; }
+.rstep.cur { border-color:var(--violet); box-shadow:0 0 14px #b48cff33; }
+.rstep .txt { white-space:pre-wrap; word-break:break-word; color:#ddd3fb; }
+@keyframes fadein { from { opacity:0; transform:translateY(4px); } }
+.answer { height:420px; overflow:auto; padding:14px; font:15px/1.6 var(--mono); white-space:pre-wrap; word-break:break-word; }
+.waiting { color:var(--dim); font-size:13px; padding:14px; }
+.stream { height:430px; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+.msg { border-radius:10px; padding:10px 12px; border:1px solid var(--line); white-space:pre-wrap; word-break:break-word; }
+.msg .who { font:11px var(--mono); color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+.msg.system { background:#10141b; color:var(--muted); font-size:12.5px; }
+.msg.user { background:#13213a; border-color:#1f3a63; }
+.msg.assistant { background:#10261d; border-color:#1d5440; font:15px/1.55 var(--mono); }
+.msg .think { color:var(--dim); font-style:italic; }
+.cursor { display:inline-block; width:8px; height:1.05em; background:var(--green); vertical-align:text-bottom; animation:pulse 1s infinite; margin-left:1px; }
+.stats { display:flex; gap:16px; flex-wrap:wrap; font:12px var(--mono); color:var(--muted); }
+.stats b { color:var(--text); font-weight:600; }
+.runs { display:flex; gap:6px; flex-wrap:wrap; }
+.runs button { background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:2px 8px; font:11px var(--mono); color:var(--muted); cursor:pointer; }
+.runs button.sel { color:var(--text); border-color:var(--blue); }
+.term { height:430px; overflow:auto; background:#06080b; font:12px/1.55 var(--mono); padding:10px 12px; border-radius:0 0 12px 12px; }
+.term div { white-space:pre-wrap; word-break:break-word; }
+.term .ts { color:var(--dim); } .term .seller { color:var(--cyan); } .term .wassette { color:var(--violet); }
+.term .ok { color:var(--green); } .term .warn { color:var(--amber); } .term .err { color:var(--red); }
+table { width:100%; border-collapse:collapse; font:12px var(--mono); }
+th { text-align:left; color:var(--dim); font-weight:500; padding:4px 6px; border-bottom:1px solid var(--line); }
+td { padding:5px 6px; border-bottom:1px solid #1a202b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+tr.hot td { color:var(--amber); }
+.feed { max-height:260px; overflow:auto; font:12px var(--mono); }
+.feed div { padding:4px 0; border-bottom:1px solid #1a202b; display:flex; gap:8px; }
+.feed .ty { color:var(--blue); min-width:132px; } .feed .tm { color:var(--dim); }
+.badge { font:11px var(--mono); padding:1px 7px; border-radius:5px; background:var(--panel2); border:1px solid var(--line); }
+.badge.g { color:var(--green); border-color:#1f4d3a; } .badge.a { color:var(--amber); border-color:#5a4720; } .badge.r { color:var(--red); border-color:#5a2626; }
+.note { color:var(--dim); font-size:12px; }
+@media (max-width:1100px) { .think2 { grid-template-columns:1fr; } .reasoning { border-right:0; border-bottom:1px solid var(--line); } .grid2,.grid3 { grid-template-columns:1fr; } .vmhead { grid-template-columns:1fr 1fr; } .app { grid-template-columns:200px 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><div class="logo">VM</div>VM Live Viewer</div>
+    <span class="chip warn" title="This viewer shows prompts and model output for demonstration. Real sellers would not see this.">DEMO · task contents visible</span>
+    <div class="spacer"></div>
+    <span id="mkt" class="chip">marketplace …</span>
+    <span id="conn" class="chip">connecting…</span>
+  </header>
+  <aside>
+    <h4>Virtual machines</h4>
+    <div id="vmlist"></div>
+    <p class="note" style="margin:10px 6px">New Lima VMs appear here automatically and open in their own window.</p>
+  </aside>
+  <main id="main"><div class="empty">Waiting for VMs…</div></main>
+</div>
+<script>
+const S = { vms:new Map(), market:null, marketError:null, marketUrl:'', selected:null, newVms:new Set(), runSel:new Map() };
+const $ = (s, el=document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const gb = (n) => n == null ? '–' : (n / 1073741824).toFixed(n >= 1e10 ? 0 : 1) + ' GB';
+const clock = (t) => t ? new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '';
+const dur = (ms) => ms == null ? '' : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms/1000).toFixed(1)} s`;
+
+function vm(name) {
+  if (!S.vms.has(name)) S.vms.set(name, { name, info:{}, metrics:null, history:[], logs:[], runs:new Map(), runOrder:[] });
+  return S.vms.get(name);
+}
+function foldTap(v, e) {
+  if (e.type === 'request') { v.runs.set(e.id, { id:e.id, model:e.model, messages:e.messages ?? [], start:e.t, first:null, thinkFirst:null, answerFirst:null, tokTimes:[], tokens:0, text:'', think:'', done:null, error:null, forced:!!e.reasoning_forced }); v.runOrder.push(e.id); if (v.runOrder.length > 12) v.runs.delete(v.runOrder.shift()); return; }
+  const r = v.runs.get(e.id); if (!r) return;
+  if (e.type === 'token') {
+    r.first ??= e.t; r.tokens++; r.last = e.t; r.tokTimes.push(e.t);
+    if (e.thinking) { r.thinkFirst ??= e.t; r.think += e.text; } else { r.answerFirst ??= e.t; r.text += e.text; }
+  }
+  if (e.type === 'done') { r.done = e; r.end = e.t; }
+  if (e.type === 'error') { r.error = e.message ?? `HTTP ${e.status}`; r.end = e.t; }
+}
+
+// ---- events ----
+const es = new EventSource('/events');
+es.addEventListener('open', () => { $('#conn').textContent = 'live'; $('#conn').className = 'chip ok'; });
+es.addEventListener('error', () => { $('#conn').textContent = 'reconnecting…'; $('#conn').className = 'chip bad'; });
+es.addEventListener('snapshot', (m) => {
+  const d = JSON.parse(m.data);
+  S.vms.clear(); S.marketUrl = d.marketplace; S.market = d.market; S.marketError = d.marketError;
+  for (const x of d.vms) { const v = vm(x.name); v.info = x; v.metrics = x.metrics; v.history = x.history ?? []; v.logs = x.logs ?? []; for (const e of x.tap ?? []) foldTap(v, e); }
+  pickDefault(); renderAll();
+});
+es.addEventListener('vms', (m) => { for (const x of JSON.parse(m.data)) { const v = vm(x.name); v.info = x; v.metrics = x.metrics ?? v.metrics; } for (const k of [...S.vms.keys()]) if (!JSON.parse(m.data).some((x) => x.name === k)) S.vms.delete(k); pickDefault(); renderList(); renderHead(); });
+es.addEventListener('vm-added', (m) => { const d = JSON.parse(m.data); if (d.isNew) { S.newVms.add(d.name); setTimeout(() => S.newVms.delete(d.name), 6000); } });
+es.addEventListener('vm-removed', (m) => { S.vms.delete(JSON.parse(m.data).name); pickDefault(); renderAll(); });
+es.addEventListener('metrics', (m) => { const d = JSON.parse(m.data); const v = vm(d.name); v.metrics = d.metrics; v.history.push({ at:d.metrics.at, cpu:d.metrics.cpu, memUsed:d.metrics.memUsed }); if (v.history.length > 150) v.history.shift(); renderList(); if (d.name === S.selected) { renderHead(); renderBottom(); scheduleStream(); } });
+es.addEventListener('log', (m) => { const d = JSON.parse(m.data); const v = vm(d.name); v.logs.push(d); if (v.logs.length > 600) v.logs.shift(); if (d.name === S.selected) appendLog(d); });
+es.addEventListener('tap', (m) => { const d = JSON.parse(m.data); const v = vm(d.name); foldTap(v, d.event); if (d.name === S.selected) { if (d.event.type === 'request') S.runSel.delete(d.name); scheduleStream(); renderPipeline(); } renderList(); });
+es.addEventListener('market', (m) => { const d = JSON.parse(m.data); S.market = d.market ?? S.market; S.marketError = d.error; S.marketUrl = d.url; renderMarketChip(); renderPipeline(); renderBottom(); });
+
+window.addEventListener('hashchange', () => { const n = decodeURIComponent((location.hash.match(/vm=([^&]+)/) ?? [])[1] ?? ''); if (n && n !== S.selected) { S.selected = n; renderAll(); } });
+function pickDefault() {
+  const fromHash = decodeURIComponent((location.hash.match(/vm=([^&]+)/) ?? [])[1] ?? '');
+  if (fromHash && S.vms.has(fromHash)) S.selected = fromHash;
+  if (!S.selected || !S.vms.has(S.selected)) S.selected = [...S.vms.keys()][0] ?? null;
+}
+function select(name) { location.hash = `vm=${encodeURIComponent(name)}`; }
+
+// ---- helpers ----
+function activeRun(v) { const id = v.runOrder[v.runOrder.length - 1]; const r = id && v.runs.get(id); return r && !r.end ? r : null; }
+function sellerTask(v) {
+  const t = S.market?.tasks ?? []; const seller = v.metrics?.seller;
+  const mine = t.filter((x) => seller && x.seller_id === seller);
+  const open = t.filter((x) => x.status === 'OPEN');
+  return [...mine, ...open].sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null;
+}
+function spark(points, max, color) {
+  const pts = points.filter((p) => p != null);
+  if (pts.length < 2) return `<svg viewBox="0 0 100 40"><line x1="0" y1="39" x2="100" y2="39" stroke="#232b38"/></svg>`;
+  const step = 100 / (points.length - 1);
+  const xy = points.map((p, i) => p == null ? null : `${(i*step).toFixed(1)},${(38 - 36 * Math.min(1, p / max)).toFixed(1)}`).filter(Boolean);
+  return `<svg viewBox="0 0 100 40" preserveAspectRatio="none"><polygon points="0,40 ${xy.join(' ')} 100,40" fill="${color}22"/><polyline points="${xy.join(' ')}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+// ---- render ----
+function renderAll() {
+  renderList(); renderMarketChip();
+  const v = S.vms.get(S.selected);
+  if (!v) { $('#main').innerHTML = `<div class="empty">No Lima VMs found. Create one with <code>limactl start</code>; it will appear here.</div>`; return; }
+  $('#main').innerHTML = `
+    <section class="panel"><div class="b vmhead" id="head"></div></section>
+    <section class="panel"><div class="h">Task pipeline <span class="spacer"></span><span id="taskstate"></span></div><div class="b" id="pipe"></div></section>
+    <section class="panel"><div class="h">Model running inside the VM <span class="spacer"></span><span id="runs" class="runs"></span></div>
+      <div class="runon" id="runon"></div>
+      <div class="b" style="padding:10px 14px;border-bottom:1px solid var(--line)"><div class="stats" id="mstats"></div></div>
+      <div class="phase" id="phase"></div>
+      <div class="tps" id="tps"></div>
+      <div id="stream"></div>
+    </section>
+    <div class="grid2">
+      <section class="panel"><div class="h">Seller sandbox log <span class="spacer"></span><span class="note">wassette · live</span></div><div class="term" id="term"></div></section>
+      <section class="panel"><div class="h">Processes in VM</div><div class="b" id="procs"></div></section>
+    </div>
+    <div class="grid2">
+      <section class="panel"><div class="h">Loaded models</div><div class="b" id="models"></div></section>
+      <section class="panel"><div class="h">Marketplace events</div><div class="b feed" id="feed"></div></section>
+    </div>`;
+  renderHead(); renderPipeline(); renderStream(); renderLogs(); renderBottom();
+}
+function renderList() {
+  const el = $('#vmlist'); if (!el) return;
+  setHtml(el, [...S.vms.values()].map((v) => {
+    const on = v.info.status === 'Running', busy = on && activeRun(v);
+    const m = v.metrics;
+    return `<button class="vmcard ${v.name === S.selected ? 'sel' : ''} ${S.newVms.has(v.name) ? 'new' : ''}" data-n="${esc(v.name)}">
+      <div class="n"><span class="dot ${busy ? 'busy' : on ? 'on' : ''}"></span>${esc(v.name)}${S.newVms.has(v.name) ? ' <span class="badge g">NEW</span>' : ''}</div>
+      <div class="m">${esc(v.info.status ?? '')} · ${esc(v.info.cpus ?? '?')} CPU · ${gb(v.info.memory)}</div>
+      <div class="m">${busy ? '<span style="color:var(--amber)">● model generating</span>' : m?.cpu != null ? `cpu ${m.cpu.toFixed(0)}% · mem ${gb(m.memUsed)}` : on ? 'connecting…' : 'stopped'}</div>
+    </button>`;
+  }).join('') || '<div class="note" style="margin:6px">No VMs yet.</div>');
+  el.querySelectorAll('.vmcard').forEach((b) => b.onclick = () => select(b.dataset.n));
+  syncPulses();
+}
+function renderMarketChip() {
+  const c = $('#mkt'); if (!c) return;
+  if (S.marketError || !S.market) { c.textContent = `marketplace offline`; c.className = 'chip bad'; c.title = `${S.marketUrl} ${S.marketError ?? ''}`; return; }
+  const n = S.market.counts ?? {};
+  c.textContent = `marketplace · ${S.market.payments?.mode ?? ''} · open ${n.OPEN ?? 0} · approved ${n.APPROVED ?? 0}`; c.className = 'chip ok'; c.title = S.marketUrl;
+}
+function renderHead() {
+  const v = S.vms.get(S.selected), el = $('#head'); if (!v || !el) return;
+  const m = v.metrics ?? {}, on = v.info.status === 'Running';
+  const up = m.uptime ? `${Math.floor(m.uptime/3600)}h ${Math.floor(m.uptime%3600/60)}m` : '–';
+  setHtml(el, `
+    <div><div class="title"><span class="dot ${on ? (activeRun(v) ? 'busy' : 'on') : ''}"></span>${esc(v.name)}</div>
+      <div class="sub">${esc(m.os || 'Linux')} · ${esc(v.info.arch ?? '')} · ${esc(v.info.vmType ?? '')}<br>${esc(v.info.cpus)} vCPU · ${gb(v.info.memory)} RAM · up ${up}<br>seller ${esc(m.seller ?? '—')}</div></div>
+    <div class="gauge"><div class="k">CPU</div><div class="v">${m.cpu != null ? m.cpu.toFixed(0) : '–'}<small>%</small></div>${spark(v.history.map((h) => h.cpu), 100, '#3ddc97')}</div>
+    <div class="gauge"><div class="k">Memory</div><div class="v">${m.memUsed != null ? (m.memUsed/1073741824).toFixed(1) : '–'}<small> / ${gb(m.memTotal)}</small></div>${spark(v.history.map((h) => h.memUsed), m.memTotal || 1, '#5fa8ff')}</div>
+    <div class="gauge"><div class="k">Load (1 / 5 / 15 min)</div><div class="v">${(m.load ?? []).map((x) => x.toFixed(2)).join(' <small>/</small> ') || '–'}</div><div class="note">${on ? 'sampled every 2 s over SSH' : 'VM is not running'}</div></div>`);
+  syncPulses();
+}
+function renderPipeline() {
+  const v = S.vms.get(S.selected), el = $('#pipe'); if (!v || !el) return;
+  const task = sellerTask(v);
+  if (!task) { setHtml(el, '<div class="note">No task yet. Post one from the buyer GUI; this VM will claim it.</div>'); setHtml($('#taskstate'), ''); return; }
+  const ev = (S.market?.events ?? []).filter((e) => e.task_id === task.task_id);
+  const at = (type) => ev.find((e) => e.type === type);
+  const verdict = at('verdict.recorded'), submitted = at('result.submitted'), running = at('task.running');
+  const mine = task.seller_id && task.seller_id === v.metrics?.seller;
+  const run = mine ? activeRun(v) : null;
+  const steps = [
+    ['Posted by buyer', at('task.posted'), clock(at('task.posted')?.created_at)],
+    ['Claimed by this VM', mine ? at('task.claimed') : null, mine ? clock(at('task.claimed')?.created_at) : task.seller_id ? 'another seller' : 'waiting…'],
+    ['Model running in VM', mine && submitted, run ? `${run.tokens} tokens…` : submitted ? dur(submitted.meta?.runtime_ms) : ''],
+    ['Result sealed & sent', mine && submitted, clock(submitted?.created_at)],
+    ['Judge verdict', mine && verdict, verdict ? `${verdict.meta?.outcome} · ${verdict.meta?.reason_code}` : at('task.judging') ? 'judging…' : ''],
+    ['Seller paid', mine && verdict?.meta?.seller_payout_cents > 0, verdict ? `$${((verdict.meta?.seller_payout_cents ?? 0)/100).toFixed(2)} ${verdict.meta?.transfer_state ?? ''}` : ''],
+  ];
+  let activeSet = false;
+  setHtml(el, `<div class="taskline"><span class="id">${esc(task.task_id)}</span><span>${esc(task.model_id ?? task.allowed_models?.join(', '))}</span><span>offer $${(task.price_cents/100).toFixed(2)}</span><span>${esc(task.payment?.mode ?? '')}</span></div>
+    <div class="steps">${steps.map(([label, done, t], i) => {
+      let cls = done ? 'done' : 'pending';
+      if (i === 4 && verdict?.meta?.outcome === 'REJECT') cls = 'fail';
+      if (!done && !activeSet && cls !== 'fail' && !(task.seller_id && !mine && i > 0)) { cls = 'active'; activeSet = true; }
+      if (['REJECTED','EXPIRED','CANCELLED'].includes(task.status) && !done) cls = i === 4 && verdict ? 'fail' : 'pending';
+      return `<div class="step ${cls}"><div class="bar"></div><div class="l">${label}</div><div class="t">${esc(t ?? '')}</div></div>`;
+    }).join('')}</div>`);
+  const st = task.status, cls = st === 'APPROVED' ? 'g' : ['REJECTED','EXPIRED','CANCELLED'].includes(st) ? 'r' : 'a';
+  setHtml($('#taskstate'), `<span class="badge ${cls}">${esc(st)}</span>`);
+  syncPulses();
+}
+let streamQueued = false;
+function scheduleStream() { if (streamQueued) return; streamQueued = true; requestAnimationFrame(() => { streamQueued = false; renderStream(); }); }
+function renderRunOn(v, r) {
+  const m = v.metrics ?? {}, el = $('#runon'); if (!el) return;
+  const loaded = (m.models ?? []).find((x) => !r || x.name === r.model) ?? (m.models ?? [])[0];
+  const engine = (m.procs ?? []).filter((p) => /ollama|llama/i.test(p.comm)).reduce((a, p) => a + p.cpu, 0);
+  setHtml(el, [`VM ${esc(v.name)}`, esc((m.os || 'Linux').split(' · ')[0]), `Ollama inside the VM`,
+    loaded ? `${esc(loaded.name)} loaded · ${gb(loaded.size)} in VM RAM` : 'model not loaded yet',
+    loaded ? (loaded.size_vram ? 'GPU' : 'CPU only · no GPU in VM') : 'CPU only · no GPU in VM',
+    `${v.info.cpus} vCPU · VM CPU now ${m.cpu != null ? m.cpu.toFixed(0) : '–'}%`, engine ? `model engine ${engine.toFixed(0)}% cpu` : null]
+    .filter(Boolean).map((x) => `<span>${x}</span>`).join(''));
+}
+// Only touch the DOM when content changes, so animations and text selection survive updates.
+function setHtml(el, html) { if (el && el._html !== html) { el._html = html; el.innerHTML = html; } }
+function setText(el, text) { if (el && el.textContent !== text) el.textContent = text; }
+// Re-created elements restart their CSS animation; give every pulse the same phase so nothing blinks out of step.
+function syncPulses() { const d = `-${Math.round(performance.now() % 1000)}ms`; document.querySelectorAll('.dot.busy,.step.active .bar,.pbar .live,.cursor').forEach((e) => { e.style.animationDelay = d; }); }
+function steps(text) {
+  const parts = text.split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
+  return parts.length ? parts : text.trim() ? [text.trim()] : [];
+}
+function renderStream() {
+  const v = S.vms.get(S.selected), el = $('#stream'); if (!v || !el) return;
+  const ids = v.runOrder, selId = S.runSel.get(v.name) ?? ids[ids.length - 1], r = selId && v.runs.get(selId);
+  renderRunOn(v, r);
+  setHtml($('#runs'), ids.slice(-6).map((id, i, a) => `<button class="${id === selId ? 'sel' : ''}" data-id="${id}">run ${ids.length - a.length + i + 1}</button>`).join(''));
+  $('#runs').querySelectorAll('button').forEach((b) => b.onclick = () => { S.runSel.set(v.name, b.dataset.id); renderStream(); });
+  if (!r) {
+    setHtml($('#mstats'), '<span>idle — waiting for the sandbox to call the model</span>'); setHtml($('#phase'), ''); setHtml($('#tps'), '');
+    delete el.dataset.run; setHtml(el, '<div class="empty">When this VM claims a task, its reasoning and answer stream here live.</div>'); return;
+  }
+  const live = !r.end, now = r.end ?? Date.now();
+  const genMs = r.first ? (r.last ?? now) - r.first : 0;
+  const tps = r.done?.eval_count && r.done?.eval_duration ? r.done.eval_count / (r.done.eval_duration / 1e9) : genMs > 0 ? r.tokens / (genMs / 1000) : 0;
+  const stage = r.error ? `<span style="color:var(--red)">error: ${esc(r.error)}</span>` : !live ? '<span style="color:var(--green)">● done</span>'
+    : r.answerFirst ? '<span style="color:var(--green)">● writing the answer</span>' : r.thinkFirst ? '<span style="color:var(--violet)">● reasoning</span>' : '<span style="color:var(--amber)">● loading model / reading prompt</span>';
+  const thinkTok = r.tokTimes.length && r.thinkFirst ? r.tokTimes.filter((t) => t < (r.answerFirst ?? Infinity)).length : 0;
+  setHtml($('#mstats'), `${stage}<span>model <b>${esc(r.model)}</b></span><span>reasoning <b>${thinkTok}</b> tok</span><span>answer <b>${r.tokens - thinkTok}</b> tok</span><span>first token <b>${r.first ? dur(r.first - r.start) : '–'}</b></span><span>elapsed <b>${dur(now - r.start)}</b></span>${r.done?.prompt_eval_count ? `<span>prompt <b>${r.done.prompt_eval_count}</b> tok</span>` : ''}${r.forced ? '<span title="The tap switched on reasoning for this demo; the runner still gets only the answer">reasoning shown by viewer tap</span>' : ''}`);
+
+  // Phase timeline: load model → read prompt → reasoning → answer.
+  const total = Math.max(1, now - r.start), pre = (r.first ?? now) - r.start;
+  const loadMs = r.done?.load_duration ? r.done.load_duration / 1e6 : null, readMs = r.done?.prompt_eval_duration ? r.done.prompt_eval_duration / 1e6 : null;
+  const segs = [];
+  if (loadMs != null && readMs != null) { const k = pre / Math.max(1, loadMs + readMs); segs.push(['load', loadMs * k, `load model ${dur(loadMs)}`], ['read', readMs * k, `read prompt ${dur(readMs)}`]); }
+  else segs.push(['load', pre, r.first ? `load + read prompt ${dur(pre)}` : `loading model / reading prompt ${dur(pre)}`]);
+  if (r.thinkFirst) segs.push(['reason', (r.answerFirst ?? now) - r.thinkFirst, `reasoning ${dur((r.answerFirst ?? now) - r.thinkFirst)}`]);
+  if (r.answerFirst) segs.push(['ans', now - r.answerFirst, `answer ${dur(now - r.answerFirst)}`]);
+  // Update the phase bar in place so widths animate instead of being redrawn.
+  const pbar = $('#phase .pbar') ?? (() => { setHtml($('#phase'), '<div class="pbar"></div><div class="plegend"></div>'); return $('#phase .pbar'); })();
+  segs.forEach(([c, ms], i) => {
+    let seg = pbar.children[i];
+    if (!seg || !seg.classList.contains(c)) { while (pbar.children.length > i) pbar.lastChild.remove(); seg = pbar.appendChild(document.createElement('div')); seg.className = c; }
+    seg.style.width = `${(100 * ms / total).toFixed(2)}%`;
+    seg.classList.toggle('live', live && i === segs.length - 1);
+  });
+  while (pbar.children.length > segs.length) pbar.lastChild.remove();
+  setHtml($('#phase .plegend'), segs.map(([c, , label]) => `<span><i style="background:var(--${({ load:'dim', read:'blue', reason:'violet', ans:'green' })[c]})"></i>${label}</span>`).join(''));
+
+  // Tokens per second, 1 s buckets.
+  const buckets = [];
+  if (r.first) { const n = Math.min(180, Math.ceil(((r.last ?? now) - r.first) / 1000) + 1); for (let i = 0; i < n; i++) buckets.push(0); for (const t of r.tokTimes) { const i = Math.min(n - 1, Math.floor((t - r.first) / 1000)); buckets[i]++; } }
+  setHtml($('#tps'), `<div><div class="note">generation speed</div><div class="big">${tps ? tps.toFixed(1) : '–'} <small>tok/s</small></div></div>${spark(buckets.length > 1 ? buckets : [0, 0], Math.max(5, ...buckets), '#b48cff')}`);
+
+  // Prompt, reasoning steps and answer: build once per run, then only append or edit text.
+  if (el.dataset.run !== r.id) {
+    el.dataset.run = r.id;
+    el.innerHTML = `<details class="prompt"><summary>Prompt sent to the model (${r.messages.length} messages) — ${esc((r.messages.at(-1)?.content ?? '').slice(0, 90))}</summary>
+        ${r.messages.map((msg) => `<div class="msg ${esc(msg.role)}"><div class="who">${esc(msg.role)}</div>${esc(msg.content)}</div>`).join('')}</details>
+      <div class="think2">
+        <div><div class="colh"><span style="color:var(--violet)">●</span> Reasoning steps <span class="spacer"></span><span class="nsteps"></span></div>
+          <div class="reasoning"><div class="waiting"></div></div></div>
+        <div><div class="colh"><span style="color:var(--green)">●</span> Answer returned to the sandbox</div>
+          <div class="answer"><span class="waiting" style="padding:0"></span><span class="atext"></span><span class="cursor" hidden></span></div></div>
+      </div>`;
+  }
+  const rEl = el.querySelector('.reasoning'), aEl = el.querySelector('.answer');
+  const stickR = rEl.scrollTop + rEl.clientHeight >= rEl.scrollHeight - 30, stickA = aEl.scrollTop + aEl.clientHeight >= aEl.scrollHeight - 30;
+  const st = steps(r.think), thinking = !!(live && r.thinkFirst && !r.answerFirst);
+  setText(el.querySelector('.nsteps'), `${st.length} step${st.length === 1 ? '' : 's'}`);
+  const wait = rEl.querySelector('.waiting');
+  setText(wait, st.length ? '' : live && !r.first ? 'The model is loading into the VM\'s memory and reading the prompt…' : r.forced || r.think || live ? '' : 'This run did not include reasoning (start the tap with TAP_THINK=1).');
+  wait.hidden = !wait.textContent;
+  const cards = rEl.querySelectorAll('.rstep');
+  st.forEach((t, i) => {
+    let card = cards[i];
+    if (!card) {
+      card = document.createElement('div'); card.className = 'rstep new';
+      card.innerHTML = `<div class="num">${i + 1}</div><div class="txt"><span class="t"></span></div>`;
+      rEl.appendChild(card);
+    }
+    setText(card.querySelector('.t'), t);
+    card.classList.toggle('cur', thinking && i === st.length - 1);
+  });
+  // A single reasoning cursor follows the newest step.
+  let rc = rEl.querySelector('.cursor');
+  if (thinking && st.length) { if (!rc) { rc = document.createElement('span'); rc.className = 'cursor'; rc.style.background = 'var(--violet)'; } const host = rEl.querySelectorAll('.rstep .txt')[st.length - 1]; if (rc.parentNode !== host) host.appendChild(rc); }
+  else rc?.remove();
+  setText(aEl.querySelector('.atext'), r.text.trim());
+  setText(aEl.querySelector('.waiting'), r.text ? '' : live ? (r.thinkFirst ? 'Waiting for the model to finish reasoning…' : '…') : '');
+  aEl.querySelector('.cursor').hidden = !(live && r.answerFirst);
+  if (stickR) rEl.scrollTop = rEl.scrollHeight;
+  if (stickA) aEl.scrollTop = aEl.scrollHeight;
+  syncPulses();
+}
+setInterval(() => { const v = S.vms.get(S.selected); if (v && activeRun(v)) { renderStream(); renderPipeline(); } }, 500);
+function logHtml(d) {
+  let line = esc(d.line);
+  line = line.replace(/^(\d\d:\d\d:\d\d)/, '<span class="ts">$1</span>').replace(/\[seller\]/, '<span class="seller">[seller]</span>').replace(/\[wassette\]/, '<span class="wassette">[wassette]</span>');
+  const cls = /fail|error|blocked|denied/i.test(d.line) ? 'err' : /claimed|submitted|APPROVE|listed/i.test(d.line) ? 'ok' : /accepting|reconnect/i.test(d.line) ? 'warn' : '';
+  return `<div class="${cls}">${line}</div>`;
+}
+function renderLogs() { const v = S.vms.get(S.selected), el = $('#term'); if (!v || !el) return; el.innerHTML = v.logs.map(logHtml).join('') || '<div class="ts">waiting for seller log…</div>'; el.scrollTop = el.scrollHeight; }
+function appendLog(d) { const el = $('#term'); if (!el) return; const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 30; if (el.firstChild?.className === 'ts') el.innerHTML = ''; el.insertAdjacentHTML('beforeend', logHtml(d)); if (stick) el.scrollTop = el.scrollHeight; }
+function renderBottom() {
+  const v = S.vms.get(S.selected); if (!v || !$('#procs')) return;
+  const m = v.metrics ?? {};
+  $('#procs').innerHTML = m.procs?.length ? `<table><tr><th>pid</th><th>process</th><th>cpu%</th><th>mem</th><th>time</th></tr>${m.procs.map((p) => `<tr class="${p.cpu > 50 ? 'hot' : ''}"><td>${p.pid}</td><td>${esc(p.comm)}</td><td>${p.cpu.toFixed(1)}</td><td>${(p.rss/1048576).toFixed(0)} MB</td><td>${esc(p.etime)}</td></tr>`).join('')}</table>` : '<div class="note">–</div>';
+  $('#models').innerHTML = m.models?.length ? `<table><tr><th>model</th><th>size</th><th>where</th><th>unloads</th></tr>${m.models.map((x) => `<tr><td>${esc(x.name)}</td><td>${gb(x.size)}</td><td>${x.size_vram ? 'GPU' : 'CPU (in VM)'}</td><td>${clock(x.expires_at)}</td></tr>`).join('')}</table>` : '<div class="note">No model loaded in this VM\'s Ollama right now. It loads on the first task.</div>';
+  const ev = S.market?.events ?? [];
+  $('#feed').innerHTML = ev.slice(0, 40).map((e) => `<div><span class="tm">${clock(e.created_at)}</span><span class="ty">${esc(e.type)}</span><span>${esc(e.task_id ?? e.agent_id ?? '')}</span></div>`).join('') || '<div class="note">No events.</div>';
+}
+</script>
+</body>
+</html>

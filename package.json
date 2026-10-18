@@ -16,7 +16,8 @@
     "build:runner": "pnpm --filter @atm/runner-wasm build",
     "setup:env": "bash scripts/setup-env.sh",
     "smoke": "tsx scripts/smoke-local.ts",
-    "deploy:manufact": "bash scripts/deploy-manufact.sh"
+    "deploy:manufact": "bash scripts/deploy-manufact.sh",
+    "vm:viewer": "pnpm --filter @atm/vm-viewer start"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
