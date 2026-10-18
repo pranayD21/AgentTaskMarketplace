@@ -30,6 +30,7 @@ post_task sends private text to the trusted marketplace immediately and encrypts
 - [Marketplace skill](skills/marketplace/SKILL.md)
 - [Exact MCP contract](docs/CONTRACT.md)
 - [Security and claims](docs/SECURITY.md)
+- [Official benchmark claims](docs/CLAIMS.md)
 - [Claude Code recipe](docs/buyer/claude-code.md)
 - [Codex recipe](docs/buyer/codex.md)
 - [Dashboard setup](apps/web/README.md)

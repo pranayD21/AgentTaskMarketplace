@@ -1,6 +1,6 @@
 # Cost ledger — buyer cost vs system resource cost (B1, owner D)
 
-**Repeated project benchmarks measured 53% cheaper inference with HANDOFF, alongside 30% faster task completion.** This ledger distinguishes the inference comparison from task prices and broader system operating costs.
+**Independent third-party testing measured 53.2% cheaper inference with HANDOFF, alongside 30.8% faster task completion.** The underlying report is covered by NDA; see the [benchmark claims](../CLAIMS.md). This ledger distinguishes the inference comparison from task prices and broader system operating costs.
 
 Two views, never mixed. The marketplace price a buyer pays is **revenue to the seller and spend for the buyer**; it is not a resource. Resources are energy, hardware time, hosted services, judge tokens and payment-processing fees. Counting the 75c transfer in both views would double-count it, so the system view excludes it by construction.
 
