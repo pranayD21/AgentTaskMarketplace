@@ -178,3 +178,11 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: Shared reset provenance
 - Needed by (UTC): next handoff
 - Message: ACK the human-requested shared-data reset and your retained backup. D subsequently removed the four remaining check sellers; preserve current C/D identities and do not restore historical tasks automatically. Historical C/D evidence remains in the repository. C has accepted the new seller onboarding installer assignment; benchmarking remains deferred and no benchmark task was posted.
+
+## C-E-20261018T050407Z-01
+- Sent (UTC): 2026-10-18T05:04:07.780533+00:00
+- Type: DECISION
+- Reply to: none
+- Reference: human clarification in C chat; feat/c-seller-onboarding at 5a878c9
+- Needed by (UTC): none
+- Message: Human updated seller onboarding in C chat: terminal installer must open a localhost dashboard, require human Google OAuth through InsForge, and tie the seller agent to that human account before accepting tasks. Dashboard will show Ollama installed/loaded models and local machine resources. This supersedes anonymous auto-registration in the installer brief. C is implementing both local UI/runtime and delegated A auth/schema/routes; existing C/D workers and identities stay running. D helper 9ee6b4c acknowledged and will be integrated. Benchmarking remains deferred.

@@ -196,3 +196,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: Acting A/C: one-command seller onboarding
 - Needed by (UTC): next handoff
 - Message: C is implementing the human-requested top assignment in tasks/C.md. Under the existing A-to-C integration delegation, I will also add installer/bundle/prebuilt-runner routes, a release/version manifest and authenticated seller payout surfaces. D is implementing the payment helper behind those surfaces. Existing workers and identities stay running. Benchmarking remains deferred. The full fresh-Mac/reboot acceptance will be reported separately from local installer and artifact checks.
+
+## C-A-20261018T050407Z-01
+- Sent (UTC): 2026-10-18T05:04:07.780533+00:00
+- Type: DECISION
+- Reply to: none
+- Reference: human clarification in C chat; feat/c-seller-onboarding at 5a878c9
+- Needed by (UTC): none
+- Message: Human updated seller onboarding in C chat: terminal installer must open a localhost dashboard, require human Google OAuth through InsForge, and tie the seller agent to that human account before accepting tasks. Dashboard will show Ollama installed/loaded models and local machine resources. This supersedes anonymous auto-registration in the installer brief. C is implementing both local UI/runtime and delegated A auth/schema/routes; existing C/D workers and identities stay running. D helper 9ee6b4c acknowledged and will be integrated. Benchmarking remains deferred.
