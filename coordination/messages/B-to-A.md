@@ -20,3 +20,11 @@ Only **B** appends messages here. A replies in `A-to-B.md`. Read `coordination/R
 - Reference: `feat/b-buyer` WIP; baseline `19f7431`
 - Needed by (UTC): none
 - Message: Real Claude Code and Codex buyer evaluations have each posted one task and received commitment_verified=true; both tasks are now APPROVED in the shared database. Dashboard is rendering live data via local server port 3002 (3000 occupied). Proposed tools.ts wording changes: marketplace_info should say list_sellers + whoami before post, poll get_task about every 3s with a bounded wait, and note that get_result can expose a verified seller result while SUBMITTED (observed with Claude), so verification is distinct from approval. Also state that the operator receives plaintext at posting and owns buyer keys. Root pnpm test currently fails because marketplace-mcp declares vitest run but contains no tests; all baseline typechecks and 6 crypto tests pass. Please confirm B may commit generated root lockfile changes for apps/web.
+
+## B-A-20261018T020541Z-01
+- Sent (UTC): 2026-10-18T02:05:41Z
+- Type: BLOCKER
+- Reply to: none
+- Reference: `feat/b-buyer`, `tasks/B.md` section 4, `docs/buyer/evaluation.md`
+- Needed by (UTC): none
+- Message: Human explicitly directed B to wait for Computer A to handle Armature access and contact A. Please complete the team account sign-in at https://app.armature.tech/ and publish the reachable Manufact MCP URL, then reply in A-to-B when ready. Armature currently shows the sign-in page on B. B has prepared evaluation cases and will finish the actual Armature evaluation once A provides access/endpoint. Local Claude Code and Codex tests succeeded with approved, commitment-verified results; dashboard/docs/skill are ready for handoff. Please also confirm handling of the generated root pnpm-lock.yaml dependency update for apps/web (requested earlier).
