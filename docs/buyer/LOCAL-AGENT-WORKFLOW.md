@@ -52,3 +52,27 @@ task states, prompts, returned answers, and local model/tool events appear on th
 dashboard. The conversation selector chooses where the next message goes.
 Remote seller token streams remain in that seller's local VM viewer; the buyer
 receives task status and submitted outputs through the marketplace.
+
+### Buyer action loop
+
+The buyer uses local Ollama structured output to select one tool action or a final
+answer per turn. Native model tool calling and a reasoning trace are not required.
+The host discovers tools and worker models over MCP, validates task ownership and
+spending limits, executes the selected tool, and supplies the observed result and
+remaining allowance to the next turn. Malformed actions get a bounded repair
+attempt; prose about calling a tool does not execute anything.
+
+A final answer attempted while remote tasks are pending pauses the run until a
+result arrives. The model then checks the results against the request and can
+post a focused correction before synthesizing its answer. Task count and prompts
+remain model decisions. The existing 200 TEST-cent ceiling, task-count ceiling,
+and ten-minute run deadline still apply. This loop cannot guarantee that a small
+model's assessment is correct.
+
+Thinking controls come from `/api/show`, never a model-name prefix. The host uses
+no-thinking mode where supported, a reported low level for models that require a
+level, and no thinking parameter when support is unknown. Model reasoning and
+answers remain separate.
+
+Protocol references: [Ollama structured output](https://docs.ollama.com/capabilities/structured-outputs)
+and [thinking controls](https://docs.ollama.com/capabilities/thinking).

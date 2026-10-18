@@ -15,6 +15,8 @@ import {
   type Envelope,
   type KeyDescriptor,
 } from "@atm/shared";
+import { modelThinkingControl } from './model-controls.js';
+export { modelThinkingControl } from './model-controls.js';
 import { workerTools, invokeWorkerTool } from "./worker-agent.js";
 import { withDeadline } from "./deadline.js";
 import { ollamaUsage, type SellerUsage } from "./seller-measurements.js";
@@ -107,7 +109,7 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
 
 async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPayload): Promise<{ text: string; tokens_out?: number; usage: SellerUsage }> {
   const messages: any[] = [
-    { role: "system", content: "You are a worker model executing a task for another agent. Reason carefully, use available tools when useful, then return the requested deliverable. Tools are limited to calculation, text inspection and a task-local scratchpad. Do not claim file execution or internet access. Follow the instruction precisely." },
+    { role: "system", content: "You are a worker model executing a task for another agent. Use available tools when useful, then return the requested deliverable. A reasoning trace is not required. Tools are limited to calculation, text inspection and a task-local scratchpad. Do not claim file execution or internet access. Follow the instruction precisely." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
   ];
   const started = host.now();
@@ -118,10 +120,12 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     const installed = await inventory.json() as { models?: { name: string }[] };
     if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
-    let capabilities:string[]=/^qwen3([:-]|$)/.test(opts.model_id)?['tools','thinking']:[];
-    if(opts.agent_mode!==false){
+    let capabilities:string[]=[];let thinkingControl:false|string|undefined;
+    {
+      // Canary calls also need capability discovery so Qwen does not default
+      // to thinking inside the intentionally tiny installation check.
       const metadata=await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/show`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:opts.model_id}),signal,redirect:'error'});
-      if(metadata.ok){const info=await metadata.json() as any;if(Array.isArray(info.capabilities))capabilities=info.capabilities;}
+      if(metadata.ok){const info=await metadata.json() as any;if(Array.isArray(info.capabilities))capabilities=info.capabilities;thinkingControl=modelThinkingControl(info);}
     }
     const notes=new Map<string,string>();let totalTokens=0;let requestingAnswer=false;
     const totals:Record<string,number>={};
@@ -129,7 +133,7 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
       const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
         method:"POST",redirect:"error",headers:{"content-type":"application/json"},signal,
         body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&capabilities.includes('tools')&&turn<7?workerTools:[],stream:false,
-          think:!requestingAnswer&&opts.agent_mode!==false&&capabilities.includes('thinking'),options:{num_predict:opts.agent_mode===false?payload.max_tokens:-1,temperature:0.2,
+          ...(thinkingControl===undefined?{}:{think:thinkingControl}),options:{num_predict:opts.agent_mode===false?payload.max_tokens:-1,temperature:0.2,
           num_thread:opts.cpu_threads??4,num_ctx:opts.context_tokens??8192}}),
       });
       if(!res.ok)throw new Error(`OLLAMA_HTTP_${res.status}`);
