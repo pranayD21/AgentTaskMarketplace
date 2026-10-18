@@ -45,4 +45,55 @@ $('stripe').onclick=()=>{
  catch(e){popup?.close();throw e;}
 });};
 $('start').onclick=()=>act(()=>post(data?.worker?.service==='running'?'/api/stop':'/api/start'));
-refresh();setInterval(refresh,5000);
+refresh();setInterval(()=>refresh(),5000);
+let chatSending=false, chatRefreshing=false, chatSnapshot='';
+function refreshAccount() {
+ const linked=Boolean(data?.owner && data?.buyer_id), payment=data?.buyer_payment;
+ const ready=['READY','MOCK'].includes(payment?.buyer_payment_status);
+ $('buyer-payment').disabled=!linked||posting;
+ $('buyer-payment').textContent=ready?'Payment connected':'Set up payment ↗';
+ $('buyer-status').textContent=!linked?'Sign in with Google to use one account for buying and selling.':`${data.owner.email} · ${ready?'Payment ready': 'Payment setup needed for network tasks'} · ${data.provider_budget?.remaining_microusd != null ? '$'+(data.provider_budget.remaining_microusd/1e6).toFixed(3)+' shared provider allowance remaining' : 'Shared allowance awaiting confirmation'}`;
+ const models=data?.machine?.models??[], select=$('chat-model'), previous=select.value;
+ const names=models.map(x=>x.name);
+ if(JSON.stringify(names)!==select.dataset.models){select.replaceChildren(...names.map(name=>new Option(name,name)));select.dataset.models=JSON.stringify(names);if(names.includes(previous))select.value=previous;}
+ $('chat-send').disabled=!linked||!names.length||chatSending;
+ $('chat-notice').textContent=!linked?'Continue with Google below to start.':!names.length?'Prepare a local model below before chatting.':!ready?'Local work is available. Network tasks require payment setup and shared provider allowance.':'Your agent can request network help within the account’s existing spending limits.';
+}
+const originalRefresh=refresh;
+refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
+async function chatPost(route,body){const r=await fetch(route,{method:'POST',headers:{'X-ATM-Request':'1','Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(typeof j.error==='string'?j.error:j.error?.message||'The request could not finish.');return j;}
+function bubble(section,label,value,kind){const item=document.createElement('div');item.className=`chat-bubble ${kind}`;const heading=document.createElement('strong');heading.textContent=label;const body=document.createElement('pre');body.textContent=value;item.append(heading,body);section.append(item);}
+function eventDetails(section,label,value){if(value==null)return;const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('pre');summary.textContent=label;body.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);details.append(summary,body);section.append(details);}
+function toolLabel(name){return ({mcp_marketplace_info:'Checking marketplace options',mcp_whoami:'Checking account limits',mcp_list_sellers:'Looking for available workers',mcp_create_job:'Creating a shared job',mcp_post_task:'Posting a task for the network',mcp_get_task:'Checking task progress',mcp_get_result:'Reading task results',mcp_get_job:'Checking the shared job',wait:'Waiting for workers'})[name]??String(name??'Agent action').replaceAll('_',' ');}
+async function refreshChats(){
+ if(chatRefreshing||!data?.buyer_id)return;chatRefreshing=true;
+ try{const r=await fetch('/api/chat');if(!r.ok)return;const j=await r.json();const snapshot=JSON.stringify(j.runs);if(snapshot===chatSnapshot)return;chatSnapshot=snapshot;
+ const fragment=document.createDocumentFragment();
+ for(const run of [...(j.runs??[])].reverse()){
+  const section=document.createElement('section');section.className='chat-run';
+  const title=document.createElement('h3');title.textContent=`Request ${run.id} · ${run.status}`;section.append(title);
+  if(!['complete','completed','done','failed','error','stopped','cancelled','finished','interrupted'].includes(String(run.status).toLowerCase())){const stop=document.createElement('button');stop.textContent='Stop agent';stop.className='secondary';stop.onclick=async()=>{try{stop.disabled=true;await chatPost('/api/chat/stop',{id:run.id});await refreshChats();}catch(e){error(e.message);stop.disabled=false;}};title.append(stop);}
+  if(run.prompt) bubble(section,'You',run.prompt,'user');
+  for(const event of run.events??[]){
+   if(event.type==='model'){
+    if(event.message?.content)bubble(section,'Your agent',event.message.content,'assistant');
+    if(event.message?.tool_calls?.length)eventDetails(section,'Requested tools',event.message.tool_calls);
+   }else if(event.type==='task_status'){
+    const task=event.task??{};const item=document.createElement('div');item.className='chat-event';
+    const label=document.createElement('strong');label.textContent=`${task.status??'Status unavailable'} · ${task.task_id??'Task'}`;
+    const note=document.createElement('p');note.textContent=task.seller_id?`Worker: ${task.seller_id}${task.model_id?' · '+task.model_id:''}`:'No worker assigned yet.';item.append(label,note);section.append(item);
+   }else if(event.type==='tool_call'){
+    const item=document.createElement('p');item.className='tool-action';item.textContent=toolLabel(event.name);section.append(item);eventDetails(section,'Request details',event.arguments);
+   }else if(event.type==='tool_result'){eventDetails(section,`Result · ${toolLabel(event.name)}`,event.result);
+   }else if(event.type==='stopped'){const note=document.createElement('p');note.className='tool-action';note.textContent=event.reason==='model_finished'?'Agent finished its response.':'Agent stopped: '+String(event.reason??run.status).replaceAll('_',' ');section.append(note);
+   }else{eventDetails(section,'Activity details',event);}
+  }
+  for(const id of run.task_ids??[]){const task=document.createElement('span');task.className='chat-task';task.textContent=`Marketplace task: ${id}`;section.append(task);}
+  if(run.error){const p=document.createElement('p');p.textContent=run.error;section.append(p);}fragment.append(section);
+ }
+ if(j.runs?.length)$('chat-runs').replaceChildren(fragment);
+ }catch{ /* Keep the previous timeline during temporary polling failures. */ }finally{chatRefreshing=false;}
+}
+$('chat-form').onsubmit=async event=>{event.preventDefault();if(chatSending)return;chatSending=true;refreshAccount();error(null);try{await chatPost('/api/chat',{prompt:$('chat-prompt').value,model:$('chat-model').value});$('chat-prompt').value='';await refreshChats();}catch(e){error(e.message);}finally{chatSending=false;refreshAccount();}};
+$('buyer-payment').onclick=()=>{const popup=window.open('about:blank','atm-buyer-payment');return act(async()=>{try{const r=await post('/api/buyer-payment');if(r.setup_url){if(popup){popup.opener=null;popup.location=r.setup_url;}else window.location.assign(r.setup_url);}else{popup?.close();if(!['READY','MOCK'].includes(r.buyer_payment_status))throw Error('Payment setup is unavailable. Please try again.');}}catch(e){popup?.close();throw e;}});};
+setInterval(()=>{refreshAccount();void refreshChats();},3000);

@@ -7,11 +7,11 @@ import { createBuyerBridge } from '../server/buyer.mjs';
 
 const spec={prompt:'Synthetic test instruction',context:'Fixture context',allowed_models:['qwen3:8b'],price_cents:100,
   expires_in_s:3600,max_tokens:512,rubric:{kind:'contains_text',expected_text:'fixture'}};
-async function fixture() {
+async function fixture(human = false) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'atm-web-buyer-'));
   const endpoint='https://marketplace.invalid/mcp';
   const statePath=path.join(dir,'buyer.json'), budgetPath=path.join(dir,'budget.json'), policyPath=path.join(dir,'policy.json');
-  fs.writeFileSync(statePath,JSON.stringify({marketplace_url:endpoint,agent_id:'buyer_fixture',api_key:'atm_sk_PRIVATE_TEST_KEY'}));
+  fs.writeFileSync(statePath,JSON.stringify({marketplace_url:endpoint,agent_id:'buyer_fixture',api_key:'atm_sk_PRIVATE_TEST_KEY',owner:human?{user_id:'human_fixture'}:undefined}));
   fs.writeFileSync(budgetPath,JSON.stringify({schema:'atm-api-budget/v1',cap_microusd:5000000,entries:{baseline:{state:'settled',booked_microusd:2390}}}));
   fs.writeFileSync(policyPath,JSON.stringify({endpoint,judge_model:'claude-opus-5-5',max_attempts:3,submissions_enabled:true,valid_until:new Date(Date.now()+600000).toISOString()}));
   const posts=new Map(), calls=[];
@@ -21,12 +21,12 @@ async function fixture() {
     expect(key).toBe('atm_sk_PRIVATE_TEST_KEY');
     return {initialize:async()=>{},tool:async(name,args)=>{
       calls.push(name);
-      if(name==='whoami') return {agent_id:'buyer_fixture',kind:'buyer',display_name:'Fixture buyer',spend:{cap_cents:2000,spent_cents:150,reserved_cents:0,available_cents:1850}};
+      if(name==='whoami') return {agent_id:'buyer_fixture',kind:'buyer',display_name:'Fixture buyer',owner:human?{user_id:'human_fixture'}:undefined,buyer_payment:{buyer_payment_status:'READY'},provider_budget:{enforced:true,available:!disconnect},spend:{cap_cents:2000,spent_cents:150,reserved_cents:0,available_cents:1850}};
       if(name==='marketplace_info') return {pricing:{mode:'task_offer'},payments:{mode:'card',min_cents:50,max_cents:100000},models:[{model_id:'qwen3:8b'}]};
       if(name==='list_sellers') return {sellers:[{seller_id:'seller_fixture',display_name:'Fixture seller',status:'ACTIVE',models:[{model_id:'qwen3:8b'}],runner:{runtime:'wassette'},last_seen:new Date().toISOString()}]};
       if(name==='list_my_tasks') return {tasks:[task]};
       if(name==='post_task') {
-        expect(JSON.parse(fs.readFileSync(budgetPath)).entries[args.client_request_id].booked_microusd).toBe(2200000);
+        if(!human) expect(JSON.parse(fs.readFileSync(budgetPath)).entries[args.client_request_id].booked_microusd).toBe(2200000);
         if(!posts.has(args.client_request_id)) posts.set(args.client_request_id,{...task,task_id:`task_${posts.size+1}`});
         if(disconnect) {disconnect=false;throw new Error('PRIVATE_PROVIDER_BODY');}
         return {task:posts.get(args.client_request_id)};
@@ -36,7 +36,7 @@ async function fixture() {
       throw new Error('Unexpected tool');
     }};
   };
-  const options={endpoint,statePath,budgetPath,policyPath,journalDir:path.join(dir,'drafts'),clientFactory};
+  const options={endpoint,statePath,budgetPath,policyPath,humanAccount:human,getSession:()=>({user_id:'human_fixture'}),journalDir:path.join(dir,'drafts'),clientFactory};
   let middleware=createBuyerBridge(options);
   const server=http.createServer((req,res)=>void middleware(req,res,()=>{res.statusCode=404;res.end();}));
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -117,3 +117,8 @@ describe('human buyer bridge',()=>{
     } finally {await f.close();}
   });
 });
+
+ describe('Google account buyer mode',()=>{
+ it('uses server allowance without creating or editing a local budget',async()=>{const f=await fixture(true);try{fs.unlinkSync(f.budgetPath);fs.unlinkSync(f.policyPath);expect((await f.call('state')).submissions_enabled).toBe(true);const {draft}=await f.call('prepare',{input:spec});expect((await f.call('submit',{id:draft.id})).status).toBe(200);expect(f.posts.size).toBe(1);expect(fs.existsSync(f.budgetPath)).toBe(false);}finally{await f.close();}});
+ it('rejects a mismatched signed-in owner',async()=>{const f=await fixture(true);try{f.options.getSession=()=>({user_id:'other'});await f.restart();expect((await f.call('state')).error.code).toBe('IDENTITY_MISMATCH');expect(f.posts.size).toBe(0);}finally{await f.close();}});
+ });

@@ -4,6 +4,11 @@ import os from "node:os";
 import http from "node:http";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { readAgentState } from "./identity.js";
+import { Marketplace } from "./marketplace.js";
+import { createDashboardChat } from "./dashboard-chat.js";
+// The shared local buyer bridge is JavaScript and bundled into the installer.
+// @ts-ignore no declaration file for this workspace module
+import { createBuyerBridge } from "../../web/server/buyer.mjs";
 
 export const DASHBOARD_PORT = 43118;
 export interface DashboardActions {
@@ -42,8 +47,34 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
   const sessions = new Set<string>();
   const pending = new Map<string, { state: string; verifier: string; until: number; insforge: string }>();
-  let phase = "Ready to set up your seller", lastError: string | null = null, busy = false;
+  let phase = "Ready to set up your account", lastError: string | null = null, busy = false;
   let cache: { at: number; value: Record<string, unknown> } | undefined;
+  const buyerFile = path.join(root, "buyer.json");
+  function buyerIdentity() {
+    const seller = jsonFile(path.join(root, "seller.json"));
+    const buyer = jsonFile(buyerFile);
+    if (!seller?.owner?.user_id || !buyer?.owner?.user_id || seller.owner.user_id !== buyer.owner.user_id ||
+      buyer.marketplace_url !== options.marketplaceUrl || !/^atm_sk_[A-Za-z0-9_-]{43}$/.test(buyer.api_key ?? "")) {
+      throw Error("Sign in with Google to link your buyer account.");
+    }
+    return buyer;
+  }
+  async function buyerCall(tool: string) {
+    const saved = buyerIdentity();
+    const client = new Marketplace(options.marketplaceUrl, saved.api_key);
+    try {
+      const account = await client.call<any>("whoami");
+      if (account.kind !== "buyer" || account.agent_id !== saved.agent_id || account.owner?.user_id !== saved.owner.user_id)
+        throw Error("The saved buyer does not match this Google account.");
+      return tool === "whoami" ? account : await client.call<any>(tool);
+    } finally { await client.close(); }
+  }
+  const buyerBridge = createBuyerBridge({ endpoint: options.marketplaceUrl, statePath: buyerFile,
+    journalDir: path.join(root, "buyer-drafts"), humanAccount: true, getSession: async () => {
+      const saved = buyerIdentity(); return { owner: { user_id: saved.owner.user_id } };
+    } });
+  const chat = createDashboardChat({ root, marketplaceUrl: options.marketplaceUrl });
+  let buyerCache: { at: number; value: Record<string, unknown> } | undefined;
   const origin = () => `http://127.0.0.1:${(server.address() as any).port}`;
   const redirect = (res: http.ServerResponse, to: string) => { res.writeHead(303, { Location: to }); res.end(); };
   const server = http.createServer(async (req, res) => {
@@ -65,7 +96,24 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         return redirect(res, "/");
       }
       if (!authorized) return json(401, { error: "Run atm-seller dashboard to open this page." });
-      if (req.method === "POST" && (req.headers.origin !== origin() || req.headers["x-atm-request"] !== "1")) return json(403, { error: "Invalid local request" });
+      if (req.method === "POST" && (req.headers.origin !== origin() || (url.pathname !== "/api/buyer" && req.headers["x-atm-request"] !== "1"))) return json(403, { error: "Invalid local request" });
+      if (url.pathname === "/api/buyer") {
+        buyerIdentity();
+        return await buyerBridge(req, res, () => json(404, { error: "Not found" }));
+      }
+      if (url.pathname === "/api/chat" || url.pathname.startsWith("/api/chat/")) {
+        if (await chat.handle(req, res)) return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/buyer-payment") {
+        const payment = await buyerCall("get_buyer_setup");
+        if (payment.setup_url) {
+          const link = new URL(payment.setup_url);
+          if (link.protocol !== "https:" || !(link.hostname === "stripe.com" || link.hostname.endsWith(".stripe.com")))
+            throw Error("Stripe returned an invalid setup link.");
+        }
+        buyerCache = undefined;
+        return json(200, payment);
+      }
       if (req.method === "GET" && url.pathname === "/auth/callback") {
         const flow = pending.get(cookie); pending.delete(cookie);
         if (!flow || Date.now() > flow.until || !equal(url.searchParams.get("state") ?? "", flow.state)) throw Error("Sign-in expired. Please try Google sign-in again.");
@@ -82,15 +130,26 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         const enrollmentFile = path.join(root, "enrollment.json");
         let enrollment = jsonFile(enrollmentFile);
         if (!enrollment) { enrollment = { api_key: existing?.api_key ?? `atm_sk_${randomBytes(32).toString("base64url")}` }; writePrivate(enrollmentFile, enrollment); }
-        const linked = await fetch(new URL("/api/seller/identity", options.marketplaceUrl), { method: "POST",
+        const linked = await fetch(new URL("/api/account/identity", options.marketplaceUrl), { method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.accessToken}` },
           body: JSON.stringify({ agent_key: enrollment.api_key, display_name: os.hostname().slice(0, 80) }), redirect: "error", signal: AbortSignal.timeout(30000) });
         if (!linked.ok) throw Error(linked.status === 409 ? "This seller belongs to another Google account. Sign in with its owner." : "Could not save your seller identity. Retry Google sign-in; the same identity will be reused.");
-        const saved = await linked.json() as any;
+        const account = await linked.json() as any;
+        const saved = account.seller, buyer = account.buyer;
+        const previousBuyer = jsonFile(buyerFile);
+        if (!saved || !buyer?.agent_id || !buyer.owner?.user_id || buyer.owner.user_id !== saved.owner?.user_id ||
+          account.owner?.user_id !== buyer.owner.user_id || !/^atm_sk_[A-Za-z0-9_-]{43}$/.test(buyer.api_key ?? ""))
+          throw Error("The marketplace did not confirm both account identities.");
+        if (previousBuyer && (previousBuyer.agent_id !== buyer.agent_id || previousBuyer.api_key !== buyer.api_key ||
+          previousBuyer.owner?.user_id !== buyer.owner.user_id || previousBuyer.marketplace_url !== options.marketplaceUrl))
+          throw Error("Existing buyer identity does not match. Nothing was replaced.");
         if (!saved.agent_id || !saved.owner?.user_id) throw Error("The marketplace did not confirm an account link.");
         if (existing && existing.agent_id !== saved.agent_id) throw Error("Existing seller identity does not match. Nothing was replaced.");
         writePrivate(stateFile, { agent_id: saved.agent_id, api_key: enrollment.api_key, display_name: saved.display_name, owner: saved.owner });
-        phase = "Google account linked. Prepare your local model next."; lastError = null; cache = undefined;
+        writePrivate(buyerFile, { agent_id: buyer.agent_id, api_key: buyer.api_key, display_name: buyer.display_name,
+          owner: buyer.owner, marketplace_url: options.marketplaceUrl });
+        buyerCache = undefined;
+        phase = "Google account linked. You can buy tasks and set up local selling."; lastError = null; cache = undefined;
         return redirect(res, "/");
       }
       if (req.method === "GET" && url.pathname === "/api/status") {
@@ -101,7 +160,12 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         }
         const saved = jsonFile(path.join(root, "seller.json"));
         const release = jsonFile(path.join(root, "app/release.json"));
-        return json(200, { machine, worker: cache.value, owner: saved?.owner ?? null, seller_id: saved?.agent_id ?? null,
+        if (!buyerCache || Date.now() - buyerCache.at > 15000) {
+          try { const account = await buyerCall("whoami"); buyerCache = { at: Date.now(), value: {
+            buyer_id: account.agent_id, buyer_payment: account.buyer_payment, provider_budget: account.provider_budget } }; }
+          catch { buyerCache = { at: Date.now(), value: { buyer_id: null, buyer_payment: null, provider_budget: null } }; }
+        }
+        return json(200, { ...buyerCache.value, machine, worker: cache.value, owner: saved?.owner ?? null, seller_id: saved?.agent_id ?? null,
           allowed_models: release?.allowed_models ?? [], phase, error: lastError, busy, payments_label: "Stripe TEST MODE" });
       }
       if (req.method === "POST" && url.pathname === "/api/auth/google") {
@@ -158,6 +222,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
       return json(400, { error: message });
     }
   });
+  server.on("close", () => { chat.close(); });
   server.requestTimeout = 35000; server.headersTimeout = 10000;
   return { server, listen: () => new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(options.port ?? DASHBOARD_PORT, "127.0.0.1", () => { server.removeListener("error", reject); resolve(); }); }) };
 }

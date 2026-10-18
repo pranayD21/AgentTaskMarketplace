@@ -235,3 +235,11 @@ alter table settlements add column if not exists transfer_key_created_at timesta
 alter table settlements add column if not exists transfer_retry_safe_to_advance boolean not null default false;
 alter table settlements add column if not exists transfer_manual_review boolean not null default false;
 alter table settlements add column if not exists transfer_pending_reason text;
+
+create table if not exists provider_budget (
+  id text primary key,
+  revision integer not null default 0,
+  cap_microusd integer not null default 0,
+  entries jsonb not null default '{}'::jsonb
+);
+alter table provider_budget enable row level security;

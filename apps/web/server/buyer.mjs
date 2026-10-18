@@ -26,11 +26,13 @@ const taskView = t => ({task_id:t.task_id, status:t.status, buyer_id:t.buyer_id,
   payment_state:t.payment?.state});
 
 /** Local development/preview only. Keys stay in the Node process; no registration or cap changes. */
-export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, policyPath, clientFactory = createClient}) {
+export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, policyPath, clientFactory = createClient, humanAccount = false, getSession}) {
   endpoint = normalizeEndpoint(endpoint);
   const csrf = randomBytes(32).toString('hex');
   let mutation = false;
-  function policy() {
+  function policy(buyer, recovering = false) {
+    if (humanAccount) return Boolean(buyer?.owner?.user_id && buyer.provider_budget?.enforced &&
+      (recovering || buyer.provider_budget.available) && ['READY','MOCK'].includes(buyer.buyer_payment?.buyer_payment_status));
     try {
       const p = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
       return p.endpoint === endpoint && p.judge_model === 'claude-opus-5-5' && p.max_attempts === 3 &&
@@ -61,6 +63,12 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
     const buyer = await client.tool('whoami');
     if (buyer.kind !== 'buyer' || (identity.agent_id && identity.agent_id !== buyer.agent_id))
       fail('IDENTITY_MISMATCH', 'The saved identity is not the expected buyer.');
+    if (humanAccount) {
+      const session = await getSession?.();
+      const owner = session?.owner?.user_id ?? session?.user_id;
+      if (!owner || identity.owner?.user_id !== owner || buyer.owner?.user_id !== owner)
+        fail('IDENTITY_MISMATCH', 'Sign in with the Google account that owns this buyer.');
+    }
     return {client, buyer};
   }
   function validate(input, info, buyer) {
@@ -80,6 +88,7 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
     return data;
   }
   function releaseZero(draft, result) {
+    if (humanAccount) return;
     // Only a deterministic approval establishes no replacement API calls. Unknown/rejected stays reserved.
     const noModelCalls = (result.task.status === 'APPROVED' && result.verdict?.reason_code === 'RUBRIC_MATCH') ||
       (['CANCELLED','EXPIRED'].includes(result.task.status) && !result.result && !result.verdict);
@@ -96,7 +105,7 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
       return {buyer:{agent_id:buyer.agent_id,display_name:buyer.display_name,spend:buyer.spend}, endpoint,
         models:info.models.map(m => ({model_id:m.model_id, family:m.family, params:m.params})),
         payments:{mode:info.payments.mode,min_cents:info.payments.min_cents,max_cents:info.payments.max_cents},
-        submissions_enabled:policy(), drafts:drafts(buyer), tasks:tasks.tasks.map(taskView),
+        submissions_enabled:policy(buyer), buyer_payment:buyer.buyer_payment, provider_budget:buyer.provider_budget, drafts:drafts(buyer), tasks:tasks.tasks.map(taskView),
         sellers:listed.sellers.map(s => ({seller_id:s.seller_id,display_name:s.display_name,status:s.status,
           models:s.models.map(m=>m.model_id),runtime:s.runner?.runtime,last_seen:s.last_seen}))};
     }
@@ -112,7 +121,7 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
     }
     if (body.action === 'discard') {
       const draft=load(body.id,buyer);
-      const ledger=fs.existsSync(budgetPath)?JSON.parse(fs.readFileSync(budgetPath,'utf8')):null;
+      const ledger=!humanAccount && fs.existsSync(budgetPath)?JSON.parse(fs.readFileSync(budgetPath,'utf8')):null;
       if(draft.state!=='DRAFT' || draft.task_id || ledger?.entries?.[draft.id])
         fail('DRAFT_ALREADY_ATTEMPTED','Submitted or uncertain requests must be recovered, not discarded.');
       fs.unlinkSync(path.join(journalDir,`${draft.id}.json`));
@@ -121,10 +130,11 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
     if (body.action === 'submit') {
       const draft = load(body.id,buyer);
       if (draft.task_id) return {draft:summary(draft)};
-      if (!policy()) fail('SUBMISSIONS_PAUSED', 'Test submissions are paused while shared workers are being benchmarked or judge settings await confirmation. Your draft is saved.');
+      if (!policy(buyer, draft.state === 'POSTING')) fail('SUBMISSIONS_PAUSED', humanAccount ? 'Complete payment setup and wait for available shared provider allowance. Your draft is saved.' : 'Submissions are paused pending operator confirmation. Your draft is saved.');
       // Replays use exactly the persisted payload and request id. Never allocate another request after uncertainty.
       if (draft.state === 'DRAFT') {
         validate(draft.input, await client.tool('marketplace_info'), buyer);
+        if (!humanAccount) {
         if (!fs.existsSync(budgetPath)) fail('BUDGET_NOT_CONFIGURED', 'The shared API budget ledger must be configured before testing.');
         const ledger = JSON.parse(fs.readFileSync(budgetPath,'utf8'));
         if (!ledger.entries[draft.id]) {
@@ -132,7 +142,9 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
           catch { fail('API_BUDGET_UNAVAILABLE', 'The shared $5 API allowance cannot cover another test. Existing unknown or rejected calls need reconciliation first. No task was posted.'); }
         }
         else if (ledger.entries[draft.id].state !== 'reserved') fail('BUDGET_RECONCILIATION', 'This draft needs API budget reconciliation before submitting.');
-        draft.reserved = true; draft.state = 'POSTING'; save(draft);
+        draft.reserved = true;
+        }
+        draft.state = 'POSTING'; save(draft);
       }
       const response = await client.tool('post_task', {...draft.input,client_request_id:draft.id});
       if (!taskPattern.test(response.task_id ?? response.task?.task_id ?? ''))

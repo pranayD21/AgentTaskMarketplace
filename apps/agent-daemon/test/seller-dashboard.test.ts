@@ -5,6 +5,10 @@ import path from "node:path";
 import http from "node:http";
 import { createHash } from "node:crypto";
 import { createSellerDashboard } from "../src/seller-dashboard.js";
+vi.mock("../src/marketplace.js", () => ({ Marketplace: class {
+ async call(name:string) { return name === "whoami" ? {kind:"buyer",agent_id:"buyer_fixture",owner:{user_id:"human-fixture"},buyer_payment:{buyer_payment_status:"READY"},provider_budget:{enforced:true,available:true}} : {buyer_payment_status:"SETUP_REQUIRED",setup_url:"https://checkout.stripe.com/setup/fixture"}; }
+ async close() {}
+} }));
 const realFetch=globalThis.fetch;
 const cleanup: Array<()=>Promise<void>>=[];
 afterEach(async()=>{vi.unstubAllGlobals();for(const fn of cleanup.splice(0))await fn();});
@@ -40,10 +44,10 @@ it('completes PKCE in Node, retries the same enrollment key after a lost respons
    const b=JSON.parse(init.body);expect(createHash('sha256').update(b.code_verifier).digest('base64url')).toBe(challenge);
    return Response.json({accessToken:'private-human-session',refreshToken:'private-refresh'});
   }
-  if(u.pathname==='/api/seller/identity'){
+  if(u.pathname==='/api/account/identity'){
    expect(init.headers.Authorization).toBe('Bearer private-human-session');const b=JSON.parse(init.body);keys.push(b.agent_key);
    if(tries++===0)return Response.json({error:'temporary'}, {status:503});
-   return Response.json({agent_id:'seller_fixture',display_name:'Mac',owner:{user_id:'human-fixture',email:'human@example.test'}});
+   return Response.json({owner:{user_id:'human-fixture'},seller:{agent_id:'seller_fixture',display_name:'Mac',owner:{user_id:'human-fixture',email:'human@example.test'}},buyer:{agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'human-fixture'}}});
   }
   if(u.hostname==='localhost')return Response.json({models:[]});
   throw Error('Unexpected URL '+u.pathname);
@@ -57,8 +61,11 @@ it('completes PKCE in Node, retries the same enrollment key after a lost respons
  const saved=JSON.parse(fs.readFileSync(path.join(f.root,'seller.json'),'utf8'));
  expect(saved.api_key).toBe(keys[0]);expect(saved.owner.user_id).toBe('human-fixture');
  expect(fs.statSync(path.join(f.root,'seller.json')).mode&0o777).toBe(0o600);
+ const buyer=JSON.parse(fs.readFileSync(path.join(f.root,'buyer.json'),'utf8'));
+ expect(buyer.owner.user_id).toBe(saved.owner.user_id);expect(buyer.marketplace_url).toBe('https://marketplace.example/mcp');
+ expect(fs.statSync(path.join(f.root,'buyer.json')).mode&0o777).toBe(0o600);
  const status=await(await f.request('/api/status')).text();
- expect(status).not.toContain(keys[0]!);expect(status).not.toContain('private-human-session');expect(status).not.toContain('private-refresh');
+ expect(status).not.toContain(keys[0]!);expect(status).not.toContain('private-human-session');expect(status).not.toContain('private-refresh');expect(status).not.toContain('b'.repeat(43));expect(JSON.parse(status).buyer_id).toBe('buyer_fixture');
  const page=await(await f.request('/')).text();expect(page).toContain('Continue with Google');expect(page).toContain('Set up Stripe');
  expect(f.actions.prepare).not.toHaveBeenCalled();expect(f.actions.start).not.toHaveBeenCalled();
 });
@@ -66,4 +73,17 @@ it('rejects wrong or replayed OAuth callbacks before exchanging tokens',async()=
  const f=await fixture();const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
  expect((await f.request('/auth/callback?state=wrong&insforge_code=bad')).status).toBe(303);
  expect(fetcher).not.toHaveBeenCalled();expect(fs.existsSync(path.join(f.root,'seller.json'))).toBe(false);
+});
+
+it('requires a matching Google owner for buyer actions and hides state files',async()=>{
+ const f=await fixture();
+ expect((await f.request('/buyer.json')).status).toBe(404);
+ expect((await f.request('/api/buyer-payment','POST')).status).toBe(400);
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.writeFileSync(path.join(f.root,'buyer.json'),JSON.stringify({agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'other-human'},marketplace_url:'https://marketplace.example/mcp'}));
+ expect((await f.request('/api/buyer-payment','POST')).status).toBe(400);
+ fs.writeFileSync(path.join(f.root,'buyer.json'),JSON.stringify({agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'human-fixture'},marketplace_url:'https://marketplace.example/mcp'}));
+ expect((await f.request('/api/buyer-payment','POST',{Origin:'https://evil.example'})).status).toBe(403);
+ expect((await f.request('/api/buyer-payment','POST')).status).toBe(200);
+ expect((await f.request('/api/buyer','POST',{'X-ATM-Request':'','Content-Type':'application/json'})).status).toBe(400);
 });

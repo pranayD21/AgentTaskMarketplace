@@ -209,3 +209,7 @@ Earlier issues above are historical. The per-call key blocker (#1), D payout int
 - Still open: deployment and live checks after C merges (hosted `/api/health` is not reachable from A's container); D's `retryTransfer` provider hook; E's use of the new judge codes and replacement loop; B's job orchestration and UI. X1 is design only (`docs/X1-CONFIDENTIAL-COMPUTE.md`), and host confidentiality remains unmet.
 - Corrected claims in PLAN/README/SECURITY: protection is from the seller daemon, not the machine owner; there is no liveness canary; replacement delivery is explicit, not guaranteed; judge outages never strike.
 
+
+## Unified account and autonomous chat, October 17, 23:32 PDT
+
+The local dashboard now links buyer and seller through one Google sign-in, offers human Stripe TEST payment setup, and provides a chat with an installed Ollama model. The model chooses whether to delegate through MCP; the interface displays real task states and worker IDs. Shared provider allowance was migrated from B's frozen ledger without resetting its booked balance. See [UNIFIED-WORKSPACE.md](UNIFIED-WORKSPACE.md) for limits, operation and acceptance status. Workspace typecheck and 265 tests passed, with two optional Wassette skips. Deployment verification follows separately; no live task or benchmark was run for this change.

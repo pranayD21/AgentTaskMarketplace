@@ -1,3 +1,4 @@
+import { registerHumanAccountRoutes } from "./human-account.js";
 import { cors } from "hono/cors";
 import { CONTRACT_VERSION } from "@atm/shared";
 import type { MCPServer } from "mcp-use";
@@ -14,6 +15,7 @@ export function registerRoutes(server: MCPServer): void {
   server.use("/api/*", cors());
   registerSellerReleaseRoutes(server);
   registerSellerIdentityRoutes(server);
+  registerHumanAccountRoutes(server);
   registerMarketplaceWebRoutes(server);
   registerMppRoutes(server); // POST|GET /api/pay/:task_id (PAYMENT_MODE=mpp; Computer D)
   // mcp-use start owns /health in production; keep an application-specific path.

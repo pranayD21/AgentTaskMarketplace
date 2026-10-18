@@ -222,6 +222,8 @@ export function dbLabel(): string {
  * anyone remembering to run scripts/db-migrate.sh.
  */
 export const SCHEMA_PATCHES = [
+  "create table if not exists provider_budget (id text primary key, revision integer not null default 0, cap_microusd integer not null default 0, entries jsonb not null default '{}'::jsonb)",
+  "alter table provider_budget enable row level security",
   // Agent credentials and human ownership are server-only. Public projections
   // are served through MCP; no browser receives direct access to this table.
   "alter table agents enable row level security",

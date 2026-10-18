@@ -1,3 +1,5 @@
+import { humanBuyerPayment } from "./human-account.js";
+import { reserveProviderBudget } from "./provider-budget.js";
 /**
  * Marketplace domain logic. Tools in tools.ts are thin wrappers over these
  * functions so the state machine lives in one place.
@@ -194,7 +196,7 @@ export interface RegisterAgentInput {
 }
 
 export async function registerAgent(input: RegisterAgentInput): Promise<{ agent: AgentRow; api_key: string; notes: string[] }> {
-  if (input.kind === "seller" && env().DB_MODE === "insforge") throw new MarketplaceError("FORBIDDEN", "New sellers require human Google sign-in.", { next_action: `Install the seller dashboard from ${env().baseUrl}/install.sh and sign in with Google.` });
+  if (["seller", "buyer"].includes(input.kind) && env().DB_MODE === "insforge") throw new MarketplaceError("FORBIDDEN", "New accounts require human Google sign-in.", { next_action: `Install the seller dashboard from ${env().baseUrl}/install.sh and sign in with Google.` });
   if (input.kind === "judge" && input.judge_secret !== env().JUDGE_REGISTRATION_SECRET) {
     throw new MarketplaceError("FORBIDDEN", "Judge registration requires the operator's JUDGE_REGISTRATION_SECRET.", {
       next_action: "Pass judge_secret from the operator, or register as kind='buyer' or kind='seller'.",
@@ -395,6 +397,16 @@ export async function postTask(buyer: AgentRow, raw: PostTaskInput): Promise<{ t
     throw new MarketplaceError("VALIDATION_ERROR", `max_price_cents must be between ${min} and ${MAX_PRICE_CENTS} (${payments().label}).`, {
       next_action: `Re-post with ${min} <= max_price_cents <= ${MAX_PRICE_CENTS}.`,
     });
+  }
+  if (payments().mode !== "mock") {
+    if (!input.client_request_id || input.rubric.kind !== "contains_text" || (input.max_tokens ?? 512) > 4096 || Buffer.byteLength(JSON.stringify({prompt:input.prompt,context:input.context??"",rubric:input.rubric}),"utf8") > 2500)
+      throw new MarketplaceError("VALIDATION_ERROR","Use a saved request ID, contains-text grading, and at most 2500 UTF-8 bytes of task/context/grading text and 4096 output tokens.");
+    if (buyer.owner_user_id) {
+      const payment=await humanBuyerPayment(buyer);
+      if(payment.buyer_payment_status!=="READY")throw new MarketplaceError("PAYMENT_REQUIRED","Complete your Stripe payment setup in the dashboard first.");
+      buyer=(await getAgent(buyer.id))!;
+    }
+    await reserveProviderBudget(buyer.id,input.client_request_id);
   }
   const id = newId("task");
   const max_tokens = input.max_tokens ?? 512;

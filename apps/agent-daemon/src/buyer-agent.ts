@@ -11,13 +11,13 @@ export interface ChatMessage {
 }
 export interface AgentEvent { type: string; at: string; [key: string]: unknown }
 export async function runBuyerAgent(options: {
-  model: string; ollamaUrl: string; system: string; prompt: string;
+  model: string; ollamaUrl: string; system: string; prompt: string; history?: ChatMessage[];
   tools: AgentTool[]; signal: AbortSignal; deadline: number;
   onEvent(event: AgentEvent): void; isComplete(): boolean;
   fetchImpl?: typeof fetch;
 }) {
   const messages: ChatMessage[] = [
-    { role: "system", content: options.system }, { role: "user", content: options.prompt },
+    { role: "system", content: options.system }, ...(options.history ?? []), { role: "user", content: options.prompt },
   ];
   const emit = (type: string, data: Record<string, unknown>) => options.onEvent({ type, at: new Date().toISOString(), ...data });
   const tools = options.tools.map(({ name, description, parameters }) => ({ type: "function", function: { name, description, parameters } }));

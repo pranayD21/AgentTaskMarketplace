@@ -14,8 +14,19 @@ if(dirty&&!process.argv.includes('--allow-dirty'))throw Error('Commit source bef
 fs.mkdirSync(output,{recursive:true});
 fs.rmSync(staging,{recursive:true,force:true});fs.mkdirSync(staging,{recursive:true});
 const metafiles=[];
+// Embedded bridge imports the buyer client, not its executable entry point. In a
+// bundle import.meta.url points at control.mjs, so its normal CLI guard is unsafe.
+const embeddedBuyer = {name:'embedded-buyer-client',setup(builder){
+ builder.onLoad({filter:/[/\\]scripts[/\\]buyer\.mjs$/},async args=>{
+  const source=fs.readFileSync(args.path,'utf8');
+  const marker='\nif (\n  process.argv[1] &&\n  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)\n) {';
+  const index=source.indexOf(marker);
+  if(index<0)throw Error('Buyer CLI entry changed; review the embedded client boundary.');
+  return {contents:source.slice(0,index),loader:'js',resolveDir:path.dirname(args.path)};
+ });
+}};
 for(const [entry,name] of [['main.ts','daemon.mjs'],['seller-control.ts','control.mjs']]){
- const result=await build({entryPoints:[path.join(root,'apps/agent-daemon/src',entry)],outfile:path.join(staging,name),bundle:true,platform:'node',target:'node22',format:'esm',metafile:true,
+ const result=await build({entryPoints:[path.join(root,'apps/agent-daemon/src',entry)],outfile:path.join(staging,name),bundle:true,platform:'node',target:'node22',format:'esm',metafile:true,plugins:[embeddedBuyer],
   banner:{js:"import { createRequire as __atmCreateRequire } from 'node:module'; const require = __atmCreateRequire(import.meta.url);"}});
  metafiles.push(result.metafile);
 }

@@ -1,3 +1,5 @@
+import { humanBuyerPayment } from "./human-account.js";
+import { providerBudgetStatus } from "./provider-budget.js";
 /**
  * MCP tool surface. Every tool is documented for an agent reader: what it
  * does, who may call it, what to do next. Errors come back as structured
@@ -159,6 +161,8 @@ export function registerTools(server: MCPServer): void {
           kind: a.kind,
           display_name: a.display_name,
           owner: a.owner_user_id ? { user_id: a.owner_user_id, email: a.owner_email } : undefined,
+          buyer_payment: a.kind === "buyer" && a.owner_user_id ? await humanBuyerPayment(a) : undefined,
+          provider_budget: a.kind === "buyer" ? await providerBudgetStatus() : undefined,
           payout: a.kind === "seller" ? await sellerPayoutInfo(a) : undefined,
           inkbox_handle: a.inkbox_handle,
           spend: a.kind === "buyer" ? { cap_cents: a.spend_cap_cents, reserved_cents: a.reserved_cents, spent_cents: a.spent_cents, available_cents: a.spend_cap_cents - a.reserved_cents - a.spent_cents } : undefined,
@@ -166,6 +170,12 @@ export function registerTools(server: MCPServer): void {
         };
       }),
   );
+
+  server.tool({name:"get_buyer_setup",description:"Human buyer: check saved Stripe TEST payment method or open hosted setup.",inputSchema:z.object({...apiKeyField}),annotations:{readOnlyHint:false,destructiveHint:false}},async(p,ctx)=>run(async()=>{
+    const actor=await requireActor(ctx as ToolCtx,p,["buyer"]);
+    if(!actor.owner_user_id)throw new MarketplaceError("FORBIDDEN","Sign in with Google before payment setup.");
+    return humanBuyerPayment(actor,true);
+  }));
 
   server.tool({ name: "get_seller_onboarding", description: "Seller only: get the Stripe Connect payout setup link and current capability status. Payments remain labelled TEST MODE or MOCK.",
     inputSchema: z.object({ ...apiKeyField }), annotations: { readOnlyHint: false, destructiveHint: false } },
