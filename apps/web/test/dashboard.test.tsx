@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Dashboard, dashboardUrl, leaseLabel, stripeLink } from "../src/data";
 import { DashboardView } from "../src/App";
+import { Buyer } from "../src/Buyer";
+
+describe("hosted buyer availability", () => {
+  it("shows the public access notice without local account or submission controls", () => {
+    const html = renderToStaticMarkup(<Buyer hosted />);
+    expect(html).toContain("Task submissions are unavailable on this website");
+    expect(html).toContain("Hosted buyer sign-in is not enabled yet");
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("Use local buyer account");
+    expect(html).not.toContain("Submit for");
+    expect(renderToStaticMarkup(<Buyer />)).toContain("Use local buyer account");
+  });
+});
 
 const stamp = "2026-10-18T02:00:00.000Z";
 const privateMarker = "PRIVATE_DATA_MUST_NOT_RENDER";

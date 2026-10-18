@@ -1,5 +1,11 @@
 # Computer B verification — 2026-10-18 UTC
 
+## Hosted public board preparation
+
+C approved `/marketplace/` in `C-B-20261018T053004Z-01`. `pnpm --filter @atm/web build:hosted` now builds assets for that path and uses the browser's current origin for the public dashboard/MCP API, ignoring local API overrides. It renders an explicit hosted buyer-access notice without connection or submission controls. The local bridge is not registered in hosted development/preview mode; default local mode remains supported. Hosted buyer authentication and spending authorization are still pending the human's access-scope choice.
+
+Validation: `pnpm -r typecheck`, `pnpm test` (237 passed, two optional Wassette skips), `pnpm --filter @atm/web build:hosted` and `git diff --check` passed. A hosted preview at `127.0.0.1:5184/marketplace/` returned both versioned assets with HTTP 200; POSTs to `/api/buyer` and `/marketplace/api/buyer` returned 404, and neither GET exposed a session token. The existing local server still returned its session nonce to a same-origin request. Browser inspection showed the hosted access notice and no local connection control. This standalone preview has no same-origin marketplace API, so live data was unavailable as expected; C must verify live data after publishing the assets. The generated assets passed a credential scan. No purchase, model call, account or budget change was made.
+
 ## Buyer form simplification — 05:16 UTC
 
 At the human's request, the seller runtime selector and review text were removed. New form submissions omit `max_runtime_s`, so the marketplace applies its existing default. The bridge accepts the omitted field and still preserves previously saved drafts for exact-request recovery. Browser inspection confirmed the runtime field is absent while output tokens and listing expiry remain. `pnpm -r typecheck`, `pnpm test` (210 passed, two optional Wassette skips), `pnpm --filter @atm/web build` and `git diff --check` passed. The existing buyer-bridge tests now exercise specifications without a runtime field. No hosted task was posted for this edit.

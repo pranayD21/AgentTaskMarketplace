@@ -14,7 +14,18 @@ type Detail = {task:Task;answer:string|null;replacement_answer:string|null;commi
   settlement:null|{kind:string;finalized_at:string|null;seller_payout_cents:number;buyer_refund_cents:number;payout_transferred_cents:number;transfer_state:string}};
 const terminal = ['APPROVED','REJECTED','CANCELLED','EXPIRED'];
 
-export function Buyer() {
+export function Buyer({hosted = false}:{hosted?:boolean}) {
+  if (hosted) return <section id="buyer" className="panel buyer-panel" aria-labelledby="buyer-title">
+    <div className="section-title"><h2 id="buyer-title"><span>BUY</span>Buyer access</h2><p>Public activity board</p></div>
+    <div className="buyer-body"><h3>Task submissions are unavailable on this website</h3>
+      <p>Browse tasks, seller models and settlement status below. Hosted buyer sign-in is not enabled yet.</p>
+      <p>Existing local buyer workspaces can still submit tasks from their configured computer.</p>
+    </div>
+  </section>;
+  return <LocalBuyer />;
+}
+
+function LocalBuyer() {
   const token = useRef('');
   const pending = useRef(false);
   const [account,setAccount] = useState<Account>();

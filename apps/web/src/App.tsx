@@ -433,7 +433,8 @@ export function DashboardView({
 }
 
 export function App() {
-  const base =
+  const hosted = import.meta.env.MODE === "hosted";
+  const base = hosted ? window.location.origin :
     import.meta.env.VITE_MARKETPLACE_BASE_URL || "http://localhost:3000";
   const { data, market, error, updated, refresh } = useDashboard(base);
   const [now, setNow] = useState(Date.now());
@@ -462,7 +463,7 @@ export function App() {
         </a>
         <div className="nav-label">OBSERVATORY</div>
         <nav aria-label="Dashboard sections">
-          <a href="#buyer">＋ <span>Submit a task</span><span>BUY</span></a>
+          <a href="#buyer">＋ <span>{hosted ? "Buyer access" : "Submit a task"}</span><span>BUY</span></a>
           <a href="#jobs">▤ <span>Buyer jobs</span><span>01</span></a>
           <a href="#tasks">▦ <span>Task board</span><span>02</span></a>
           <a href="#market">↗ <span>Market observations</span><span>03</span></a>
@@ -521,9 +522,9 @@ export function App() {
             Follow tasks from an open listing to a judged result and a settled
             payment.
           </p>
-          <a className="buyer-entry" href="#buyer">Submit a task →</a>
+          <a className="buyer-entry" href="#buyer">{hosted ? "Buyer access" : "Submit a task"} →</a>
         </div>
-        <Buyer />
+        <Buyer hosted={hosted} />
         <div className="toolbar">
           <div className="filters">
             <label>
