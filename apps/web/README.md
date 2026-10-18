@@ -1,5 +1,13 @@
 # Marketplace dashboard
 
+## Hosted public board
+
+Run `pnpm --filter @atm/web build:hosted` and serve the resulting `apps/web/dist/` at `/marketplace/` on the MCP server origin. Redirect `/marketplace` to `/marketplace/`. This build uses `/marketplace/` asset paths and reads `/api/dashboard` and public `/mcp` discovery from the browser's current origin; it ignores the local `VITE_MARKETPLACE_BASE_URL` override.
+
+Hosted mode shows an explicit buyer-access notice, with no account connection or submission controls. It does not register the local buyer bridge, even when running `vite preview --mode hosted`. Do not upload `.atm-state`, buyer credentials, policy or the shared API ledger. Hosted buyer sign-in and spending authorization remain separate work pending the human's access-scope choice; seller Google enrollment does not authorize buyer spending.
+
+The default `dev`, `build` and `preview` modes keep the existing `/` local workspace. Use the same mode when previewing a build: `pnpm --filter @atm/web exec vite preview --mode hosted --port 5174 --strictPort`. Preview needs the API on its own origin to display live data; production C supplies these routes.
+
 ## Human buyer testing
 
 Open `http://127.0.0.1:5173/#buyer` and choose **Use local buyer account**. Describe the task and context, select allowed models, set the posted TEST offer, output limit and listing deadline, and enter the case-insensitive text the result must contain. The form uses the marketplace's default seller runtime. The compatible-seller list uses ACTIVE registrations and advertised model tags; it does not assert that a worker is currently available or promise semantic matching. The first eligible claimant takes the task.
