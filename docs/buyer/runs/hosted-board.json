@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-10-18T05:43:59.949Z",
+  "url": "https://warm-cloud-4hh5i.run.mcp-use.com/marketplace/",
+  "revision": "0a15c4a4a8e1a6752b48c587f2fb2ac8705c0c32",
+  "storage": "Insforge Postgres",
+  "payments": "card",
+  "board_status": 200,
+  "canonical_redirect": 308,
+  "assets": [
+    {
+      "path": "/marketplace/assets/index-1kiTYT-L.js",
+      "status": 200,
+      "sha256": "4d892381f68fa268355ef60352d59858aa056c6ff2c6e7472bf61f03137c819c"
+    },
+    {
+      "path": "/marketplace/assets/index-BJ9HnyYV.css",
+      "status": 200,
+      "sha256": "db37fa1407195c7b411bd94f8d4f164ada91f013bf492c78e03fc77ff5f3b5c2"
+    }
+  ],
+  "public_task_count": 1,
+  "public_seller_count": 4,
+  "private_field_scan": "passed",
+  "hosted_buyer_endpoint_status": 404,
+  "new_purchases": 0,
+  "browser_live_data": false,
+  "browser_blocker": "Dashboard schema rejected the explicit empty-key sentinel for two newly enrolled sellers. HTTP and asset checks passed; live-data display did not."
+}

@@ -1,5 +1,11 @@
 # Computer B verification — 2026-10-18 UTC
 
+## First hosted rollout and runner-setup correction — 05:43 UTC
+
+B independently reached `https://warm-cloud-4hh5i.run.mcp-use.com/marketplace/` on source `0a15c4a`: health, HTML and both assets returned 200, the missing trailing slash redirected with 308, the public API contained no private task fields, and `/api/buyer` returned 404. However, the browser could not display live data. Two newly enrolled sellers had the documented `key_source: none` / empty-public-key sentinel, which the shared key validator rejected. The initial rollout is therefore **not** recorded as a fully working dashboard; see [redacted observation](runs/hosted-board.json).
+
+B's display projection now accepts only that explicit no-key sentinel, strips it to null, and labels the seller “Awaiting runner setup” / “Not registered,” with an empty-model message. Registered and per-claim keys still require valid key descriptors. The corrected parser successfully read the actual hosted response (one task, four sellers, two awaiting runner setup). A regression covers mixed ready/pending sellers, private-field stripping, and malformed advertised-key rejection. Workspace typecheck, 239 tests (two optional Wassette skips), hosted build and `git diff --check` passed. C owns the shared schema correction and deployment; a fresh live-browser check is still required after this fix is published. No hosted task or provider call was created.
+
 ## Hosted public board preparation
 
 C approved `/marketplace/` in `C-B-20261018T053004Z-01`. `pnpm --filter @atm/web build:hosted` now builds assets for that path and uses the browser's current origin for the public dashboard/MCP API, ignoring local API overrides. It renders an explicit hosted buyer-access notice without connection or submission controls. The local bridge is not registered in hosted development/preview mode; default local mode remains supported. Hosted buyer authentication and spending authorization are still pending the human's access-scope choice.

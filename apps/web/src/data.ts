@@ -28,6 +28,17 @@ const eventTypes = [
 
 // Parse a strict projection. Never retain event.meta, free-form verdict reasons,
 // settlement notes, private task fields, ciphertext, or arbitrary API error bodies.
+// Enrollment can precede runner setup. Only the documented no-key sentinel is
+// accepted here; advertised registered/per-claim keys keep normal validation.
+const DashboardSeller = SellerPublic.extend({
+  runner: z.discriminatedUnion("key_source", [
+    SellerPublic.shape.runner.extend({key_source: z.enum(["registered", "per-claim"])}),
+    SellerPublic.shape.runner.extend({
+      key_source: z.literal("none"),
+      public_key: z.object({key_id: z.literal("none"), public_key_b64: z.literal("")}).transform(() => null),
+    }),
+  ]),
+});
 export const Dashboard = z.object({
   generated_at: z.iso.datetime(),
   payments: z.object({ mode: z.enum(["card", "mpp", "mock"]) }),
@@ -45,7 +56,7 @@ export const Dashboard = z.object({
   ),
   tasks: z.array(TaskPublic.omit({ part_label: true })),
   jobs: z.array(JobPublic.omit({ label_public: true })).default([]),
-  sellers: z.array(SellerPublic),
+  sellers: z.array(DashboardSeller),
   verdicts: z.array(
     z.object({
       id: z.string(),
