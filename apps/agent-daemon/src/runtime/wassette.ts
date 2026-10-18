@@ -69,7 +69,7 @@ const JudgeCycleResult = z.union([
 
 const CycleOutput = z.object({
   task_id: z.string(), claim_id: z.string(), result_id: z.string(), runtime_ms: z.number().nonnegative(),
-  tokens_out: z.number().nonnegative().optional(), key_id: z.string(),
+  tokens_out: z.number().nonnegative().optional(), key_id: z.string(), price_cents: z.number().int().positive(),
   seller_usage: z.unknown().transform(safeSellerUsage).optional(),
 });
 

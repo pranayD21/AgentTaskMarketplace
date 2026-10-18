@@ -33,7 +33,7 @@ Expect `passed=true`, `runtime=wassette` and a component hash. This tests a fixe
 Use one process per seller identity. For an existing state file, use its absolute path:
 
 ```sh
-pnpm daemon --role seller --runtime wassette --state-file /ABSOLUTE/PATH/TO/EXISTING/SELLER.json --computer-id D --canary --measurement-file .atm-state/measurements/d-seller.jsonl --ask-cents 75 --poll-ms 5000
+pnpm daemon --role seller --runtime wassette --state-file /ABSOLUTE/PATH/TO/EXISTING/SELLER.json --computer-id D --canary --measurement-file .atm-state/measurements/d-seller.jsonl --poll-ms 5000
 ```
 
 An `AGENT_API_KEY` already in the environment overrides the state file. With that configuration the recorder leaves `seller_id` null because the host has not verified it; provide the authenticated seller ID separately in the handoff. Do not substitute a guessed ID. A new seller can use `--display-name computer-D` if it has no existing identity and the team has authorized registration; retain the resulting state file for future starts.
