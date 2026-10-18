@@ -17,6 +17,11 @@ import {
   type KeyDescriptor,
   type Rubric,
 } from "@atm/shared";
+import { withDeadline } from "./deadline.js";
+
+export { FetchMarketplace, safeFailureCode } from "./marketplace.js";
+export { runCycle, type RunCycleOpts, type RunCycleOutput, type SellerRegistration } from "./seller-cycle.js";
+export { judgeCycle, type JudgeCycleOpts, type JudgeCycleOutput } from "./judge-cycle.js";
 
 export interface RunnerHost {
   fetch: typeof fetch;
@@ -31,12 +36,16 @@ export interface RunTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_public_key: KeyDescriptor;
   timeout_ms?: number;
+  expected_task_id?: string;
+  expected_claim_id?: string;
 }
 
 export interface JudgeTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_model?: string;
   anthropic_url?: string;
+  /** The commitment the seller submitted; checked against the decrypted bytes. */
+  commitment_sha256?: string;
 }
 
 export interface Runner {
@@ -63,6 +72,8 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
     async runTask(sellerEnvelope, opts) {
       const started = host.now();
       const payload = SellerPayload.parse(JSON.parse(fromUtf8(open(keypair(), sellerEnvelope))));
+      if ((opts.expected_task_id && opts.expected_task_id !== payload.task_id) ||
+          (opts.expected_claim_id && opts.expected_claim_id !== payload.claim_id)) throw new Error("PAYLOAD_CLAIM_MISMATCH");
       const answer = await ollamaChat(host, opts, payload);
       const result: ResultPlaintext = {
         answer: answer.text,
@@ -88,6 +99,9 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
       const result = ResultPlaintext.parse(JSON.parse(fromUtf8(resultBytes)));
       // The judge recomputes the commitment over the canonical bytes it decrypted.
       const expected = commitment(result).sha256_hex;
+      if (opts.commitment_sha256 && opts.commitment_sha256 !== expected) {
+        return JudgeTaskOutput.parse({ verdict: "REJECT", reason_code: "COMMITMENT_MISMATCH", reason_public: "Result does not match the commitment the seller submitted." });
+      }
       if (result.task_id !== task.task_id) {
         return JudgeTaskOutput.parse({ verdict: "REJECT", reason_code: "COMMITMENT_MISMATCH", reason_public: "Result was produced for a different task." });
       }
@@ -102,7 +116,7 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
         score: graded.score,
       };
       if (!graded.pass) out.replacement_enc_buyer = await replacement(host, opts, task);
-      return JudgeTaskOutput.parse({ ...out, commitment_checked: expected } as unknown as JudgeTaskOutput);
+      return JudgeTaskOutput.parse(out);
     },
   };
 }
@@ -116,22 +130,27 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     { role: "system", content: "You are a worker model executing a task for another agent. Follow the instruction precisely and answer directly without preamble." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
   ];
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
-  const timer = controller && opts.timeout_ms ? setTimeout(() => controller.abort(), opts.timeout_ms) : undefined;
-  try {
+  const started = host.now();
+  const timeout = opts.timeout_ms ?? 180_000;
+  return withDeadline(async (signal) => {
+    const inventory = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/tags`, { signal, redirect: "error" });
+    if (!inventory.ok) throw new Error(`OLLAMA_HTTP_${inventory.status}`);
+    const installed = await inventory.json() as { models?: { name: string }[] };
+    if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
+    if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
     const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
       method: "POST",
+      redirect: "error",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: opts.model_id, messages, stream: false, think: false, options: { num_predict: payload.max_tokens, temperature: 0.2 } }),
-      signal: controller?.signal,
+      signal,
     });
-    if (!res.ok) throw new Error(`ollama HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    if (!res.ok) throw new Error(`OLLAMA_HTTP_${res.status}`);
     const json = (await res.json()) as { message?: { content?: string }; eval_count?: number };
     const text = (json.message?.content ?? "").trim();
+    if (host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     return { text, tokens_out: json.eval_count };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  }, timeout);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,13 +191,17 @@ async function replacement(host: RunnerHost, opts: JudgeTaskOpts, task: JudgePay
 async function anthropic(host: RunnerHost, opts: JudgeTaskOpts, prompt: string, maxTokens: number): Promise<string> {
   const key = await host.getSecret("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY not available to the judge sandbox");
-  const res = await host.fetch(`${(opts.anthropic_url ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/messages`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: opts.judge_model ?? DEFAULT_JUDGE_MODEL, max_tokens: maxTokens + 4000, output_config: { effort: "low" }, messages: [{ role: "user", content: prompt }] }),
-  });
-  if (!res.ok) throw new Error(`anthropic HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const json = (await res.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] };
-  if (json.stop_reason === "refusal") throw new Error("judge model declined the request (refusal)");
-  return (json.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  return withDeadline(async (signal) => {
+    const res = await host.fetch(`${(opts.anthropic_url ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/messages`, {
+      method: "POST",
+      redirect: "error",
+      signal,
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: opts.judge_model ?? DEFAULT_JUDGE_MODEL, max_tokens: maxTokens + 4000, output_config: { effort: "low" }, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error(`anthropic HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const json = (await res.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] };
+    if (json.stop_reason === "refusal") throw new Error("judge model declined the request (refusal)");
+    return (json.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  }, 90_000, "JUDGE_MODEL_TIMEOUT");
 }

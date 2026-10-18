@@ -12,7 +12,15 @@ world runner {
   /// and returns JSON with result envelopes for buyer + judge plus the sha256 commitment.
   export run-task: func(seller-envelope: string, opts: string) -> result<string, string>;
 
+  /// Claims, decrypts, runs and submits within one instance. Returns IDs and timing only.
+  export run-cycle: func(opts: string) -> result<string, string>;
+
   /// Decrypts the judge copies, verifies the commitment, applies the rubric,
   /// and returns the verdict JSON (optionally with a replacement answer for the buyer).
   export judge-task: func(task-envelope: string, result-envelope: string, opts: string) -> result<string, string>;
+
+  /// One full judge round inside a single instance: fetch_review_package over the
+  /// marketplace grant, decrypt + grade, submit_verdict. opts: {"marketplace_url","judge_model"?}.
+  /// Returns {"idle":true} or the public verdict summary JSON.
+  export judge-cycle: func(opts: string) -> result<string, string>;
 }
