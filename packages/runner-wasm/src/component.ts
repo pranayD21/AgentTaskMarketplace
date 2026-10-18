@@ -6,20 +6,22 @@
 import { restoreRandom } from "./wizer-shim.js";
 import { get } from "wasi:config/store@0.2.0-rc.1";
 import { keypairFromSecretB64 } from "@atm/crypto";
-import { createRunner, type Runner } from "@atm/runner-core";
+import { createRunner, judgeCycle as runJudgeCycle, type Runner, type RunnerHost } from "@atm/runner-core";
+
+const host: RunnerHost = {
+  fetch: (...args) => globalThis.fetch(...args),
+  getSecret: async (name) => {
+    try { return get(name) ?? undefined; } catch { return undefined; }
+  },
+  now: () => Date.now(),
+};
 
 let runner: Runner | undefined;
 function instance(): Runner {
   restoreRandom();
   // Lazy: Wizer snapshots module top-level at build time, so the keypair must
   // be generated on first call, never at import.
-  runner ??= createRunner({
-    fetch: globalThis.fetch.bind(globalThis),
-    getSecret: async (name) => {
-      try { return get(name) ?? undefined; } catch { return undefined; }
-    },
-    now: () => Date.now(),
-  });
+  runner ??= createRunner(host);
   return runner;
 }
 
@@ -46,6 +48,15 @@ export async function judgeTask(taskEnvelope: string, resultEnvelope: string, op
     if (!secret) throw new Error("JUDGE_PRIVATE_KEY_B64 is not available inside the judge sandbox");
     const judgeKey = keypairFromSecretB64(secret);
     return JSON.stringify(await instance().judgeTask(JSON.parse(taskEnvelope), JSON.parse(resultEnvelope), JSON.parse(opts), judgeKey));
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function judgeCycle(opts: string): Promise<string> {
+  try {
+    restoreRandom();
+    return JSON.stringify(await runJudgeCycle(host, JSON.parse(opts)));
   } catch (err) {
     return fail(err);
   }

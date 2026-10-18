@@ -8,6 +8,8 @@ import { NodeRuntime } from "./runtime/node.js";
 import type { Runtime } from "./runtime/types.js";
 
 const { values: args } = parseArgs({
+  // pnpm 10 forwards the literal `--` from `pnpm daemon -- …`; drop it.
+  args: process.argv.slice(2).filter((a) => a !== "--"),
   options: {
     role: { type: "string", default: "seller" },
     runtime: { type: "string", default: process.env.ATM_RUNTIME ?? "wassette" },
@@ -48,13 +50,13 @@ async function ensureAgent(mp: Marketplace): Promise<State> {
   return state;
 }
 
-async function makeRuntime(): Promise<Runtime> {
+async function makeRuntime(agentApiKey: string): Promise<Runtime> {
   if (args.runtime === "wassette") {
     const { WassetteRuntime } = await import("./runtime/wassette.js").catch(() => ({ WassetteRuntime: null }));
-    if (WassetteRuntime) return new WassetteRuntime(role, process.env.JUDGE_PRIVATE_KEY_B64);
+    if (WassetteRuntime) return new WassetteRuntime(role, { judgePrivateKeyB64: process.env.JUDGE_PRIVATE_KEY_B64, agentApiKey, marketplaceUrl: MARKETPLACE_URL });
     log("WARNING: wassette runtime not available yet; falling back to node-unsandboxed");
   }
-  return new NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64);
+  return new NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64, { AGENT_API_KEY: agentApiKey });
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -122,22 +124,18 @@ async function runClaim(mp: Marketplace, rt: Runtime, claim: ClaimPublic) {
 }
 
 // ----------------------------------------------------------------- judge ----
-async function judgeLoop(mp: Marketplace, rt: Runtime) {
-  log(`judging with runtime=${rt.info().runtime} (${rt.info().description})`);
+async function judgeLoop(rt: Runtime) {
+  const info = rt.info();
+  log(`judging with runtime=${info.runtime} (${info.description}); each round is one judge-cycle call: the runner fetches, grades and submits itself`);
   for (;;) {
     try {
-      const { package: pkg } = await mp.call<{ package: null | { task_id: string; result_id: string; payload_enc_judge: Envelope; result_enc_judge: Envelope; commitment_sha256: string; buyer_public_key: KeyDescriptor; model_id: string } }>("fetch_review_package");
-      if (!pkg) { if (args.once) return; await sleep(pollMs); continue; }
-      log(`reviewing ${pkg.task_id} / ${pkg.result_id} (model ${pkg.model_id})`);
-      const verdict = await rt.judgeTask(pkg.payload_enc_judge, pkg.result_enc_judge, { buyer_public_key: pkg.buyer_public_key, judge_model: process.env.JUDGE_MODEL });
-      const res = await mp.call<{ task: { status: string }; settlement: { seller_payout_cents: number; note: string | null }; seller_status: string | null }>("submit_verdict", {
-        task_id: pkg.task_id, result_id: pkg.result_id, verdict: verdict.verdict, reason_code: verdict.reason_code, reason_public: verdict.reason_public,
-        score: verdict.score, replacement_enc_buyer: verdict.replacement_enc_buyer,
-      });
-      log(`${verdict.verdict} ${pkg.task_id}: ${verdict.reason_code} — ${verdict.reason_public} | payout ${res.settlement?.seller_payout_cents}c | seller ${res.seller_status ?? "n/a"} | ${res.settlement?.note ?? ""}`);
+      const out = await rt.judgeCycle({ marketplace_url: MARKETPLACE_URL, judge_model: process.env.JUDGE_MODEL });
+      if (out.idle) { if (args.once) { log("idle: nothing to review"); return; } await sleep(pollMs); continue; }
+      log(`${out.verdict} ${out.task_id} / ${out.result_id}: ${out.reason_code}${out.score !== undefined ? ` (score ${out.score})` : ""} — ${out.reason_public} | payout ${out.seller_payout_cents ?? "?"}c | seller ${out.seller_status ?? "n/a"} | ${out.settlement_note ?? ""}`);
       if (args.once) return;
     } catch (err) {
       log("loop error:", (err as Error).message);
+      if (args.once) return;
       await sleep(pollMs * 2);
     }
   }
@@ -148,7 +146,7 @@ const mp = new Marketplace(MARKETPLACE_URL, undefined);
 log(`marketplace ${MARKETPLACE_URL}`);
 const state = await ensureAgent(mp);
 log(`agent ${state.agent_id} (${state.display_name})`);
-const rt = await makeRuntime();
+const rt = await makeRuntime(state.api_key);
 process.on("SIGINT", async () => { await rt.close(); process.exit(0); });
-if (role === "seller") await sellerLoop(mp, rt); else await judgeLoop(mp, rt);
+if (role === "seller") await sellerLoop(mp, rt); else await judgeLoop(rt);
 await rt.close();

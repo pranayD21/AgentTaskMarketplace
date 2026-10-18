@@ -1,10 +1,12 @@
 version: "1.0"
-description: "ATM judge runner: may reach only the judge model API and read two secrets"
+description: "ATM judge runner: may reach only the marketplace and the judge model API, and read three secrets"
 permissions:
   network:
     allow:
+      - host: "localhost:3000"     # marketplace (the daemon grants the host of MARKETPLACE_URL at runtime)
       - host: "api.anthropic.com"
   environment:
     allow:
+      - key: "AGENT_API_KEY"
       - key: "ANTHROPIC_API_KEY"
       - key: "JUDGE_PRIVATE_KEY_B64"
