@@ -6,7 +6,13 @@
 import { restoreRandom } from "./wizer-shim.js";
 import { get } from "wasi:config/store@0.2.0-rc.1";
 import { keypairFromSecretB64 } from "@atm/crypto";
-import { createRunner, type Runner } from "@atm/runner-core";
+import { createRunner, runCycle as sellerCycle, safeFailureCode, type Runner, type RunnerHost } from "@atm/runner-core";
+
+const host: RunnerHost = {
+  fetch: globalThis.fetch.bind(globalThis),
+  getSecret: async (name) => { try { return get(name) ?? undefined; } catch { return undefined; } },
+  now: () => Date.now(),
+};
 
 let runner: Runner | undefined;
 function instance(): Runner {
@@ -37,6 +43,12 @@ export async function runTask(sellerEnvelope: string, opts: string): Promise<str
   } catch (err) {
     return fail(err);
   }
+}
+
+export async function runCycle(opts: string): Promise<string> {
+  restoreRandom();
+  try { return JSON.stringify(await sellerCycle(host, JSON.parse(opts))); }
+  catch (err) { throw safeFailureCode(err); }
 }
 
 export async function judgeTask(taskEnvelope: string, resultEnvelope: string, opts: string): Promise<string> {

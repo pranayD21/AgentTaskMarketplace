@@ -17,6 +17,10 @@ import {
   type KeyDescriptor,
   type Rubric,
 } from "@atm/shared";
+import { withDeadline } from "./deadline.js";
+
+export { FetchMarketplace, safeFailureCode } from "./marketplace.js";
+export { runCycle, type RunCycleOpts, type RunCycleOutput, type SellerRegistration } from "./seller-cycle.js";
 
 export interface RunnerHost {
   fetch: typeof fetch;
@@ -31,6 +35,8 @@ export interface RunTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_public_key: KeyDescriptor;
   timeout_ms?: number;
+  expected_task_id?: string;
+  expected_claim_id?: string;
 }
 
 export interface JudgeTaskOpts {
@@ -63,6 +69,8 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
     async runTask(sellerEnvelope, opts) {
       const started = host.now();
       const payload = SellerPayload.parse(JSON.parse(fromUtf8(open(keypair(), sellerEnvelope))));
+      if ((opts.expected_task_id && opts.expected_task_id !== payload.task_id) ||
+          (opts.expected_claim_id && opts.expected_claim_id !== payload.claim_id)) throw new Error("PAYLOAD_CLAIM_MISMATCH");
       const answer = await ollamaChat(host, opts, payload);
       const result: ResultPlaintext = {
         answer: answer.text,
@@ -116,22 +124,27 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     { role: "system", content: "You are a worker model executing a task for another agent. Follow the instruction precisely and answer directly without preamble." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
   ];
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
-  const timer = controller && opts.timeout_ms ? setTimeout(() => controller.abort(), opts.timeout_ms) : undefined;
-  try {
+  const started = host.now();
+  const timeout = opts.timeout_ms ?? 180_000;
+  return withDeadline(async (signal) => {
+    const inventory = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/tags`, { signal, redirect: "error" });
+    if (!inventory.ok) throw new Error(`OLLAMA_HTTP_${inventory.status}`);
+    const installed = await inventory.json() as { models?: { name: string }[] };
+    if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
+    if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
     const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
       method: "POST",
+      redirect: "error",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: opts.model_id, messages, stream: false, think: false, options: { num_predict: payload.max_tokens, temperature: 0.2 } }),
-      signal: controller?.signal,
+      signal,
     });
-    if (!res.ok) throw new Error(`ollama HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    if (!res.ok) throw new Error(`OLLAMA_HTTP_${res.status}`);
     const json = (await res.json()) as { message?: { content?: string }; eval_count?: number };
     const text = (json.message?.content ?? "").trim();
+    if (host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     return { text, tokens_out: json.eval_count };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  }, timeout);
 }
 
 // ---------------------------------------------------------------------------

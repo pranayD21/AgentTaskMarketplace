@@ -1,0 +1,69 @@
+# Computer C verification
+
+Verified on October 18, 2026, 01:44–01:55 UTC, with Node 26, Wassette 0.8, local Ollama and qwen3:8b. The live marketplace used the supplied Insforge project and Stripe test mode. The two sellers ran as separate local processes with separate identities. This does not establish connectivity between physical computers.
+
+Final component SHA-256:
+
+```text
+88f3899040f12be10ca3bfc3c6f924407223234cf98b7767aca37623bb320e4f
+```
+
+`pnpm -r typecheck` passed. `pnpm build:runner` compiled the component and printed the hash above. `ATM_TEST_WASSETTE=1 pnpm --filter @atm/crypto --filter @atm/runner-core --filter @atm/agent-daemon test` passed 26 tests: 6 crypto, 13 runner-core and 7 daemon tests. The daemon suite includes a real Wassette process, local fixture HTTP servers, a forced child-process kill and a delayed model response.
+
+The unfiltered `pnpm test` already failed before this work because `apps/marketplace-mcp` runs `vitest run` with no test files. C left that A-owned package unchanged and reported the gate to A.
+
+## Live results
+
+The buyer's `get_result` returned `commitment_verified: true` and an exact match to the synthetic expected answer for all five tasks below. The judge approved each, and `payment.state` became `CAPTURED`. Amounts are Stripe test cents; this is not evidence of a completed real seller transfer.
+
+| Check | Task | Result | Payout recorded |
+| --- | --- | --- | --- |
+| Explicit Node fallback | `task_ef063a0f2999f12e` | `result_694ffa2841c1ff92` | 75c |
+| Single-call Wassette runner | `task_44d1688c561904db` | `result_12214d292860deca` | 75c |
+| Denied host, then restored grant | `task_b4044911fcc627bf` | `result_96d3ea56f4015e49` | 75c |
+| Two live seller processes racing | `task_132de0acf4f6b5be` | `result_30ab643f86a421a8` | 60c |
+| Final component build | `task_e66ebe94dff17966` | `result_b039ca308c8ceea1` | 75c |
+
+The final build ran with:
+
+```sh
+pnpm daemon --role seller --runtime wassette --display-name computer-c-wasm-check --task-id task_e66ebe94dff17966 --once
+```
+
+Relevant output:
+
+```text
+claimed task_e66ebe94dff17966 (claim_13c53aff5715122b); submitted result_b039ca308c8ceea1 in 183ms (2 tokens); key=runner-db15864597c547f9; runtime=wassette
+```
+
+This short, warm-model run demonstrates execution, not a latency benchmark.
+
+## Denial and race
+
+```sh
+MARKETPLACE_URL=http://127.0.0.1:3000/mcp pnpm daemon --role seller --runtime wassette --display-name computer-c-wasm-check --task-id task_b4044911fcc627bf --deny-ollama --once
+```
+
+The process printed the Wassette policy refusal below and exited 1. The buyer then read the task as `OPEN`. Repeating without `--deny-ollama` submitted the result in the table.
+
+```text
+[wassette] HTTP request blocked by network policy (configured origins: http://127.0.0.1:3000)
+```
+
+Two commands started together against the same task:
+
+```sh
+pnpm daemon --role seller --runtime wassette --display-name computer-c-wasm-check --task-id task_132de0acf4f6b5be --once
+pnpm daemon --role seller --runtime wassette --display-name mac-seller-2 --ask-cents 60 --task-id task_132de0acf4f6b5be --once
+```
+
+`mac-seller-2` won `claim_4b2ad1773881538d` and submitted `result_30ab643f86a421a8`. The first seller printed `CLAIM_CONFLICT` and exited 1. Exactly one submitted result was observed.
+
+## Findings and integration notes
+
+- The former `get-public-key` / `run-task` decryption failure is fixed for the seller by `run-cycle`, which retains its key throughout one component invocation.
+- The live server still requires registered keys. The verified compatibility path registers a fresh public key from inside the component before claiming. Per-claim keys and optional registration keys remain A's proposed API change. The daemon detects that future capability from tool schemas; that path passed the local fixture tests.
+- Wassette 0.8's network filter ignores ports. Bare `localhost:port` is also parsed as a URL scheme. Complete origins fix the parsing issue; the documented effective restriction remains scheme plus hostname. The denied-host demo must use different hostnames.
+- The Wasm fetch implementation ignored `AbortSignal` in a delayed-response test. An explicit timer race and elapsed-time check now prevent late model output from being submitted. The forced timeout test confirms task release.
+- A killed Wassette child causes host recovery of the active claim; a subsequent cycle creates a fresh process and succeeds. A result already submitted is not released after an ambiguous transport failure. Failed calls return codes without private text.
+- No shared API/schema, payment implementation or judge algorithm was changed. E can reuse `FetchMarketplace` and the seller's grant setup for `judge-cycle`. The optional model canary was not added.
