@@ -21,7 +21,7 @@ export function registerMarketplaceWebRoutes(server: MCPServer, directory?: stri
       c.header("Cache-Control", "no-cache");
       c.header("X-Content-Type-Options", "nosniff");
       c.header("Referrer-Policy", "no-referrer");
-      c.header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+      c.header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
       return c.html(html);
     } catch { return c.json({ error: "MARKETPLACE_WEB_UNAVAILABLE" }, 503); }
   });
