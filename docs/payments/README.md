@@ -124,6 +124,40 @@ Then the agent, in one conversation:
 
 Spend controls to show on stage: the marketplace cap (`whoami` → `spend.cap_cents / reserved / spent / available`), Link's per-transaction and daily limits (`user-info retrieve`), and the approval on the phone. Record a screen capture; if Link onboarding or verification blocks, demo the simulated path above instead and keep card mode as the default.
 
+### Showcase run (real Link agent wallet, 2026-10-18 02:28–02:35 UTC)
+
+Done on this Mac with the user's own US Link account; all Stripe **test mode**. What was typed and what printed (ids trimmed; no secrets):
+
+```
+$ npx -y @stripe/link-cli@0.28.0 auth login --client-name "Claude Code" --interval 5
+  Open: https://app.link.com/device/setup?code=<four-word phrase>   ← one-time device pairing, approved in the Link app
+  ✓ Successfully authenticated!   (scope: userinfo:read payment_methods.agentic)
+$ link-cli user-info retrieve      → agent_wallet_spend_limits: per_transaction 50000c, daily 500000c, thirty_day 2000000c
+$ link-cli approval-policy retrieve → 403 "This feature is not enabled on your account" (so every spend asks the human)
+
+$ node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max 55
+  task_a67c7ede93b31a01  status=AWAITING_PAYMENT  payment_link=http://localhost:3001/api/pay/task_a67c7ede93b31a01
+
+$ link-cli mpp pay http://localhost:3001/api/pay/task_a67c7ede93b31a01 --method POST --test --context "Buying 55 cents of sandboxed qwen3:8b compute …"
+  Waiting for approval…  Approve in Link app: https://app.link.com/activity/approve/lsrq_1URjqU…   ← the human approves on the phone
+  Error: MPP challenge changed after approval; refusing to use the approved payment credential     ← see fix below
+$ link-cli mpp pay http://localhost:3001/api/pay/task_a67c7ede93b31a01 --spend-request-id lsrq_1URjqU… --method POST --test
+  HTTP 200 {"ok":true,"task_id":"task_a67c7ede93b31a01","status":"OPEN","payment_state":"PAID","amount_cents":55}
+
+Stripe: pi_3URjtc… succeeded, amount 55, livemode false, metadata {machine_payment:"true", mpp_sdk:"mppx/0.13.5", mpp_challenge_id:…, task_id:…},
+        payment method card visa ••4242 (Link test-mode credential), charge ch_3URjtc…
+[seller] claimed task_a67c… price=50c … submitted result_de8a…
+[judge]  APPROVE task_a67c…: RUBRIC_MATCH | payout 50c | MPP payment pi_3URjtc… of 55c kept 50c; refunded 5c to the buyer (re_3URjtc…); transferred 50c to acct_1URiul… (tr_3URjtc…)
+
+# after the challenge-pinning fix, the stock command works in one go (second task):
+$ link-cli mpp pay http://localhost:3001/api/pay/task_7e3eb7acecd29bda --method POST --test --context "…"
+  Approve in Link app: https://app.link.com/activity/approve/lsrq_1URjv7…   → HTTP 200 {"task_id":"task_7e3eb7acecd29bda","status":"OPEN","payment_state":"PAID"}
+```
+
+**Finding → fix.** `link-cli mpp pay` probes the URL, asks the human to approve the challenge it saw, then re-probes and refuses to pay if the challenge differs. It ignores `id` and `expires` in that comparison but not `opaque`, and mppx puts a fresh issuance nonce in `opaque` on every 402. `payTask` now pins each task's challenge: an unauthenticated probe gets the identical `WWW-Authenticate` header back until the challenge expires (5 min; checked with two `curl -i -X POST` calls returning the same `id`), and a request that carries a credential always goes to mppx. The approved spend request can also be reused directly with `--spend-request-id`, which is how the first task was completed.
+
+**What the human saw.** One device-pairing approval (once per machine), then one spend approval per task in the Link app, each showing the merchant, the amount and the `--context` text. With a Link approval policy enabled on the account (`approval-policy retrieve` returned 403 here) spends under the owner's limits can be auto-approved and the agent runs unattended.
+
 ## Card mode — exact commands and what they printed
 
 ```sh
