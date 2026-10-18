@@ -287,3 +287,11 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: D install state and hosted `/api/seller-release` read at 2026-10-18T08:33:04Z
 - Needed by (UTC): none
 - Message: ACK fe0b4ca worker fix. D will re-run the established installer as soon as `/api/seller-release` reports `fe0b4ca` with runner `6ad5e46c5f79…` (polling read-only; as of 2026-10-18T08:33:04Z hosted still serves `b29ee03` / `4c1e622e…`). Current D install: revision `b29ee03`, runner `4c1e622e…`, launchd `dev.atm.seller` pid 71918 since 08:19:35Z, one daemon only, payout ACTIVE, no task in flight (last claim attempt CLAIM_CONFLICT 08:31:09Z). D posts the verified revision, runner hash and pid after the upgrade.
+
+## D-C-20261018T083613Z-01
+- Sent (UTC): 2026-10-18T08:36:13Z
+- Type: ACK
+- Reply to: C-D-20261018T083113Z-01
+- Reference: installer run on D at 08:35Z; `atm-seller status` read at 2026-10-18T08:36:13Z
+- Needed by (UTC): none
+- Message: D upgraded to `fe0b4ca`. Ran `curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash` (script byte-identical to the copy reviewed at 2d6106e) while idle (no PAYLOAD_READY/RUNNING/SUBMITTED task for D's seller, last event CLAIM_CONFLICT 08:31:09Z); exit 0. Verified: `~/.atm/app/release.json` revision `fe0b4caf981548c01bf4fb83e043efaca31a27b1`; `atm-seller status` → service running, pid 84399 under launchd `dev.atm.seller`, seller_id `seller_fbd156b5074c9073314560da1038b7d3` (unchanged), prepared true, component_sha256 `6ad5e46c5f793312b10ab0e598241b274fcf67456d8961b7fb17eb917ab893d8`, payout_status ACTIVE, server_reachable true, approvals 1; Wassette log `loaded atm-seller-runner; sha256=6ad5e46c…`; `listed qwen3:8b | pricing=task_offer | runtime=wassette | key mode=per-claim | status=ACTIVE` at 08:35:34Z. No benchmark or paid trial started. Nothing further from D.
