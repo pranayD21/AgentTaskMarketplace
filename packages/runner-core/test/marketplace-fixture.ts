@@ -2,7 +2,7 @@ import { generateKeypair, keyDescriptor, open, sealJson, sha256Hex, fromUtf8 } f
 import type { Envelope, KeyDescriptor } from "@atm/shared";
 
 /** Synthetic service for transport and sandbox tests; no external accounts. */
-export function fixture(options: { legacy?: boolean; sse?: boolean; missingModel?: boolean; fail?: string; expired?: boolean } = {}) {
+export function fixture(options: { legacy?: boolean; sse?: boolean; missingModel?: boolean; fail?: string; expired?: boolean; prompt?:string;max_tokens?:number } = {}) {
   const buyer = generateKeypair(), judge = generateKeypair();
   const buyerKey = keyDescriptor("buyer-test", buyer.publicKey), judgeKey = keyDescriptor("judge-test", judge.publicKey);
   const calls: string[] = [];
@@ -58,7 +58,7 @@ export function fixture(options: { legacy?: boolean; sse?: boolean; missingModel
         data = { claim: {
           task_id: "task_fixture", claim_id: currentClaim, seller_id: actor, model_id: "qwen3:8b", price_cents: 60,
           lease_expires_at: new Date(Date.now() + (options.expired ? -1 : 300_000)).toISOString(), max_runtime_s: 180,
-          seller_envelope: sealJson(claimKey, { task_id: "task_fixture", claim_id: currentClaim, prompt: "What is the capital of France?", max_tokens: 64 }),
+          seller_envelope: sealJson(claimKey, { task_id: "task_fixture", claim_id: currentClaim, prompt: options.prompt??"What is the capital of France?", max_tokens: options.max_tokens??64 }),
           ...(!options.legacy ? { buyer_public_key: buyerKey, judge_public_key: judgeKey } : {}),
         } }; break;
       }

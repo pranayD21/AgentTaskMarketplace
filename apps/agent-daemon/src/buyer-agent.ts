@@ -7,7 +7,7 @@ export interface AgentTool {
 }
 export interface ToolCall { function: { name: string; arguments: Record<string, unknown> } }
 export interface ChatMessage {
-  role: string; content: string; tool_name?: string; tool_calls?: ToolCall[];
+  role: string; content: string; thinking?:string; tool_name?: string; tool_calls?: ToolCall[];
 }
 export interface AgentEvent { type: string; at: string; [key: string]: unknown }
 export async function runBuyerAgent(options: {
@@ -15,6 +15,9 @@ export async function runBuyerAgent(options: {
   tools: AgentTool[]; signal: AbortSignal; deadline: number;
   onEvent(event: AgentEvent): void; isComplete(): boolean;
   fetchImpl?: typeof fetch;
+  thinking?:boolean;stream?:boolean;
+  onIdle?():Promise<ChatMessage[]|null>;
+  acquireModel?(signal:AbortSignal):Promise<()=>void>;
 }) {
   const messages: ChatMessage[] = [
     { role: "system", content: options.system }, ...(options.history ?? []), { role: "user", content: options.prompt },
@@ -25,20 +28,33 @@ export async function runBuyerAgent(options: {
   for (let turn = 0; turn < 100 && !options.isComplete(); turn++) {
     options.signal.throwIfAborted();
     const started = Date.now();
+    const release=await options.acquireModel?.(options.signal);
+    let data:any;
+    try {
     const response = await fetcher(`${options.ollamaUrl.replace(/\/$/, "")}/api/chat`, {
       method: "POST", redirect: "error", signal: options.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: options.model, messages, tools, stream: false, think: false,
+      body: JSON.stringify({ model: options.model, messages, tools, stream: options.stream??false, think: options.thinking??false,
         options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 4096 } }),
     });
     if (!response.ok) throw new Error(`Local model HTTP ${response.status}`);
-    const data = await response.json() as { message: ChatMessage; prompt_eval_count?: number; eval_count?: number; load_duration?: number };
+    if(response.headers.get('content-type')?.includes('application/x-ndjson')&&response.body){
+      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
+      const message:ChatMessage={role:'assistant',content:'',thinking:'',tool_calls:[]};
+      const take=(line:string)=>{if(!line.trim())return;const chunk=JSON.parse(line);if(chunk.error)throw Error(String(chunk.error));data=chunk;
+        message.content+=chunk.message?.content??'';message.thinking+=chunk.message?.thinking??'';
+        if(chunk.message?.tool_calls)message.tool_calls!.push(...chunk.message.tool_calls);
+        emit('model_delta',{turn,content:message.content,thinking:message.thinking,duration_ms:Date.now()-started});};
+      for(;;){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let n;while((n=buffer.indexOf('\n'))>=0){take(buffer.slice(0,n));buffer=buffer.slice(n+1);}}
+      take(buffer);data={...data,message};
+    }else data=await response.json();
+    } finally {release?.();}
     if (data.message?.role !== "assistant") throw new Error("Missing local assistant response");
     messages.push(data.message);
     emit("model", { turn, duration_ms: Date.now() - started, input_tokens: data.prompt_eval_count ?? null,
       output_tokens: data.eval_count ?? null, load_ms: data.load_duration === undefined ? null : data.load_duration / 1e6, message: data.message });
     const calls = data.message.tool_calls ?? [];
-    if (!calls.length) { emit("stopped", { reason: "model_finished", complete: options.isComplete() }); return; }
+    if (!calls.length) { const updates=await options.onIdle?.();if(updates?.length){messages.push(...updates);continue;}emit("stopped", { reason: "model_finished", complete: options.isComplete() }); return; }
     // Sequential dispatch makes authorization/budget accounting atomic. The posted jobs
     // execute asynchronously on general workers; the model can continue local work.
     for (const call of calls) {

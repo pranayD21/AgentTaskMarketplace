@@ -91,3 +91,12 @@ it.skipIf(!process.env.ATM_TEST_WASSETTE)("keeps inference usage after a failed 
     expect(service.calls).toHaveLength(calls);
   } finally { await runtime.close(); await marketplace.close(); await ollama.close(); }
 }, 90_000);
+
+it.skipIf(!process.env.ATM_TEST_WASSETTE)('executes a seller tool inside real Wassette and resumes model inference',async()=>{
+ const service=fixture();let turns=0;
+ const model:typeof fetch=async(input,init)=>{
+  if(String(input).endsWith('/api/chat')){const body=JSON.parse(String(init?.body));if(turns++===0)return Response.json({message:{role:'assistant',thinking:'Verify arithmetic',content:'',tool_calls:[{function:{name:'calculate',arguments:{operation:'sum',values:[30,50,5]}}}]},eval_count:10});expect(JSON.parse(body.messages.at(-1).content).result).toBe(85);return Response.json({message:{role:'assistant',content:'Paris'},eval_count:2});}return service.fetch(input,init);
+ };
+ const marketplace=await serve(service.fetch),ollama=await serve(model,'localhost');const config={apiKey:'fixture-seller',marketplaceUrl:marketplace.url+'/mcp',ollamaUrl:ollama.url};const runtime=new WassetteRuntime('seller',undefined,config);
+ try{const out=await runtime.runCycle({marketplace_url:config.marketplaceUrl,ollama_url:ollama.url,task_id:'task_fixture',model_id:'qwen3:8b',max_runtime_s:180});expect(turns).toBe(2);expect(out.tokens_out).toBe(12);expect(service.summary().outputVerified).toBe(true);}finally{await runtime.close();await marketplace.close();await ollama.close();}
+},60000);

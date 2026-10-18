@@ -16,6 +16,8 @@ export interface RunCycleOpts {
   task_id: string;
   model_id: string;
   max_runtime_s: number;
+  cpu_threads?: number;
+  context_tokens?: number;
   /** The posted offer observed by the seller. Check before starting inference. */
   expected_price_cents?: number;
   /** Only for servers that still require a registered key. */
@@ -69,7 +71,7 @@ export async function runCycle(host: RunnerHost, opts: RunCycleOpts): Promise<Ru
     const remaining = Date.parse(claim.lease_expires_at) - host.now() - 30_000;
     if (remaining <= 0) throw new MarketplaceError("LEASE_EXPIRED", "LEASE_EXPIRED");
     const out = await runner.runTask(claim.seller_envelope, {
-      ollama_url: opts.ollama_url, model_id: opts.model_id,
+      ollama_url: opts.ollama_url, model_id: opts.model_id,cpu_threads:opts.cpu_threads,context_tokens:opts.context_tokens,
       buyer_public_key: KeyDescriptor.parse(recipients.buyer_public_key),
       judge_public_key: KeyDescriptor.parse(recipients.judge_public_key),
       timeout_ms: Math.min(timeoutMs, remaining), expected_task_id: opts.task_id, expected_claim_id: claim.claim_id,

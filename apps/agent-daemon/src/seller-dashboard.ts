@@ -10,6 +10,8 @@ import { createDashboardChat } from "./dashboard-chat.js";
 // @ts-ignore no declaration file for this workspace module
 import { createBuyerBridge } from "../../web/server/buyer.mjs";
 
+import { computeSettings, readCompute } from "./compute.js";
+
 export const DASHBOARD_PORT = 43118;
 export interface DashboardActions {
   status(): Promise<Record<string, unknown>>;
@@ -88,7 +90,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   const server = http.createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store"); res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("X-Content-Type-Options", "nosniff"); res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src http://localhost:* http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     const json = (status: number, value: unknown) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(value)); };
     if (req.headers.host !== new URL(origin()).host) return json(403, { error: "Invalid local host" });
     const url = new URL(req.url ?? "/", origin());
@@ -178,6 +180,14 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         }
         return json(200, { ...buyerCache.value, machine, worker: cache.value, owner: saved?.owner ?? null, seller_id: saved?.agent_id ?? null,
           allowed_models: release?.allowed_models ?? [], phase, error: lastError, busy, payments_label: "Stripe TEST MODE" });
+      }
+      if(url.pathname==='/api/compute'&&req.method==='GET')return json(200,readCompute(path.join(root,'compute.json')));
+      if(url.pathname==='/api/compute'&&req.method==='POST'){
+        if((await actions.status()).service==='running')return json(409,{error:'Stop selling before changing allocation.'});
+        let body='';for await(const chunk of req){body+=chunk;if(body.length>4096)throw Error('Allocation is too large.');}
+        const settings=computeSettings(JSON.parse(body));
+        if(settings.model){const machine=await machineSnapshot();const release=jsonFile(path.join(root,'app/release.json'));if(!machine.models.some((m:any)=>m.name===settings.model)||!release?.allowed_models?.includes(settings.model))throw Error('Choose an installed supported model.');}
+        writePrivate(path.join(root,'compute.json'),settings);return json(200,settings);
       }
       if (req.method === "POST" && url.pathname === "/api/auth/google") {
         const configResponse = await fetch(new URL("/api/seller-auth-config", options.marketplaceUrl), { signal: AbortSignal.timeout(15000), redirect: "error" });

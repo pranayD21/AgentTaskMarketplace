@@ -1,13 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 :root {
   font-family: "DM Sans", system-ui, sans-serif;
-  color: #242825;
-  background: #f5f4ef;
+  color: #172940;
+  background: #f4f6fa;
   font-synthesis: none;
   font-weight: 400;
-  --muted: #74776f;
-  --line: #dfdfd6;
-  --green: #257356;
+  --muted: #65758a;
+  --line: #dfe5ef;
+  --green: #173c75;
   --red: #a33332;
   --amber: #b76815;
 }
@@ -38,7 +38,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid #c28027;
+  outline: 3px solid #7099e3;
   outline-offset: 4px;
 }
 code,
@@ -186,7 +186,7 @@ main {
   height: 6px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 0 4px #2573560c;
+  box-shadow: 0 0 0 4px #173c750c;
 }
 .connection.offline i {
   background: var(--red);
@@ -967,9 +967,9 @@ footer b {
 .buyer-step > span { color:var(--green); font:12px 'IBM Plex Mono',monospace; }
 .buyer-step h3 { margin:0; }
 .buyer-form label { display:flex; flex-direction:column; gap:8px; font-size:13px; font-weight:500; }
-.buyer-form textarea, .buyer-form input:not([type=checkbox]), .buyer-form select { width:100%; min-width:0; padding:11px 12px; border:1px solid #cacfc6; border-radius:4px; background:#fff; color:#242825; font:14px/1.5 'DM Sans',sans-serif; }
+.buyer-form textarea, .buyer-form input:not([type=checkbox]), .buyer-form select { width:100%; min-width:0; padding:11px 12px; border:1px solid #cacfc6; border-radius:4px; background:#fff; color:#172940; font:14px/1.5 'DM Sans',sans-serif; }
 .buyer-form textarea { resize:vertical; }
-.buyer-form textarea:focus-visible { outline:3px solid #c28027; outline-offset:3px; }
+.buyer-form textarea:focus-visible { outline:3px solid #7099e3; outline-offset:3px; }
 .buyer-fields { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 .buyer-form fieldset { margin:0; padding:14px; border:1px solid var(--line); }
 .buyer-form legend { font-size:13px; padding:0 5px; }

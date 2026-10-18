@@ -60,7 +60,7 @@ export async function modelCanary(host: RunnerHost, opts: CanaryOpts): Promise<C
     prompt: "What is 2 + 2? Reply with the single digit only.", max_tokens: 8,
   });
   const out = await runner.runTask(envelope, {
-    ollama_url: opts.ollama_url, model_id: opts.model_id, buyer_public_key: key, judge_public_key: key, timeout_ms: timeout,
+    ollama_url: opts.ollama_url, model_id: opts.model_id, buyer_public_key: key, judge_public_key: key, timeout_ms: timeout, agent_mode:false,
   });
   const result = JSON.parse(new TextDecoder().decode(open(recipient, out.result_enc_buyer))) as { answer?: unknown };
   return { passed: result.answer === "4", runtime_ms: out.runtime_ms, seller_usage: out.seller_usage ?? null };

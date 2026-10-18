@@ -1,3 +1,4 @@
+import { readCompute } from "./compute.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -242,6 +243,7 @@ try {
     }
     if (role === "seller") await sellerLoop(mp, rt, {
       marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, pollMs,
+      compute: process.env.ATM_STATUS_FILE ? readCompute(path.join(path.dirname(process.env.ATM_STATUS_FILE), "compute.json")) : undefined,
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       registerOnly: args["register-only"],
       beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {
@@ -253,7 +255,7 @@ try {
         let payout: Record<string, unknown> = { payout_status: "UNAVAILABLE", payout_onboarding_url: null };
         try { payout = args["register-only"] ? await mp.call("get_seller_onboarding") : ((await mp.call<any>("whoami")).payout ?? payout); }
         catch { log("Payout status unavailable; existing identity is retained. Use atm-seller status to check again."); }
-        const status = { worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
+        const status = { viewer_url: viewer?.url ?? null, worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
         fs.writeFileSync(process.env.ATM_STATUS_FILE, JSON.stringify(status, null, 2), { mode: 0o600 });
         log(`payout status=${payout.payout_status}; ${payout.payout_label ?? "Stripe TEST mode"}`);
 

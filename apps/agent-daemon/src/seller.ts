@@ -1,3 +1,4 @@
+import type { ComputeSettings } from "./compute.js";
 import { MarketplaceError, isAllowlistedModel, type ClaimPublic, type KeyDescriptor } from "@atm/shared";
 import { safeFailureCode, safeSellerUsage, type SellerUsage, type SellerRegistration } from "@atm/runner-core";
 import { Marketplace } from "./marketplace.js";
@@ -8,6 +9,7 @@ import { requireTaskPricing, selectOfferedTask, type OfferedTask } from "./task-
 
 export interface SellerOptions {
   marketplaceUrl: string; ollamaUrl: string; pollMs: number;
+  compute?: ComputeSettings;
   models?: string[]; once: boolean; taskId?: string;
   log: (...args: unknown[]) => void;
   measurements?: MeasurementRecorder;
@@ -24,8 +26,8 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
   const info = await mp.call<{ models: { model_id: string }[] }>("marketplace_info");
   requireTaskPricing(info);
   const local = await listOllamaModels(opts.ollamaUrl);
-  const wanted = opts.models?.length ? new Set(opts.models) : null;
-  const models = local.filter((m) => isAllowlistedModel(m.model_id) && (!wanted || wanted.has(m.model_id)))
+  const wanted = opts.compute?.model ? new Set([opts.compute.model]) : opts.models?.length ? new Set(opts.models) : null;
+  const models = local.filter((m) => isAllowlistedModel(m.model_id) && (!opts.compute || m.size_gb <= opts.compute.max_model_gb) && (!wanted || wanted.has(m.model_id)))
     .map((m) => ({ model_id: m.model_id, digest: m.digest }));
   if (!models.length) {
     log(`No installed allowlisted models. Local: ${local.map((m) => m.model_id).join(", ") || "none"}. Allowed: ${info.models.map((m) => m.model_id).join(", ")}`);
@@ -78,6 +80,7 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
       if (rt.runCycle) {
         log(`accepting ${taskId} offer=${task.price_cents}c model=${model} runtime=wassette`);
         const out = await rt.runCycle({
+          cpu_threads: opts.compute?.cpu_threads, context_tokens: opts.compute?.context_tokens,
           marketplace_url: opts.marketplaceUrl, ollama_url: opts.ollamaUrl, task_id: taskId, model_id: model, max_runtime_s: task.max_runtime_s, expected_price_cents: task.price_cents,
           ...(keyMode === "registered" ? { legacy_registration: registration } : {}),
         });

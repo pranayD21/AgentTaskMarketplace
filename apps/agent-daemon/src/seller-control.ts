@@ -71,7 +71,7 @@ async function status() {
   let current: any = null;
   if (state) { try { current = await callMarketplace("whoami"); } catch {} }
   const processInfo = serviceInfo();
-  return { service: processInfo.state, pid: processInfo.pid, seller_id: state?.agent_id ?? null,
+  return { viewer_url: processInfo.pid && processInfo.pid === saved.worker_pid ? saved.viewer_url : null, service: processInfo.state, pid: processInfo.pid, seller_id: state?.agent_id ?? null,
     prepared: Boolean(prepared && prepared.seller_id === state?.agent_id && prepared.runner_sha256 === manifest.artifacts["runner.wasm"].sha256),
     marketplace: config().marketplace_url, models: current?.seller?.models ?? saved.models ?? [], approvals: current?.seller?.approvals ?? null,
     runtime: saved.runtime ?? "wassette", component_sha256: saved.wasm_sha256 ?? manifest.artifacts["runner.wasm"].sha256,

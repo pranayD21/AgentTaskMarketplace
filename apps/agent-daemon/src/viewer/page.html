@@ -5,15 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sandbox Live View</title>
 <style>
-:root {
-  --bg: #0b0e14; --panel: #121722; --panel-2: #171d2b; --line: #232b3d; --text: #e6e9f0; --muted: #8a93a8; --faint: #5b6478;
-  --accent: #6ea8ff; --ok: #3ecf8e; --warn: #f5b84b; --bad: #ff6b6b; --busy: #b18cff;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: light) {
-  :root { --bg: #f5f6f9; --panel: #ffffff; --panel-2: #f0f2f7; --line: #dfe3ec; --text: #161a23; --muted: #5d6578; --faint: #9aa2b4;
-    --accent: #2f6fe0; --ok: #12a26a; --warn: #b7791f; --bad: #d64545; --busy: #7c4ddb; }
-}
+:root { --bg:#f4f6fa; --panel:#ffffff; --panel-2:#f5f7fb; --line:#dfe5ef; --text:#172940; --muted:#65758a; --faint:#71839c; --accent:#285ba0; --ok:#285d91; --warn:#986014; --bad:#b54646; --busy:#486fb2; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; display: flex; flex-direction: column; }
@@ -108,6 +100,7 @@ footer { padding: 6px 16px; border-top: 1px solid var(--line); color: var(--fain
   aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 180px; }
   .grid2, .detail-grid { grid-template-columns: 1fr; }
 }
+header{background:#0d2142;color:white;padding:18px 22px}header .chip{color:#d4e1f5;border-color:#416087}aside{background:#edf2fa;padding:16px}.content{padding:24px;gap:20px}section.panel{padding:22px;border-radius:16px;box-shadow:0 3px 16px #17294004}.vm-head .title{font-size:24px;letter-spacing:-.6px}.kv span:last-child{font-size:17px}.out{max-height:620px;padding:18px;line-height:1.65}.msg{padding:14px}.msg pre{line-height:1.6}.stage{padding:16px 12px}.grid2{grid-template-columns:1fr 1.2fr}.reasoning{padding:14px;background:#edf3ff;border-radius:10px;margin-bottom:14px}.reasoning summary{font-weight:600;color:#285ba0;cursor:pointer}.reasoning pre{margin-top:12px}button:focus-visible,summary:focus-visible{outline:3px solid #7099e3;outline-offset:3px}@media(max-width:1000px){main{grid-template-columns:1fr}aside{max-height:170px}.grid2{grid-template-columns:1fr}.content{padding:14px}section.panel{padding:16px}}@media(prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
 <body>
@@ -133,7 +126,7 @@ footer { padding: 6px 16px; border-top: 1px solid var(--line); color: var(--fain
     </div>
   </div>
 </main>
-<footer>Wassette sandbox = WebAssembly isolation under a deny-by-default network policy. It is not a TEE, and model digests are not attestation. Observer tap is a demo aid.</footer>
+<footer>Wassette sandbox = WebAssembly isolation under a deny-by-default network policy. It is not a TEE, and model digests are not attestation. CPU and memory measure the sandbox process; Ollama runs separately on the host.</footer>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -396,8 +389,8 @@ function renderContent() {
       <div class="kv"><span>pid</span><span>${vm.pid ?? "—"}</span></div>
       <div class="kv"><span>uptime</span><span>${fmtDur(up)}</span></div>
       <div class="kv"><span>boot</span><span>${vm.readyAt ? fmtMs(vm.readyAt - vm.startedAt) : "…"}</span></div>
-      <div class="spark"><div class="kv"><span>cpu</span><span>${cpu != null ? cpu.toFixed(0) + "%" : "—"}</span></div>${spark(vm.cpu, 100, "var(--busy)")}</div>
-      <div class="spark"><div class="kv"><span>memory</span><span>${rss != null ? (rss / 1048576).toFixed(0) + " MB" : "—"}</span></div>${spark(vm.rss, 0, "var(--accent)")}</div>
+      <div class="spark"><div class="kv"><span>Sandbox CPU</span><span>${cpu != null ? cpu.toFixed(0) + "%" : "—"}</span></div>${spark(vm.cpu, 100, "var(--busy)")}</div>
+      <div class="spark"><div class="kv"><span>Sandbox memory</span><span>${rss != null ? (rss / 1048576).toFixed(0) + " MB" : "—"}</span></div>${spark(vm.rss, 0, "var(--accent)")}</div>
     </div>
     <div class="policy">network allow-list ${vm.grants.length ? vm.grants.map((g) => `<code>${esc(g)}</code>`).join("") : "<code>none</code>"} &nbsp; env ${vm.env.length ? vm.env.map((g) => `<code>${esc(g)}</code>`).join("") : "<code>none</code>"}${vm.sha ? ` &nbsp; runner.wasm <code title="${esc(vm.sha)}">sha256 ${esc(vm.sha.slice(0, 12))}…</code>` : ""}</div>
     ${vm.runtime === "node-unsandboxed" ? `<div class="policy" style="color:var(--bad)">UNSANDBOXED Node fallback: no Wasm instance, the host can read everything.</div>` : ""}
@@ -425,20 +418,20 @@ ${vm.role === "judge" ? `  <div class="grid2">
 
 ` : `  <div class="grid2">
     <section class="panel">
-      <h2>Prompt sent to the model ${run?.model ? "· " + esc(run.model) : ""}</h2>
-      ${run?.prompt ? run.prompt.map((m) => `<div class="msg"><div class="r">${esc(m.role)}</div><pre>${esc(m.content)}</pre></div>`).join("") :
+      <h2>Conversation & tool results ${run?.model ? "· " + esc(run.model) : ""}</h2>
+      ${run?.prompt ? run.prompt.map((m) => `<div class="msg"><div class="r">${esc(m.role)}</div><pre>${esc(m.content || "")}</pre>${m.tool_calls?.length ? `<pre>${esc(JSON.stringify(m.tool_calls,null,2))}</pre>` : ""}${m.thinking ? `<details class="reasoning"><summary>Model reasoning</summary><pre>${esc(m.thinking)}</pre></details>` : ""}</div>`).join("") :
         `<div class="empty">${vm.role === "judge" ? "The judge grades through api.anthropic.com over TLS; the tap shows the review package and verdict, not the grading prompt." : S.hello?.tap === false ? "Observer tap is off (--viewer-no-tap), so the prompt is not visible." : "Appears when the runner calls Ollama."}</div>`}
     </section>
     <section class="panel">
       <h2>Model output ${isLive && run?.stages.infer?.state === "active" ? "· live" : ""}</h2>
       <div class="meta">
-        <span>tokens ${run?.inferRes?.eval_count ?? run?.tokens ?? 0}</span>
-        ${tokRate ? `<span>${tokRate.toFixed(1)} tok/s</span>` : ""}
+        <span>${run?.inferRes?.eval_count != null ? "tokens " + run.inferRes.eval_count : "stream chunks " + (run?.tokens ?? 0)}</span>
+        ${run?.inferRes?.eval_duration_ms > 0 ? `<span>${(run.inferRes.eval_count / (run.inferRes.eval_duration_ms/1000)).toFixed(1)} tokens/s</span>` : tokRate ? `<span>${tokRate.toFixed(1)} chunks/s · streaming</span>` : ""}
         ${run?.firstAt && run?.inferStart ? `<span>first token ${fmtMs(run.firstAt - run.inferStart)}</span>` : ""}
         ${run?.inferRes?.prompt_eval_count != null ? `<span>prompt tokens ${run.inferRes.prompt_eval_count}</span>` : ""}
         ${run?.inferRes?.load_duration_ms != null ? `<span>model load ${fmtMs(run.inferRes.load_duration_ms)}</span>` : ""}
       </div>
-      <div class="out">${run?.thinking ? `<pre style="color:var(--muted)">${esc(run.thinking)}</pre><hr style="border:0;border-top:1px solid var(--line)">` : ""}<pre>${esc(run?.output || run?.inferRes?.content || "")}${run?.stages.infer?.state === "active" ? '<span class="cursor"></span>' : ""}</pre>${!run?.output && run?.stages.infer?.state !== "active" ? `<div class="empty">${run?.inferRes?.content ? "" : "No output yet."}</div>` : ""}</div>
+      <div class="out">${run?.thinking ? `<details class="reasoning" open><summary>Model reasoning · current turn</summary><pre>${esc(run.thinking)}</pre></details>` : ""}<pre>${esc(run?.output || run?.inferRes?.content || "")}${run?.stages.infer?.state === "active" ? '<span class="cursor"></span>' : ""}</pre>${!run?.output && run?.stages.infer?.state !== "active" ? `<div class="empty">${run?.inferRes?.content ? "" : "No output yet."}</div>` : ""}</div>
     </section>
   </div>
 

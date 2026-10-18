@@ -137,7 +137,7 @@ export class LiveView implements SandboxObserver {
   // ------------------------------------------------------------- internals --
   private handle(req: http.IncomingMessage, res: http.ServerResponse) {
     if(!/^((localhost)|(127\.0\.0\.1)):\d+$/.test(req.headers.host??"")){res.writeHead(403);res.end("Local viewer only");return;}
-    res.setHeader("X-Frame-Options","DENY");
+    res.setHeader("Content-Security-Policy", "frame-ancestors http://127.0.0.1:43118; base-uri 'none'");
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });

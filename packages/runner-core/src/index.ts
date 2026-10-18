@@ -15,6 +15,7 @@ import {
   type Envelope,
   type KeyDescriptor,
 } from "@atm/shared";
+import { workerTools, invokeWorkerTool } from "./worker-agent.js";
 import { withDeadline } from "./deadline.js";
 import { ollamaUsage, type SellerUsage } from "./seller-measurements.js";
 export { measuredCycle, modelCanary, safeSellerUsage, type SellerUsage, type MeasuredCycleOutput, type CanaryOpts, type CanaryOutput } from "./seller-measurements.js";
@@ -40,6 +41,9 @@ export interface RunTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_public_key: KeyDescriptor;
   timeout_ms?: number;
+  cpu_threads?: number;
+  context_tokens?: number;
+  agent_mode?: boolean;
   expected_task_id?: string;
   expected_claim_id?: string;
 }
@@ -102,8 +106,8 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
 // ---------------------------------------------------------------------------
 
 async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPayload): Promise<{ text: string; tokens_out?: number; usage: SellerUsage }> {
-  const messages = [
-    { role: "system", content: "You are a worker model executing a task for another agent. Follow the instruction precisely and answer directly without preamble." },
+  const messages: any[] = [
+    { role: "system", content: "You are a worker model executing a task for another agent. Reason carefully, use available tools when useful, then return the requested deliverable. Tools are limited to calculation, text inspection and a task-local scratchpad. Do not claim file execution or internet access. Follow the instruction precisely." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
   ];
   const started = host.now();
@@ -114,17 +118,29 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     const installed = await inventory.json() as { models?: { name: string }[] };
     if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
-    const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
-      method: "POST",
-      redirect: "error",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: opts.model_id, messages, stream: false, think: false, options: { num_predict: payload.max_tokens, temperature: 0.2 } }),
-      signal,
-    });
-    if (!res.ok) throw new Error(`OLLAMA_HTTP_${res.status}`);
-    const json = (await res.json()) as Record<string, unknown> & { message?: { content?: string }; eval_count?: number };
-    const text = (json.message?.content ?? "").trim();
-    if (host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
-    return { text, tokens_out: json.eval_count, usage: ollamaUsage(json) };
+    const notes=new Map<string,string>();let totalTokens=0;const totalBudget=payload.max_tokens;
+    const totals:Record<string,number>={};
+    for(let turn=0;turn<8;turn++){
+      const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
+        method:"POST",redirect:"error",headers:{"content-type":"application/json"},signal,
+        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&turn<7?workerTools:[],stream:false,
+          think:opts.agent_mode!==false&&/^qwen3([:-]|$)/.test(opts.model_id),options:{num_predict:Math.max(1,totalBudget-totalTokens),temperature:0.2,
+          num_thread:opts.cpu_threads??4,num_ctx:opts.context_tokens??8192}}),
+      });
+      if(!res.ok)throw new Error(`OLLAMA_HTTP_${res.status}`);
+      const json=await res.json() as any;const message=json.message??{};
+      if(host.now()-started>=timeout)throw new Error("TASK_TIMEOUT");
+      for(const key of ['total_duration','load_duration','prompt_eval_duration','eval_duration','prompt_eval_count'])if(typeof json[key]==='number')totals[key]=(totals[key]??0)+json[key];
+      totalTokens+=Number(json.eval_count)||0;messages.push({role:'assistant',...message});
+      const calls=message.tool_calls??[];
+      if(!calls.length){const text=String(message.content??'').trim();if(!text)throw Error('EMPTY_MODEL_OUTPUT');return {text,tokens_out:totalTokens,usage:ollamaUsage({...totals,eval_count:totalTokens})};}
+      if(calls.length>4)throw Error('WORKER_TOOL_LIMIT');
+      for(const call of calls){
+        let result:unknown;try{result=invokeWorkerTool(call.function.name,call.function.arguments,notes);}catch(error){result={error:(error as Error).message};}
+        messages.push({role:'tool',tool_name:call.function.name,content:JSON.stringify(result)});
+      }
+      if(totalTokens>=totalBudget)throw Error('WORKER_TOKEN_LIMIT');
+    }
+    throw Error('WORKER_TOOL_LIMIT');
   }, timeout);
 }
