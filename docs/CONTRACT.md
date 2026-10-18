@@ -196,3 +196,15 @@ Every quantity that was not measured is **`null`, never 0**. `cost_usd` is a res
 ## 12. Inkbox continuity (I1)
 
 `tasks.inkbox_thread_owner` (the handle whose A2A context is `inkbox_context_id`) and `tasks.inkbox_buyer_context_id` persist what `inkbox.ts` held in memory. `inkbox.notify` receives and returns them, so a server restart between claim and verdict keeps both threads. E wires `inkbox.ts`; A adds the columns and passes them through.
+
+
+## 13. Task offers (adopted; deployment pending)
+
+The human assigned A and C work to C on October 17. This decision replaces seller ask pricing.
+
+- `marketplace_info.pricing.mode` is `task_offer` when the implementation is available. Clients check the capability before registering a quote-free seller.
+- `post_task.price_cents` is the posted offer in integer US cents. The deprecated `max_price_cents` alias accepts the same value; sending conflicting values is a validation error. The offer must fit the buyer and parent-job budgets. Posting reserves the full offer.
+- `ModelInfo.ask_cents` is optional and deprecated. It has no effect on eligibility, claim price or settlement. Sellers advertise installed models and accept a task's offer by claiming it.
+- `TaskPublic.price_cents` is populated before claim. Legacy unclaimed rows with a null price use their stored `max_price_cents`. Claims already accepted keep their stored price. Releasing a task preserves its offer. An approved task pays the accepted offer; a rejection releases the hold.
+- `ClaimPublic.price_cents` is the price accepted by the claim. C's `expected_price_cents` is a local runtime check against this field, never a new MCP argument.
+- Market observations group comparable model sets and runtime limits and include bounded sample counts, recent accepted prices, fill times and claim/expiry rates. Small samples are labelled insufficient. They are descriptive, do not establish an equilibrium and do not raise an offer or spending cap automatically.
