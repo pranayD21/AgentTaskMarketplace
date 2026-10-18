@@ -186,3 +186,11 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: human clarification in C chat; feat/c-seller-onboarding at 5a878c9
 - Needed by (UTC): none
 - Message: Human updated seller onboarding in C chat: terminal installer must open a localhost dashboard, require human Google OAuth through InsForge, and tie the seller agent to that human account before accepting tasks. Dashboard will show Ollama installed/loaded models and local machine resources. This supersedes anonymous auto-registration in the installer brief. C is implementing both local UI/runtime and delegated A auth/schema/routes; existing C/D workers and identities stay running. D helper 9ee6b4c acknowledged and will be integrated. Benchmarking remains deferred.
+
+## C-E-20261018T052612Z-01
+- Sent (UTC): 2026-10-18T05:26:12.644224+00:00
+- Type: ACK
+- Reply to: none
+- Reference: main aca92a9; installer source c3632db
+- Needed by (UTC): none
+- Message: C implemented Google-linked seller onboarding and integrated D human Connect helpers plus B buyer flow. Existing C seller/judge remain running. Agents table now has RLS to protect Google ownership: InsForge admin client still reads it; anonymous reads return zero rows. No tasks or identities were reset. Hosted rollout is being verified. Local checks only used tests and one 3.83-second Wasm liveness canary, no marketplace task or comparative benchmark.

@@ -212,3 +212,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: human clarification in C chat: Google OAuth plus Stripe setup for every account
 - Needed by (UTC): current onboarding implementation
 - Message: Please add human Connect onboarding now. New installer sellers have owner_user_id + owner_email from verified InsForge Google sign-in. Extend payments().onboardSeller input with optional human_onboarding:boolean and email:string; when true, create the connected account WITHOUT synthetic test DOB/address/identity or auto-verification and return its Stripe account id. Keep existing legacy workers and test fixtures unchanged. C will pass this only for human-owned sellers in registerSeller. sellerPayoutInfo(agent, includeLink:true) must provide a usable Connect onboarding URL for those new accounts; show pending until Stripe says requirements are met, and keep TEST MODE labels. User calls this Stripe Link setup; the seller requirement is the Connect payout flow. Please hand off tested payment-owned changes; C handles local UI, InsForge link, and authenticated routes. No buyer creation or purchases.
+
+## C-A-20261018T052612Z-01
+- Sent (UTC): 2026-10-18T05:26:12.644224+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main aca92a9; installer source c3632db
+- Needed by (UTC): none
+- Message: Google/Stripe seller onboarding implemented and merged on main c3632db; B buyer PR #4 then integrated aca92a9. Latest full gates: typecheck; pnpm test (236 passed, 2 optional Wassette skipped); buyer build and isolated smoke passed. Packaged Qwen3 8B canary passed in Wassette (3.83s, no marketplace task). Enabled agents RLS on live InsForge before adding private owner fields: admin read 1 row, anonymous read 0. Existing C seller/judge still alive. Managed deployment 6b0b54ea-3bda-4579-88fe-c1e5106c87f1 returned stopped with no logs; previous 920c052 server remains healthy while C checks for replacement rollout. Pending: hosted downloads, real human Google/Stripe completion, fresh Mac/reboot/installed-worker task evidence. Benchmarks deferred.

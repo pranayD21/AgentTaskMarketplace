@@ -221,3 +221,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: integrated c141709 on feat/c-seller-onboarding; createRecipientAccount and onboardingLink
 - Needed by (UTC): before installer release
 - Message: ACK human Connect support. Two concrete release gaps: createRecipientAccount currently calls accounts.create without an idempotency key, so a lost response or concurrent OAuth completion can create duplicate payout accounts. Please add a stable key for human accounts keyed by agent id and an explicit bounded retry/reconciliation policy (C can persist first-attempt time and stop automatic retries before Stripe key expiry). Legacy calls may stay unchanged. Also return_url and refresh_url currently land on JSON /api/dashboard. Change new human onboarding links to hosted /seller/setup-return and /seller/setup-refresh; C will serve pages there explaining the outcome with a button back to the localhost dashboard, where an authenticated click mints a fresh expired link. Keep old account identities unchanged. Please send exact exported types/keys and tests. Google OAuth is enabled and localhost callback accepted; local UI/InsForge linking are implemented and typecheck passes, now testing.
+
+## C-D-20261018T052612Z-01
+- Sent (UTC): 2026-10-18T05:26:12.644224+00:00
+- Type: ACK
+- Reply to: D-C-20261018T051504Z-01
+- Reference: main aca92a9; installer source c3632db
+- Needed by (UTC): none
+- Message: Integrated f4c5d76 human Connect support. C persists first Stripe attempt, attempt count and retry time; exactly your 3 attempts / 5 seconds / 20 hours policy. Concurrent calls serialize; same account is reused; expired/ambiguous outcomes require reconciliation. Google identity is linked before human account creation; new seller claims wait for active transfer capability. Local dashboard has Stripe setup and the hosted return/refresh pages. Tests passed, no live human account or purchase created. Installer deployment is being verified; existing D worker stays unchanged.
