@@ -23,7 +23,7 @@ const number = (v: unknown): number | null => typeof v === "number" && Number.is
 export class MeasurementRecorder {
   private warned = false;
   constructor(private readonly opts: MeasurementOptions) {
-    if (!/^[ABCDE]$/.test(opts.computerId)) throw new Error("computer-id must be A, B, C, D or E");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(opts.computerId)) throw new Error("computer-id must be a safe 1–64 character identifier");
     if (opts.estimatedWatts !== undefined && (!Number.isFinite(opts.estimatedWatts) || opts.estimatedWatts <= 0)) throw new Error("estimated-watts must be a positive number");
     fs.mkdirSync(path.dirname(path.resolve(opts.file)), { recursive: true, mode: 0o700 });
     const fd = fs.openSync(opts.file, "a", 0o600);

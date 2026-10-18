@@ -24,13 +24,14 @@
     ]
   },
   "devDependencies": {
+    "@atm/crypto": "workspace:*",
+    "@atm/runner-core": "workspace:*",
+    "@atm/shared": "workspace:*",
     "@types/node": "^24.6.0",
+    "esbuild": "0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.5",
-    "@atm/crypto": "workspace:*",
-    "@atm/shared": "workspace:*",
-    "@atm/runner-core": "workspace:*"
+    "vitest": "^5.0.5"
   },
   "workspaces": [
     "apps/*",

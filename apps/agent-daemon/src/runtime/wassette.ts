@@ -21,7 +21,7 @@ import { z } from "zod";
 import type { Runtime, RuntimeInfo } from "./types.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(here, "../../../..");
+const REPO_ROOT = process.env.ATM_APP_ROOT ? path.resolve(process.env.ATM_APP_ROOT) : path.resolve(here, "../../../..");
 const WASM_SRC = path.join(REPO_ROOT, "packages/runner-wasm/dist/runner.wasm");
 
 interface Grants { network: string[]; env: string[] }
