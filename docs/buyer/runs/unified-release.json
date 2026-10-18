@@ -1,0 +1,56 @@
+{
+  "checked_at": "2026-10-18T06:35:33.316Z",
+  "source_commit": "ba09f07a5a592a0c191a4d970277b8774eb0a063",
+  "url": "https://warm-cloud-4hh5i.run.mcp-use.com/marketplace/",
+  "board_status": 200,
+  "canonical_redirect": 308,
+  "storage": "Insforge Postgres",
+  "payments": "card",
+  "assets": [
+    {
+      "path": "/marketplace/assets/index-0K79YO0M.js",
+      "status": 200,
+      "sha256": "51f3f4c4335151597e0dd774d9634946fc39560cd3771edd1e31f18c63a76404"
+    },
+    {
+      "path": "/marketplace/assets/index-EAjt5LkM.css",
+      "status": 200,
+      "sha256": "a35f54185df94000b0f4840929c7aaa463e6c3738fc093f9e15ad0f503b84671"
+    }
+  ],
+  "public_task_count": 1,
+  "public_seller_count": 6,
+  "awaiting_runner_setup_count": 4,
+  "private_field_scan": "passed",
+  "hosted_buyer_endpoint_status": 404,
+  "browser": {
+    "verified": true,
+    "live_refresh": true,
+    "task_id": "task_0b688c85f6f5b867",
+    "awaiting_runner_setup_label": true,
+    "insufficient_market_sample_label": true,
+    "confirmed_transfer_label": true,
+    "hosted_submission_unavailable": true
+  },
+  "independent_tests": {
+    "web_typecheck": "passed",
+    "web_tests": 32,
+    "account_dashboard_chat_tests": 7,
+    "human_account_provider_budget_tests": 6
+  },
+  "insforge_budget_read": {
+    "cap_microusd": 5000000,
+    "booked_microusd": 2390,
+    "open_reservations": 0,
+    "legacy_local_policy_enabled": false,
+    "legacy_ledger_unchanged": true,
+    "checked_on": "2026-10-18"
+  },
+  "new_purchases": 0,
+  "external_model_calls": 0,
+  "limitations": [
+    "Human Google and Stripe acceptance on an installed dashboard is not verified by B.",
+    "No new live chat delegation was performed.",
+    "Armature pending-seller and rejected-result fixtures remain unavailable."
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "checked_at": "2026-10-18T11:49:19.332Z",
+  "tested_source_commit": "87667d4e210a1728ac6ccc475624e0078981650a",
+  "deployed_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+  "release_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+  "url": "https://warm-cloud-4hh5i.run.mcp-use.com/marketplace/",
+  "contract": "0.3",
+  "storage": "Insforge Postgres",
+  "payment_mode": "card",
+  "board_http_status": 200,
+  "canonical_redirect_status": 308,
+  "assets": [
+    {
+      "path": "/marketplace/assets/index-CwDb7jzR.js",
+      "status": 200,
+      "sha256": "b14e75b917c153e2cad5282354c56c6cabfeb95f9999804fe51a149589b37207"
+    },
+    {
+      "path": "/marketplace/assets/index-L3noAE9d.css",
+      "status": 200,
+      "sha256": "c5c2025ea97ba3b3ad692373a37b20d6cc37b38dc7cd876d754064a0a0ed1325"
+    }
+  ],
+  "installer_artifacts": [
+    {
+      "name": "seller-bundle.tgz",
+      "status": 200,
+      "size_matches": true,
+      "sha256_matches": true,
+      "sha256": "80e0d5f10ce1337dedd00e10985f7625950a5a45f25560c266fe41cb680a3c0d"
+    },
+    {
+      "name": "runner.wasm",
+      "status": 200,
+      "size_matches": true,
+      "sha256_matches": true,
+      "sha256": "a911fb3952069f3e7c3161187b58b39dc7ba5b632e306721b1f976c7d0a83046"
+    }
+  ],
+  "public_metadata": {
+    "task_window": 40,
+    "total_counts": {
+      "APPROVED": 51,
+      "EXPIRED": 2,
+      "REJECTED": 2
+    },
+    "sellers": 5,
+    "awaiting_runner_setup": 1,
+    "legacy_b_task_visible": false,
+    "private_field_scan": "passed",
+    "unexpected_private_keys": []
+  },
+  "hosted_buyer_endpoint_status": 404,
+  "browser": {
+    "verified": true,
+    "live": true,
+    "awaiting_runner_setup": true,
+    "hosted_submission_unavailable": true,
+    "confirmed_transfer": true,
+    "replacement_delivered": true,
+    "stripe_test_mode": true
+  },
+  "google_ownership_metadata_read": {
+    "tasks_checked": 40,
+    "sellers_checked": 5,
+    "all_task_buyers_google_owned": true,
+    "all_task_sellers_google_owned": true,
+    "all_directory_sellers_google_owned": true,
+    "same_owner_claims_in_visible_window": 0
+  },
+  "provider_budget": {
+    "authenticated_whoami_enforced": false,
+    "reservation_microusd": 0,
+    "remaining_microusd": null,
+    "persisted_ledger_revision": 54,
+    "persisted_cap_microusd": 5000000,
+    "persisted_booked_microusd": 2390,
+    "persisted_open_reservations": 0,
+    "ledger_is_not_current_usage_reconciliation": true,
+    "legacy_local_submissions_enabled": false,
+    "usage_reconciliation": {
+      "status": "incomplete",
+      "source": "E-B-20261018T115500Z-01 on main4bfd615",
+      "e_reported_calls": 1,
+      "e_reported_call": {
+        "at": "2026-10-18T03:23:44Z",
+        "purpose": "grade",
+        "attempt": 1,
+        "model": "claude-opus-5-5",
+        "outcome": "ok",
+        "input_tokens": 139,
+        "output_tokens": 15,
+        "cache_tokens": 0,
+        "cost_usd": null
+      },
+      "e_reports_no_later_judge_runs": true,
+      "trace_independently_read_by_b": false,
+      "production_c_judge_usage": "not received",
+      "booked_into_b_ledger": false,
+      "note": "Attributed historical E report only. It does not reconcile the production judge or establish remaining external API allowance.",
+      "d_report": {
+        "source": "D-B-20261018T115715Z-01",
+        "as_of": "2026-10-18T11:57:15Z",
+        "ledger_entries": 28,
+        "zero_settled_entries": 27,
+        "nonzero_import_microusd": 2390,
+        "post_reset_verdicts": 70,
+        "approved": 68,
+        "rejected": 2,
+        "replacement_envelopes": 2,
+        "judge": "C integration judge",
+        "raw_usage_received": false,
+        "actual_provider_cost_usd": null
+      },
+      "e_reported_post_reset": {
+        "source": "E-D-20261018T120000Z-01",
+        "provider_calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0,
+        "scope": "E judge only; excludes C production judge"
+      }
+    },
+    "operator_change_report": {
+      "source": "D-B-20261018T115715Z-01",
+      "commit": "2d119c552f67ab6b5d1315db907f834f3e6a54ae",
+      "intentional_opt_in_enforcement": true,
+      "source_checked_by_b": true,
+      "deploy_env_allowlist_includes_enforcement_flag": false,
+      "production_configuration_changed_by_b": false
+    }
+  },
+  "independent_tests": {
+    "workspace_typecheck": "passed",
+    "passed": 317,
+    "skipped": 4,
+    "packages": {
+      "dashboard": 17,
+      "web": 33,
+      "crypto": 7,
+      "runner_core": 55,
+      "agent_daemon": 62,
+      "marketplace": 143
+    },
+    "hosted_web_build": "passed"
+  },
+  "new_purchases": 0,
+  "external_model_calls": 0,
+  "limitations": [
+    "No fresh human Google/Stripe signup or live chat submission was performed by B.",
+    "Published latest installer tag and hosted source can differ; no install or worker restart performed.",
+    "Provider allowance is disabled in the deployed account response; persisted ledger totals do not prove current actual API spending.",
+    "Account UI still claims at most four tasks/200 TEST cents although current orchestration removed those ceilings.",
+    "Remaining Armature cases need explicitly allocated owned fixtures and authorization; public rejected tasks are not that evidence.",
+    "Benchmarking remains deferred."
+  ],
+  "installed_account": {
+    "revision": "3f7254a5498b8304fd8c22e1ce59abedd672ce6b",
+    "buyer_identity_matches": true,
+    "google_owned": true,
+    "buyer_payment_status": "READY",
+    "fresh_browser_onboarding_performed": false
+  },
+  "latest_github_release": {
+    "tag": "seller-3f7254a",
+    "published_at": "2026-10-18T11:42:08Z"
+  },
+  "later_claim_review": {
+    "source_commit": "4d2a51e",
+    "readme_claims": {
+      "task_speed_improvement_percent": 30,
+      "inference_cost_reduction_percent": 53
+    },
+    "attribution": "README attributes these to team tests outside checked-in matched runs/ledger",
+    "new_supporting_benchmark_artifacts_in_commit": false,
+    "verified_by_b": false,
+    "benchmark_rerun_performed": false,
+    "production_judge_cost_reconciliation": "still missing",
+    "e_answer": {
+      "source": "E-B-20261018T150500Z-01 on main ffffc9c",
+      "sent_at": "2026-10-18T15:05:00Z",
+      "supporting_evidence_held_by_e": false,
+      "paired_benchmark_run_by_e": false,
+      "scope": "Attributed E report only; no supporting runs or costs supplied, and no conclusion about evidence held elsewhere.",
+      "claims_verified_by_b": false
+    },
+    "documentation_followup": {
+      "checked_at": "2026-10-18T16:31:17.205Z",
+      "source_commit": "6fc2324",
+      "changed_files": [
+        "README.md",
+        "docs/AUTONOMOUS-BENCHMARK.md",
+        "docs/PROGRESS.md",
+        "docs/UNIFIED-WORKSPACE.md",
+        "docs/buyer/LOCAL-AGENT-WORKFLOW.md",
+        "docs/buyer/benchmark-report.md",
+        "docs/payments/COST.md"
+      ],
+      "change": "Introductions now describe the 30% and 53% figures as repeated project benchmark results.",
+      "new_matched_run_or_cost_artifacts_in_commit": false,
+      "bounded_v1_marketplace_arm": "still unrun",
+      "autonomous_comparison": "still deferred",
+      "claims_verified_by_b": false,
+      "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+      "paid_calls_by_this_followup": 0
+    },
+    "official_claim_followup": {
+      "checked_at": "2026-10-18T16:51:17.485Z",
+      "source_commit": "31003e57a72d485d514ded809274669f119c55e0",
+      "claim_document": "docs/CLAIMS.md",
+      "claim_record": "docs/benchmark-claims.jsonl",
+      "record_type": "official_benchmark_claim",
+      "project_asserted_validation": "officially tested",
+      "task_completion_faster_percent": 30.8,
+      "inference_cheaper_percent": 53.2,
+      "raw_run_artifact": false,
+      "new_matched_run_or_cost_artifacts_in_commits": false,
+      "independently_verified_by_b": false,
+      "raw_bounded_run_artifacts_modified": false,
+      "benchmarks_resumed": false,
+      "production_judge_usage_received": false
+    }
+  },
+  "repository_cleanup_followup": {
+    "source_commit": "4cbcb8d",
+    "checked_at": "2026-10-18T16:41:17.212Z",
+    "historical_narratives_removed_upstream": true,
+    "branch_narrative_history_commit": "d25e43fd1a8f8948ca95b6521fba2feb217b0bb4",
+    "branch_narrative_history_path": "docs/buyer/verification.md",
+    "json_receipts_preserved": true,
+    "coordination_paths_restored": false,
+    "verification_log_restored": false,
+    "unverified_claims_adopted": false,
+    "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+    "new_provider_usage_or_owned_fixture_evidence": false,
+    "integration_checks": {
+      "checked_at": "2026-10-18T16:43:23.642901+00:00",
+      "main_source_commit": "4cbcb8dc0dcb94b4b8e5bcd213cd8754571a896b",
+      "commands": [
+        "pnpm -r typecheck",
+        "pnpm test",
+        "pnpm --filter @atm/web build:hosted"
+      ],
+      "workspace_typecheck": "passed",
+      "tests_passed": 317,
+      "tests_skipped": 4,
+      "hosted_web_build": "passed",
+      "external_model_calls": 0,
+      "new_purchases": 0,
+      "hosted_browser_reverified": false
+    }
+  }
+}
