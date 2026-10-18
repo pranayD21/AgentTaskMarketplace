@@ -110,7 +110,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
   const blocks = useMemo(() => {
     const out: Array<TimelineItem | { kind: "tools"; key: string; tools: Extract<TimelineItem, { kind: "tool" }>[] }> = [];
     for (const item of items) {
-      if (item.kind === "task" || item.kind === "note") continue; // status rows are covered by the task block
+      if (item.kind === "task") continue; // status rows are covered by the task block
       const last = out.at(-1);
       if (item.kind === "tool") { if (last?.kind === "tools") last.tools.push(item); else out.push({ kind: "tools", key: item.key, tools: [item] }); }
       else out.push(item);
@@ -151,6 +151,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
             );
           }
           if (item.kind === "results") return <div key={item.key}>{cardGrid}</div>;
+          if (item.kind === "note") return <p key={item.key} className={cn("text-[12.5px]", item.tone === "warning" ? "text-warning" : "text-muted-foreground")}>{item.text}</p>;
           return null;
         })}
         {live && !lastStreaming && <StatusLine state={run.status === "waiting" ? "waiting" : "working"} label={run.status === "waiting" ? "Waiting for network workers" : "Working"} />}

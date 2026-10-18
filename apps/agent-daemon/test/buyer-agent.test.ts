@@ -1,3 +1,4 @@
+import { parseAction } from '../src/buyer-agent.js';
 import { expect, it, vi } from "vitest";
 import { runBuyerAgent, type AgentEvent } from "../src/buyer-agent.js";
 import { BenchmarkPolicy } from "../../../scripts/autonomous-benchmark/policy.js";
@@ -78,4 +79,11 @@ it('repairs malformed actions, invokes a real tool adapter, then returns the exp
  const replies=['not json',JSON.stringify({action:'tool',tool:'delegate',arguments:{prompt:'Specific work'}}),JSON.stringify({action:'final',answer:'Completed using task_observed'})];
  await runBuyerAgent({model:'plain-model',ollamaUrl:'http://fixture',system:'',prompt:'Help',tools:[{name:'delegate',description:'Delegate',parameters:{type:'object',properties:{prompt:{type:'string'}},required:['prompt']},invoke}],structuredActions:true,signal:new AbortController().signal,deadline:Date.now()+10000,isComplete:()=>false,onEvent:e=>events.push(e),fetchImpl:async(_url,init)=>{const body=JSON.parse(String(init?.body));expect(body.tools).toBeUndefined();expect(body.think).toBeUndefined();return Response.json({message:{role:'assistant',content:replies.shift()}});}});
  expect(invoke).toHaveBeenCalledExactlyOnceWith({prompt:'Specific work'},expect.any(AbortSignal));expect(events.some(e=>e.type==='action_error')).toBe(true);expect(events.filter(e=>e.type==='model').at(-1)?.message).toMatchObject({content:'Completed using task_observed'});
+});
+
+it('salvages fenced or prose-wrapped actions and rejects anything else',()=>{
+ expect(parseAction('```json\n{"action":"final","answer":"42"}\n```')).toEqual({action:'final',answer:'42'});
+ expect(parseAction('Sure. {"action":"tool","tool":"delegate_tasks","arguments":{"tasks":[]}} done')).toEqual({action:'tool',tool:'delegate_tasks',arguments:{tasks:[]}});
+ expect(parseAction('I will wait for the workers.')).toBeNull();
+ expect(parseAction('{"action":"nope"}')).toBeNull();
 });
