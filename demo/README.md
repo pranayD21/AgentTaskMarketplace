@@ -89,6 +89,6 @@ Acceptance, from E's evidence output plus C/D/B records: both children `APPROVED
 ## Recording and submission artifacts
 
 - Record the screen and save the video outside Git.
-- Evidence artifacts in the repo: `apps/agent-daemon/evidence/cd-live-20261018-*` and `demo/evidence/job_6487101b45b433f1.*`.
+- Evidence artifacts in the repo: `demo/evidence/job_6487101b45b433f1.*` (two-Mac overlap check; `ATM_DASHBOARD_FILE=demo/evidence/job_6487101b45b433f1.dashboard.json node demo/evidence.mjs task_2e401d3bac3419a5 task_d7e2992aa0951f46` reproduces it offline).
 - Judge usage for the cost ledger: `.atm-state/judge-usage.jsonl` on E's machine (metadata only: model, attempt, outcome, token counts).
 - Judge logs: `.atm-state/evidence/judge-*.log` on E's machine; public evidence: `bash demo/run.sh evidence <task_id>...`.
