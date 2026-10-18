@@ -202,6 +202,16 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
     return { response: json({ error: { code: "INVALID_STATE", message: "Listing deadline passed before payment; post a new task." } }, 410) };
   }
 
+  // Wallets pin the challenge they asked a human to approve and refuse to pay
+  // if a re-probe returns a different one (Stripe Link CLI compares everything
+  // but id/expires, and mppx puts a fresh nonce in `opaque` on every issuance).
+  // So an unauthenticated probe gets the same challenge back until it expires.
+  const hasCredential = /^payment\s/i.test(request.headers.get("authorization") ?? "");
+  if (!hasCredential) {
+    const cached = challengeFor(t.id);
+    if (cached) return { response: cached };
+  }
+
   const result = await provider.handler().charge({
     amount: (t.max_price_cents / 100).toFixed(2),
     description: `Agent Task Marketplace task ${t.id} (max price, TEST MODE)`,
@@ -209,11 +219,13 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
     paymentIntentOptions: { metadata: { task_id: t.id, buyer_id: t.buyer_id } },
   })(request);
 
-  if (result.status === 402) return { response: result.challenge };
+  if (result.status === 402) return { response: rememberChallenge(t.id, result.challenge) };
+  forgetChallenge(t.id);
 
   const receipted = await result.withReceipt(json({ ok: true, task_id: t.id, status: "OPEN", payment_state: MPP_PAID_STATE, amount_cents: t.max_price_cents, label: provider.label }));
   const receipt = Receipt.fromResponse(receipted);
   try {
+    await assertTestMoney(provider.stripe, receipt.reference, t.max_price_cents);
     await markTaskPaid(t, receipt.reference);
   } catch (err) {
     // Money moved but the task could not be opened: give it back rather than strand it.
@@ -231,6 +243,51 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
     } }, 500) };
   }
   return { response: receipted, paid: { task_id: t.id, payment_intent_id: receipt.reference } };
+}
+
+/**
+ * Hard stop: this marketplace never moves real money. The client is built
+ * from an sk_test_ key, so Stripe would already reject a live token, but the
+ * PaymentIntent is checked anyway; anything live or over the task's price
+ * is refunded by the caller.
+ */
+export async function assertTestMoney(stripe: Stripe, paymentIntentId: string, maxCents: number): Promise<void> {
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  if (pi.livemode) throw new MarketplaceError("PAYMENT_FAILED", `PaymentIntent ${pi.id} is LIVE MODE; this marketplace only accepts Stripe test money.`);
+  if (pi.currency !== "usd" || pi.amount > maxCents) {
+    throw new MarketplaceError("PAYMENT_FAILED", `PaymentIntent ${pi.id} is ${pi.amount} ${pi.currency}; expected at most ${maxCents} usd.`);
+  }
+}
+
+// ---------------------------------------------------------------- challenge pinning
+
+interface PinnedChallenge { header: string; body: string; status: number; expiresAt: number }
+const pinned = new Map<string, PinnedChallenge>();
+const PIN_FALLBACK_MS = 4 * 60 * 1000; // mppx challenges default to 5 min
+
+function rememberChallenge(taskId: string, challenge: Response): Response {
+  const header = challenge.headers.get("www-authenticate");
+  if (!header) return challenge;
+  const expires = /expires="([^"]+)"/.exec(header)?.[1];
+  const expiresAt = expires && !Number.isNaN(Date.parse(expires)) ? Date.parse(expires) - 15_000 : Date.now() + PIN_FALLBACK_MS;
+  // Clone so the original body can still be streamed to this caller.
+  const copy = challenge.clone();
+  void copy.text().then((body) => pinned.set(taskId, { header, body, status: challenge.status, expiresAt }));
+  return challenge;
+}
+
+function challengeFor(taskId: string): Response | null {
+  const c = pinned.get(taskId);
+  if (!c) return null;
+  if (c.expiresAt <= Date.now()) {
+    pinned.delete(taskId);
+    return null;
+  }
+  return new Response(c.body, { status: c.status, headers: { "www-authenticate": c.header, "content-type": "application/json" } });
+}
+
+function forgetChallenge(taskId: string): void {
+  pinned.delete(taskId);
 }
 
 /**
