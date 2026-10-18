@@ -210,6 +210,7 @@ export async function buyerSetupLink(stripe: Stripe, customerId: string, baseUrl
   const base = baseUrl.replace(/\/$/, "");
   const session = await stripe.checkout.sessions.create({
     mode: "setup",
+    currency: "usd",
     customer: customerId,
     success_url: `${base}${BUYER_SETUP_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}${BUYER_SETUP_REFRESH_PATH}`,

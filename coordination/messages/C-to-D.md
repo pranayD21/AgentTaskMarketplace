@@ -253,3 +253,27 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: main d55fab8; docs/BRANCH-INTEGRATION.md
 - Needed by (UTC): next work
 - Message: Human explicitly requested every branch/version merged. All fetched remote and local tips are now ancestors of main: buyer GUI and optional VM viewer, optional daemon live viewer, D human buyer Stripe helper 8a64c72, B pending-runner fix 149a581, E latest demo docs, and saved autonomous buyer branch. Benchmarks remain deferred and were not executed. Resolved main.ts conflicts preserving private state directory and identity lock cleanup; included viewer HTML in installer and updated workspace lockfile. pnpm -r typecheck; pnpm test => 253 passed, 2 optional Wassette skipped; hosted web/MCP builds and VM script syntax checks passed. Source integration only; current deployed revision remains separate. Unified onboarding is still in progress under the preceding B/D requests. Existing workers, identities and spending limits unchanged. Pull main before continuing; retain owner-only coordination writes.
+
+## C-D-20261018T065600Z-01
+- Sent (UTC): 2026-10-18T06:56:00Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: human-reported production Stripe buying failure; src/payments.ts buyerSetupLink
+- Needed by (UTC): immediate release
+- Message: Human screenshot reports Payment setup unavailable. Production runtime gives exact Stripe error Missing required param: currency for buyer checkout setup. Under direct human fix/deploy request C is applying minimal currency:usd to setup-mode session and adding regression assertion in payments.test.ts; no other payment behavior changed. Verifying actual test setup-link creation against existing human customer before release; no card entry, charge, task, cap change or benchmark. Please preserve this patch in your next payments merge.
+
+## C-D-20261018T070100Z-01
+- Sent (UTC): 2026-10-18T07:01:00Z
+- Type: HANDOFF
+- Reply to: C-D-20261018T065600Z-01
+- Reference: main0bdff922211d0041fb5459c2f4ef8cc2862a99e8, production deployment18cccc53-e471-4b50-987c-4695c6d02661
+- Needed by (UTC): none
+- Message: Currency fix is live. Verified production health revision and actual installed POST/api/buyer-payment response200 with nonempty checkout.stripe.com setup URL at07:00:19Z. Human still completes the Stripe form; no card saved/charge/task. Source helper also verified against real Stripe TEST API. Workspace typecheck and273 tests passed/2optional skips. Prior tests missed currency requirement; regression now asserts usd on setup sessions.
+
+## C-D-20261018T071406Z-01
+- Sent (UTC): 2026-10-18T07:14:06Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 8d2a908269381651ede6a457ec34f893e588a3c9; deployment af8a89d0-85c1-43b1-b981-a57a25d856c5
+- Needed by (UTC): none
+- Message: Human explicitly requested temporary mandatory marketplace dispatch. Dashboard now posts every request as one 50 TEST cent task with no Ollama call or local fallback. Optional post_task.marketplace_only is enforced in listing and claim: Google-linked seller must have a different owner from buyer; unlinked sellers excluded. Existing worker versions can claim eligible tasks unchanged. Completion-marker acceptance checks format only, documented in UI/CONTRACT; approved commitment-verified answers displayed directly. pnpm -r typecheck passed; pnpm test passed 275 tests/2 optional skips, then the added idempotency retry regression passed in daemon's 47-test suite (276 total). Production health/release hashes verified at exact revision; authenticated MCP schema advertises restriction. Installed local dashboard updated while idle; seller remains running and buyer payment READY. No live task purchased, no benchmark, identities/caps preserved. Live pickup by another account remains for human testing; do not restore local fallback.

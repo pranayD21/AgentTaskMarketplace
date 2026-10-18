@@ -56,3 +56,16 @@ describe("task offers", () => {
     await svc.cancelTask(b, t.task_id);
   });
 });
+
+it('marketplace-only tasks exclude own-account and legacy sellers at listing and claim', async()=>{
+ const b=await agent('buyer'), own=await seller(), legacy=await seller(), other=await seller();
+ for(const [id,owner] of [[b.id,'human-1'],[own.id,'human-1'],[other.id,'human-2']])unwrap(await db().from('agents').update({owner_user_id:owner}).eq('id',id));
+ const ownAgent=(await svc.getAgent(own.id))!, otherAgent=(await svc.getAgent(other.id))!;
+ const task=await post(b,{marketplace_only:true});
+ for(const excluded of [ownAgent,legacy]){
+  expect((await svc.listOpenTasksFor(excluded)).tasks.some(t=>t.task_id===task.task_id)).toBe(false);
+  await expectError(svc.claimTask(excluded,task.task_id,'qwen3:8b',key()),'FORBIDDEN');
+ }
+ expect((await svc.listOpenTasksFor(otherAgent)).tasks.some(t=>t.task_id===task.task_id)).toBe(true);
+ expect((await svc.claimTask(otherAgent,task.task_id,'qwen3:8b',key())).task_id).toBe(task.task_id);
+});

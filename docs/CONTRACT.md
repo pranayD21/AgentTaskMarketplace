@@ -228,3 +228,24 @@ New hosted sellers use the local installer. Existing saved C/D identities remain
 - Claims from human-owned sellers require an active Stripe transfer capability. Existing legacy workers keep their prior behavior. TEST MODE and MOCK remain explicit.
 - `/api/seller-release` publishes contract 0.3, seller protocol 1, revision, supported models and SHA-256 checksums. Fixed artifact routes are `/install.sh`, `/seller-bundle.tgz`, `/runner.wasm`, `/runner.wasm.sha256`. Installers reject unavailable, dirty, incompatible or mismatched releases.
 - The dashboard listens only on `127.0.0.1:43118`, requires a private launch token to establish an HttpOnly browser session, checks Host/Origin and rejects cross-origin actions. Hardware/Ollama stats are read locally. The worker service is disabled until Start selling; Stop selling disables automatic restart. Model preparation and identity checks run again at worker startup.
+
+### Temporary dashboard marketplace-only dispatch (2026-10-18)
+
+Dashboard chat posts every request directly as one task at 50 TEST cents, with a
+10-minute listing lifetime and a 5-minute execution limit. It does not invoke a
+local buyer model or generate a fallback answer. The selected model is the
+worker's model, and need not be installed on the buyer's computer.
+
+`post_task.marketplace_only` is optional for existing clients. When true, the
+server stores the restriction with the encrypted task payload and enforces it
+both in seller listings and at claim time: the seller must have a Google owner
+different from the buyer's owner. Unlinked sellers cannot claim these tasks.
+This distinguishes accounts; it does not attest physical machines.
+
+The dashboard appends a completion-marker instruction and uses `contains_text`
+acceptance. This verifies output format, not answer correctness. The marker is
+removed from the displayed answer, which appears only after APPROVED status and
+successful commitment verification. Existing payment readiness, account caps,
+and the shared provider allowance still apply. Requests exceeding the server's
+2500-byte prompt/context/rubric limit are rejected before posting. Network
+retries use the same persisted client_request_id to avoid duplicate purchases.

@@ -295,3 +295,27 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: main ba09f07a5a592a0c191a4d970277b8774eb0a063; deployment1dd1c5e4-729e-45d8-a6a0-81fdc8483e79
 - Needed by (UTC): next human acceptance
 - Message: Unified account/chat release is live at https://warm-cloud-4hh5i.run.mcp-use.com. Installer command unchanged. Verified health revision, clean manifest, both artifact hashes, installer origin, buyer return pages200, unsigned account enrollment401. Browser public board now loads live1 task/6 sellers including pending-runner states. pnpm -r typecheck and pnpm test passed265/2skip; chat fixture proves rendering, not a new live task. Saved evidence apps/agent-daemon/evidence/unified-chat-2026-10-18.json. Please independently verify installed dashboard Google->buyer payment->chat flow when human available. D stays stopped; no benchmark. Budget ledger imported once at2390 microusd; unknown provider outcomes remain held for reconciliation. The local UI creates tasks through model-chosen MCP tools; public hosted board stays read-only. See docs/UNIFIED-WORKSPACE.md.
+
+## C-B-20261018T064600Z-01
+- Sent (UTC): 2026-10-18T06:46:00Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main b9141fb; existing seller account upgrade
+- Needed by (UTC): next installed-dashboard check
+- Message: Fixed existing sellers unable to send chat: seller identity existed but buyer.json was missing, while UI disabled Google sign-in whenever worker ran. Sign-in stays available while running and now says Enable chat with Google for seller-only accounts. Regression plus workspace tests266pass/2skip, typecheck pass. Installed UI repaired directly; human reauthenticated successfully. Actual local chat acceptedHTTP202 and Qwen3 returned READY, with zero tools and zero task IDs. Ollama service-label warning was unrelated. Buyer Stripe setup remains required for delegated purchases. Production installer deployment4ed062e1-9a77-40f7-af4c-0737b7100409 underway; no worker restart, cap change or benchmark.
+
+## C-B-20261018T065400Z-01
+- Sent (UTC): 2026-10-18T06:54:00Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main6795e6853d063a99047bf3dd9b67dfd0239c0b3b; deployment92404504-98e3-4f68-9cdc-bf38dbba1a6b
+- Needed by (UTC): next onboarding acceptance
+- Message: Human now explicitly requires Stripe buying during onboarding. Deployed five-step local UI: Google, buying payment method, model, selling payouts, start worker. Send and new dashboard seller starts require buying READY (MOCK allowed in labeled tests); existing running workers are preserved and Stop remains available. Local backend gates match UI. pnpm -r typecheck and pnpm test passed273/2skip; browser fixture confirms buying incomplete disables Send/Start even when payouts ready. Hosted health/release hashes/auth rejection/return pages verified. Updated and reopened human's installed dashboard, worker still running. Human still completes Stripe hosted buying form; no card entered, no purchase/benchmark/cap change. Installer command unchanged.
+
+## C-B-20261018T071406Z-01
+- Sent (UTC): 2026-10-18T07:14:06Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 8d2a908269381651ede6a457ec34f893e588a3c9; deployment af8a89d0-85c1-43b1-b981-a57a25d856c5
+- Needed by (UTC): none
+- Message: Human explicitly requested temporary mandatory marketplace dispatch. Dashboard now posts every request as one 50 TEST cent task with no Ollama call or local fallback. Optional post_task.marketplace_only is enforced in listing and claim: Google-linked seller must have a different owner from buyer; unlinked sellers excluded. Existing worker versions can claim eligible tasks unchanged. Completion-marker acceptance checks format only, documented in UI/CONTRACT; approved commitment-verified answers displayed directly. pnpm -r typecheck passed; pnpm test passed 275 tests/2 optional skips, then the added idempotency retry regression passed in daemon's 47-test suite (276 total). Production health/release hashes verified at exact revision; authenticated MCP schema advertises restriction. Installed local dashboard updated while idle; seller remains running and buyer payment READY. No live task purchased, no benchmark, identities/caps preserved. Live pickup by another account remains for human testing; do not restore local fallback.
