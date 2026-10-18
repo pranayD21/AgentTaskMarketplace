@@ -76,6 +76,25 @@ async function makeRuntime(apiKey: string): Promise<Runtime> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ----------------------------------------------------------------- judge ----
+type UsageRow = { purpose: string; attempt: number; model: string; outcome: string; input_tokens: number | null; output_tokens: number | null; cache_creation_input_tokens: number | null; cache_read_input_tokens: number | null; duration_ms: number };
+const USAGE_LEDGER = path.join(STATE_DIR, "judge-usage.jsonl");
+
+/** B1: one metadata line per model call (no prompt, answer or key material) for D's cost ledger. */
+function recordJudgeUsage(task_id: string, result_id: string, usage: UsageRow[]) {
+  if (!usage.length) return;
+  const at = new Date().toISOString();
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+    fs.appendFileSync(USAGE_LEDGER, usage.map((u) => JSON.stringify({ at, task_id, result_id, ...u })).join("\n") + "\n", { mode: 0o600 });
+  } catch (err) { log(`usage ledger write failed: ${safeFailureCode(err)}`); }
+}
+
+function usageSummary(usage: UsageRow[]): string {
+  if (!usage.length) return "model calls 0";
+  const sum = (k: "input_tokens" | "output_tokens") => (usage.some((u) => u[k] === null) ? "unknown" : String(usage.reduce((n, u) => n + (u[k] ?? 0), 0)));
+  return `model calls ${usage.length} (${usage.filter((u) => u.outcome !== "ok").length} failed), tokens in ${sum("input_tokens")} out ${sum("output_tokens")}`;
+}
+
 async function judgeLoop(rt: Runtime) {
   const info = rt.info();
   log(`judging with runtime=${info.runtime} (${info.description}); each round is one judge-cycle call that fetches, grades and submits inside the runner`);
@@ -83,7 +102,12 @@ async function judgeLoop(rt: Runtime) {
     try {
       const out = await rt.judgeCycle({ marketplace_url: MARKETPLACE_URL, judge_model: process.env.JUDGE_MODEL });
       if (out.idle) { if (args.once) { log("idle: nothing to review"); return; } await sleep(pollMs); continue; }
-      log(`${out.verdict} ${out.task_id} / ${out.result_id}: ${out.reason_code}${out.score !== undefined ? ` (score ${out.score})` : ""} — ${out.reason_public} | payout ${out.seller_payout_cents ?? "?"}c | seller ${out.seller_status ?? "n/a"} | ${out.settlement_note ?? ""}`);
+      recordJudgeUsage(out.task_id, out.result_id, out.usage);
+      if (out.deferred) {
+        log(`DEFERRED ${out.task_id} / ${out.result_id}: ${out.failure_code} — judge infrastructure failure; no verdict submitted, seller not penalised, task returns to review after the server's JUDGING timeout | ${usageSummary(out.usage)}`);
+      } else {
+        log(`${out.verdict} ${out.task_id} / ${out.result_id}: ${out.reason_code}${out.score !== undefined ? ` (score ${out.score})` : ""} — ${out.reason_public} | replacement ${out.replacement_status}${out.replacement_failure_code ? ` (${out.replacement_failure_code})` : ""} | payout ${out.seller_payout_cents ?? "?"}c | seller ${out.seller_status ?? "n/a"} | ${usageSummary(out.usage)}`);
+      }
       if (args.once) return;
     } catch (err) {
       log(`judge-cycle failed: ${safeFailureCode(err)}`);
