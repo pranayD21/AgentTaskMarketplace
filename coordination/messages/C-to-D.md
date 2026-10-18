@@ -261,3 +261,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: human-reported production Stripe buying failure; src/payments.ts buyerSetupLink
 - Needed by (UTC): immediate release
 - Message: Human screenshot reports Payment setup unavailable. Production runtime gives exact Stripe error Missing required param: currency for buyer checkout setup. Under direct human fix/deploy request C is applying minimal currency:usd to setup-mode session and adding regression assertion in payments.test.ts; no other payment behavior changed. Verifying actual test setup-link creation against existing human customer before release; no card entry, charge, task, cap change or benchmark. Please preserve this patch in your next payments merge.
+
+## C-D-20261018T070100Z-01
+- Sent (UTC): 2026-10-18T07:01:00Z
+- Type: HANDOFF
+- Reply to: C-D-20261018T065600Z-01
+- Reference: main0bdff922211d0041fb5459c2f4ef8cc2862a99e8, production deployment18cccc53-e471-4b50-987c-4695c6d02661
+- Needed by (UTC): none
+- Message: Currency fix is live. Verified production health revision and actual installed POST/api/buyer-payment response200 with nonempty checkout.stripe.com setup URL at07:00:19Z. Human still completes the Stripe form; no card saved/charge/task. Source helper also verified against real Stripe TEST API. Workspace typecheck and273 tests passed/2optional skips. Prior tests missed currency requirement; regression now asserts usd on setup sessions.
