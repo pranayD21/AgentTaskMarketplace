@@ -240,6 +240,9 @@ export const SCHEMA_PATCHES = [
   "alter table tasks add column if not exists attempt integer",
   "alter table tasks add column if not exists client_request_id text",
   "create index if not exists tasks_job_idx on tasks(job_id)",
+  "create unique index if not exists tasks_job_part_attempt_uniq on tasks(job_id, part_key, attempt)",
+  "create unique index if not exists tasks_buyer_request_uniq on tasks(buyer_id, client_request_id)",
+  "create unique index if not exists jobs_buyer_key_uniq on jobs(buyer_id, client_job_key)",
   // v0.3 §12
   "alter table tasks add column if not exists inkbox_thread_owner text",
   "alter table tasks add column if not exists inkbox_buyer_context_id text",

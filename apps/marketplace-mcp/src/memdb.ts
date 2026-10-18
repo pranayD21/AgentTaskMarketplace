@@ -24,6 +24,8 @@ interface Column {
 interface Table {
   name: string;
   columns: Map<string, Column>;
+  /** Multi-column unique indexes; like Postgres, a row with any NULL in them never conflicts. */
+  uniques: string[][];
   rows: Row[];
   seq: number;
 }
@@ -78,12 +80,15 @@ export function parseSchema(sql: string): Map<string, Table> {
   const clean = sql.replace(/--[^\n]*/g, "");
   const tables = new Map<string, Table>();
   for (const m of clean.matchAll(/create table if not exists (\w+)\s*\(([\s\S]*?)\n\);/gi)) {
-    const table: Table = { name: m[1]!, columns: new Map(), rows: [], seq: 0 };
+    const table: Table = { name: m[1]!, columns: new Map(), uniques: [], rows: [], seq: 0 };
     for (const part of splitTopLevel(m[2]!)) {
       const col = parseColumn(part);
       if (col) table.columns.set(col.name, col);
     }
     tables.set(table.name, table);
+  }
+  for (const m of clean.matchAll(/create unique index if not exists \w+ on (\w+)\s*\(([^)]+)\);/gi)) {
+    tables.get(m[1]!)?.uniques.push(m[2]!.split(",").map((c) => c.trim()));
   }
   for (const m of clean.matchAll(/alter table (\w+) add column if not exists ([^;]+);/gi)) {
     const table = tables.get(m[1]!);
@@ -186,6 +191,12 @@ class Query implements PromiseLike<DbResult> {
   }
 
   private checkRow(row: Row, ignore?: Row): void {
+    for (const cols of this.table.uniques) {
+      if (cols.some((c) => row[c] == null)) continue;
+      if (this.table.rows.some((r) => r !== ignore && cols.every((c) => r[c] === row[c]))) {
+        this.fail("23505", `duplicate key value violates unique constraint on "${this.table.name}(${cols.join(", ")})"`);
+      }
+    }
     for (const col of this.table.columns.values()) {
       if (col.notNull && row[col.name] == null) this.fail("23502", `null value in column "${col.name}" of relation "${this.table.name}" violates not-null constraint`);
       if (col.unique && row[col.name] != null && this.table.rows.some((r) => r !== ignore && r[col.name] === row[col.name])) {
