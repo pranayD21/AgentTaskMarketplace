@@ -74,6 +74,7 @@ async function status() {
   return { viewer_url: processInfo.pid && processInfo.pid === saved.worker_pid ? saved.viewer_url : null, service: processInfo.state, pid: processInfo.pid, seller_id: state?.agent_id ?? null,
     prepared: Boolean(prepared && prepared.seller_id === state?.agent_id && prepared.runner_sha256 === manifest.artifacts["runner.wasm"].sha256),
     marketplace: config().marketplace_url, models: current?.seller?.models ?? saved.models ?? [], approvals: current?.seller?.approvals ?? null,
+    seller_status: current?.seller?.status ?? null, strikes: current?.seller?.strikes ?? null, stopped_reason: saved.stopped_reason ?? null,
     runtime: saved.runtime ?? "wassette", component_sha256: saved.wasm_sha256 ?? manifest.artifacts["runner.wasm"].sha256,
     payout_status: current?.payout?.payout_status ?? "UNAVAILABLE", payout_label: current?.payout?.payout_label,
     server_reachable: Boolean(current) };

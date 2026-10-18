@@ -16,6 +16,9 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
   const machine = status?.machine;
   const worker = status?.worker ?? {};
   const running = setup.selling;
+  const suspended = worker.seller_status === "SUSPENDED";
+  // Why the worker cannot take tasks right now, if the service is on but idle for a known reason.
+  const blocked = suspended ? "SELLER_SUSPENDED" : running && worker.stopped_reason ? worker.stopped_reason : undefined;
   const toggle = () => act(() => (running ? api.stop() : api.start()));
   const live = useLiveView(running);
 
@@ -46,10 +49,11 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-semibold tracking-[-0.01em]">Seller mode</h2>
-                <Badge tone={running ? "success" : "muted"} dot={running}>{running ? "Watching for tasks" : "Stopped"}</Badge>
+                <Badge tone={suspended ? "danger" : running ? "success" : "muted"} dot={running && !suspended}>{suspended ? "Suspended" : running ? "Watching for tasks" : "Stopped"}</Badge>
               </div>
               <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                {running ? "Your agent claims eligible work and runs it locally. It resumes after login." : setup.canStartSelling ? "Activate to accept network work. Nothing else to configure." : "Finish the seller checklist to activate."}
+                {suspended ? `The marketplace suspended this seller after a rejected result${worker.strikes ? ` (${worker.strikes} strike${worker.strikes === 1 ? "" : "s"})` : ""}. The operator must lift it; your worker retries on its own.`
+                  : running ? "Your agent claims eligible work and runs it locally. It resumes after login." : setup.canStartSelling ? "Activate to accept network work. Nothing else to configure." : "Finish the seller checklist to activate."}
               </p>
             </div>
             <Button size="lg" variant={running ? "secondary" : "default"} disabled={busy || setup.busy || (!running && !setup.canStartSelling)} loading={busy} onClick={() => void toggle()}>
@@ -73,7 +77,7 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
         </Card>
 
         <Card className="mt-4 overflow-hidden">
-          <LiveWorkspace model={live.model} connection={live.connection} running={running} />
+          <LiveWorkspace model={live.model} connection={live.connection} running={running} blocked={blocked} />
         </Card>
 
         <p className="mt-6 text-center text-[11.5px] text-muted-foreground">Only this computer can open this dashboard · Prompts and output are visible here because the sandbox is observed on this machine · Model identity is self-reported, not attested.</p>

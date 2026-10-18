@@ -21,7 +21,8 @@ export interface SellerOptions {
 }
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptions) {
+/** Resolves with why the loop ended: a run of `once`, registration only, or a suspension the operator must lift. */
+export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptions): Promise<"DONE" | "SELLER_SUSPENDED"> {
   const { log } = opts;
   const info = await mp.call<{ models: { model_id: string }[] }>("marketplace_info");
   requireTaskPricing(info);
@@ -55,8 +56,8 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
   });
   log(`listed ${models.map((m) => m.model_id).join(", ")} | pricing=task_offer | runtime=${runtime.runtime} | key mode=${keyMode} | status=${reg.seller.status}`);
   await opts.onRegistered?.(models);
-  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); if (opts.registerOnly) throw new Error("SELLER_SUSPENDED"); return; }
-  if (opts.registerOnly) return;
+  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); if (opts.registerOnly) throw new Error("SELLER_SUSPENDED"); return "SELLER_SUSPENDED"; }
+  if (opts.registerOnly) return "DONE";
   if (rt.runCycle) log("Single sandbox call per task; inference capped at 180s within the 300s lease; no host lease renewal.");
   let payoutReady = false;
   let nextPayoutPoll = Date.now() + 60000;
@@ -72,7 +73,7 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
       }
       const { tasks } = await mp.call<{ tasks: OfferedTask[] }>("list_open_tasks");
       const task = selectOfferedTask(tasks, models.map((m) => m.model_id), opts.taskId);
-      if (!task) { if (opts.once) { log("No eligible open tasks"); return; } await sleep(opts.pollMs); continue; }
+      if (!task) { if (opts.once) { log("No eligible open tasks"); return "DONE"; } await sleep(opts.pollMs); continue; }
       await opts.beforeClaim?.();
       taskId = task.task_id;
       const model = task.eligible_models.find((id) => models.some((m) => m.model_id === id))!;
@@ -96,12 +97,12 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
         const out = await runNodeClaim(mp, rt, claim, opts, (value) => { usage = value; });
         finish?.({ status: "submitted", ...out, claim_id: claim.claim_id });
       }
-      if (opts.once) return;
+      if (opts.once) return "DONE";
     } catch (error) {
       const code = safeFailureCode(error);
       finish?.({ status: "failed", error_code: code, seller_usage: safeSellerUsage((error as { seller_usage?: unknown })?.seller_usage) ?? usage });
       log(`seller: ${code}`);
-      if (code === "SELLER_SUSPENDED") return;
+      if (code === "SELLER_SUSPENDED") return "SELLER_SUSPENDED";
       // runCycle closes a crashed process first. Recover an active claim using metadata only.
       if (taskId && code !== "CLAIM_CONFLICT") await recoverClaim(mp, taskId, log);
       if (opts.once) throw new Error(code);

@@ -12,6 +12,8 @@ export interface Worker {
   service?: string; pid?: number | null; seller_id?: string | null; prepared?: boolean; marketplace?: string;
   models?: string[]; approvals?: number | null; runtime?: string; component_sha256?: string;
   payout_status?: string; payout_label?: string; server_reachable?: boolean; viewer_url?: string | null;
+  /** Marketplace-side state of this seller (ACTIVE, SUSPENDED…) and why the worker last stopped, if it did. */
+  seller_status?: string | null; strikes?: number | null; stopped_reason?: string | null;
 }
 export interface Status {
   buyer_id: string | null;

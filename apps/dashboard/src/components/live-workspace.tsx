@@ -14,9 +14,18 @@ import { ToolGroup } from "@/components/tool-group";
  * user bubble, the model's answer streaming as the assistant, tool calls and
  * sandbox traffic folded into tool rows. One instance, one run, no history.
  */
-export function LiveWorkspace({ model, connection, running }: { model: LiveModel; connection: LiveConnection; running: boolean }) {
+const BLOCKED: Record<string, string> = {
+  SELLER_SUSPENDED: "Suspended by the marketplace after a rejected result",
+  PAYOUT_ONBOARDING_REQUIRED: "Stripe payout setup is incomplete",
+  MODEL_SETUP_REQUIRED: "The local model needs to be prepared again",
+  SELLER_UPDATE_REQUIRED: "A newer seller release is required",
+  GOOGLE_SIGN_IN_REQUIRED: "Sign in with Google again",
+};
+
+export function LiveWorkspace({ model, connection, running, blocked }: { model: LiveModel; connection: LiveConnection; running: boolean; blocked?: string }) {
   const { vm, run } = model;
-  const head = running ? describe(model, connection === "open") : { label: "Activate seller mode to lend this computer.", state: "base" as const, tone: "muted" as const };
+  const head = blocked ? { label: BLOCKED[blocked] ?? `Worker stopped · ${blocked}`, state: "base" as const, tone: "danger" as const }
+    : running ? describe(model, connection === "open") : { label: "Activate seller mode to lend this computer.", state: "base" as const, tone: "muted" as const };
   return (
     <div className="flex min-h-[420px] flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-5 py-3.5">
@@ -26,7 +35,7 @@ export function LiveWorkspace({ model, connection, running }: { model: LiveModel
         </div>
         {vm && <VmMeta vm={vm} />}
       </div>
-      {running && run ? <RunBody run={run} role={vm?.role ?? "seller"} /> : <Idle vm={vm} running={running} connection={connection} />}
+      {running && run && !blocked ? <RunBody run={run} role={vm?.role ?? "seller"} /> : <Idle vm={vm} running={running} connection={connection} blocked={blocked} />}
       {running && model.log.length > 0 && (
         <div className="border-t border-border px-5 py-3">
           <ToolGroup summary="Event stream" className="max-w-none">
@@ -56,8 +65,10 @@ function VmMeta({ vm }: { vm: LiveModel["vm"] & object }) {
   );
 }
 
-function Idle({ vm, running, connection }: { vm: LiveModel["vm"]; running: boolean; connection: LiveConnection }) {
-  const text = !running ? "When you activate seller mode, each task your worker takes on is shown here as it happens: the prompt, the model’s reasoning and answer, and what the sandbox sends over the network."
+function Idle({ vm, running, connection, blocked }: { vm: LiveModel["vm"]; running: boolean; connection: LiveConnection; blocked?: string }) {
+  const text = blocked === "SELLER_SUSPENDED" ? "No tasks are claimed while the seller is suspended. The worker checks back every half minute and resumes here as soon as the suspension is lifted."
+    : blocked ? "The worker stopped and will retry shortly. Check atm-seller logs if this persists."
+    : !running ? "When you activate seller mode, each task your worker takes on is shown here as it happens: the prompt, the model’s reasoning and answer, and what the sandbox sends over the network."
     : connection !== "open" ? "The worker reports its live view a few seconds after it starts."
     : vm?.closedAt ? "The sandbox instance has closed. A new one starts with the next task."
     : "The sandbox is ready. Open tasks that match your model are claimed automatically.";

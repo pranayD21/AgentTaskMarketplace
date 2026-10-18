@@ -119,6 +119,17 @@ async function makeRuntime(apiKey: string): Promise<Runtime> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let outcome: "DONE" | "SELLER_SUSPENDED" | undefined;
+
+/** Tell the local dashboard why this worker stopped; the next registration clears it. */
+function recordStop(code: string) {
+  const file = process.env.ATM_STATUS_FILE;
+  if (!file) return;
+  try {
+    const current = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+    fs.writeFileSync(file, JSON.stringify({ ...current, stopped_reason: code, stopped_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  } catch { /* status is advisory */ }
+}
 
 // ----------------------------------------------------------------- judge ----
 type UsageRow = { purpose: string; attempt: number; model: string; outcome: string; input_tokens: number | null; output_tokens: number | null; cache_creation_input_tokens: number | null; cache_read_input_tokens: number | null; duration_ms: number };
@@ -242,7 +253,7 @@ try {
       const prepared = JSON.parse(fs.readFileSync(preparedFile, "utf8"));
       if (prepared.seller_id !== state.agent_id || prepared.runner_sha256 !== rt.info().wasm_sha256) throw new Error("MODEL_SETUP_REQUIRED");
     }
-    if (role === "seller") await sellerLoop(mp, rt, {
+    if (role === "seller") outcome = await sellerLoop(mp, rt, {
       marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, pollMs,
       compute: autoCompute(),
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
@@ -276,14 +287,18 @@ try {
         estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined,
     });
     else await judgeLoop(rt);
+    if (outcome === "SELLER_SUSPENDED") throw new Error("SELLER_SUSPENDED");
   }
 } catch (error) {
-  log(`stopped: ${safeFailureCode(error)}`);
+  const code = safeFailureCode(error);
+  log(`stopped: ${code}`);
+  recordStop(code);
   process.exitCode = 1;
 } finally {
   await rt?.close();
   await mp.close();
   unlock?.();
-  if (viewer && !stopping) { log(`run finished; live view stays at ${viewer.url}. Press Ctrl-C to exit.`); await new Promise(() => {}); }
+  // A developer run keeps the page up to read; the installed seller exits so launchd restarts it and it recovers once the cause is gone.
+  if (viewer && !stopping && process.env.ATM_HUMAN_SELLER_REQUIRED !== "1") { log(`run finished; live view stays at ${viewer.url}. Press Ctrl-C to exit.`); await new Promise(() => {}); }
   await closeViewer();
 }
