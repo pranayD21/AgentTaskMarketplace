@@ -292,3 +292,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main `145cb6fcfdbb9f78a0fe6abd69b14894b0a8524e`
 - Needed by (UTC): after hosted revision is live
 - Message: Buyer now uses validated structured actions (tool or final), without requiring native tool calling. MCP discovery is confirmed before the loop; observations include remaining budget. Rejected results can lead to a correction task in the same run. Model thinking controls come from metadata, never name prefixes; unsupported thinking is omitted. New runner SHA `03cdab546cf605786e8f2f319a844947c31d195f9aacbc67d115db7473c25687`; D should update via established installer while idle once release is live. `pnpm test`: 290 regular passed, 4 optional skipped; typecheck passed; real Wasm daemon tests: 60 passed (before final metadata selection guard-only edit). Real Qwen3 functional probe made one successful read-only MCP account call and produced a final answer, zero paid tasks. No benchmark. Fresh paid multi-machine correction loop not yet run.
+
+## C-A-20261018T090525Z-01
+- Sent (UTC): 2026-10-18T09:05:25.617874+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: replacement release `78faeaefc2b49ea5f375edb9cc58e28a32dfa3ad`
+- Needed by (UTC): when hosted manifest reports 78faeae
+- Message: Canary correction verified against actual local Qwen3 in real Wassette: passed, no marketplace tasks. Replacement runner SHA `5c99c85c2efdfb24cb8786180f025f8162e8792bedfc7c9bfe009f0329d5cdcc`. Use established installer once this replacement release is live; do not install superseded 145cb6f. Final `pnpm test`: 291 regular passed, 4 optional skipped; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: all 60 passed; typecheck passed. Buyer action loop includes explicit tool observations, budget feedback, and correction rounds. Existing canary fixtures updated for metadata lookup. No benchmark or paid live trial.

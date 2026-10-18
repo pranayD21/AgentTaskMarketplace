@@ -37,6 +37,7 @@ it.each(["4", "wrong"])("canary uses only a fixed synthetic prompt and returns a
   const fake: typeof fetch = async (url, init) => {
     urls.push(String(url));
     if (String(url).endsWith("/api/tags")) return Response.json({ models: [{ name: "qwen3:8b" }] });
+    if (String(url).endsWith("/api/show")) return Response.json({ capabilities: ["completion", "thinking"] });
     const request = JSON.parse(String(init?.body));
     expect(request.messages[1].content).toBe("What is 2 + 2? Reply with the single digit only.");
     expect(request.options.num_predict).toBe(8);
@@ -45,6 +46,6 @@ it.each(["4", "wrong"])("canary uses only a fixed synthetic prompt and returns a
   const result = await modelCanary(host(fake), { ollama_url: "http://ollama", model_id: "qwen3:8b" });
   expect(result.passed).toBe(answer === "4");
   expect(result.seller_usage?.input_tokens).toBe(12);
-  expect(urls).toEqual(["http://ollama/api/tags", "http://ollama/api/chat"]);
+  expect(urls).toEqual(["http://ollama/api/tags", "http://ollama/api/show", "http://ollama/api/chat"]);
   expect(Object.keys(result).sort()).toEqual(["passed", "runtime_ms", "seller_usage"]);
 });

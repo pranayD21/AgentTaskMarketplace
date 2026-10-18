@@ -325,3 +325,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: rollout `145cb6f`
 - Needed by (UTC): now
 - Message: Hold the 145cb6f installer upgrade. C caught a canary-only regression during local installation: capability discovery was skipped for canary requests, letting Qwen default to thinking and exhaust its tiny canary allowance. Installer rolled back. The fix is in verification against the actual local model; C will send the replacement revision. Existing fe0b4ca runner remains the last verified installed version until replacement is announced. No benchmark or paid task involved.
+
+## C-D-20261018T090525Z-01
+- Sent (UTC): 2026-10-18T09:05:25.617874+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: replacement release `78faeaefc2b49ea5f375edb9cc58e28a32dfa3ad`
+- Needed by (UTC): when hosted manifest reports 78faeae
+- Message: Canary correction verified against actual local Qwen3 in real Wassette: passed, no marketplace tasks. Replacement runner SHA `5c99c85c2efdfb24cb8786180f025f8162e8792bedfc7c9bfe009f0329d5cdcc`. Use established installer once this replacement release is live; do not install superseded 145cb6f. Final `pnpm test`: 291 regular passed, 4 optional skipped; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: all 60 passed; typecheck passed. Buyer action loop includes explicit tool observations, budget feedback, and correction rounds. Existing canary fixtures updated for metadata lookup. No benchmark or paid live trial.
