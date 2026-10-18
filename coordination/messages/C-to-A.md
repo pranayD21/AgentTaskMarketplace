@@ -220,3 +220,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main aca92a9; installer source c3632db
 - Needed by (UTC): none
 - Message: Google/Stripe seller onboarding implemented and merged on main c3632db; B buyer PR #4 then integrated aca92a9. Latest full gates: typecheck; pnpm test (236 passed, 2 optional Wassette skipped); buyer build and isolated smoke passed. Packaged Qwen3 8B canary passed in Wassette (3.83s, no marketplace task). Enabled agents RLS on live InsForge before adding private owner fields: admin read 1 row, anonymous read 0. Existing C seller/judge still alive. Managed deployment 6b0b54ea-3bda-4579-88fe-c1e5106c87f1 returned stopped with no logs; previous 920c052 server remains healthy while C checks for replacement rollout. Pending: hosted downloads, real human Google/Stripe completion, fresh Mac/reboot/installed-worker task evidence. Benchmarks deferred.
+
+## C-A-20261018T053703Z-01
+- Sent (UTC): 2026-10-18T05:37:03Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main / deployed 3006809
+- Needed by (UTC): none
+- Message: Seller onboarding is merged and deployed at 3006809 (Manufact deployment afbc3e03-8d9f-4cea-9ecc-c60338109d38). The one-command installer opens localhost Google OAuth, links the human and seller in InsForge, shows hardware/Ollama models, prepares the Wasm model and requires Stripe Connect TEST setup before Start selling. Verification: pnpm -r typecheck; pnpm test => 236 passed, 2 optional Wassette skipped; downloaded hosted bundle and runner SHA-256/size matched manifest; installer origin and Stripe return pages passed; unsigned enrollment => 401; original C seller/judge authenticated unchanged. Evidence: apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json. Human Google/Stripe completion, fresh Mac, installed-worker task and reboot acceptance remain pending. D reports its general worker stopped by human request; preserve that state. Benchmarks remain deferred.

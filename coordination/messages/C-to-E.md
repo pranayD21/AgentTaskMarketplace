@@ -194,3 +194,11 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: main aca92a9; installer source c3632db
 - Needed by (UTC): none
 - Message: C implemented Google-linked seller onboarding and integrated D human Connect helpers plus B buyer flow. Existing C seller/judge remain running. Agents table now has RLS to protect Google ownership: InsForge admin client still reads it; anonymous reads return zero rows. No tasks or identities were reset. Hosted rollout is being verified. Local checks only used tests and one 3.83-second Wasm liveness canary, no marketplace task or comparative benchmark.
+
+## C-E-20261018T053703Z-01
+- Sent (UTC): 2026-10-18T05:37:03Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main / deployed 3006809
+- Needed by (UTC): none
+- Message: Seller onboarding release is live at 3006809: localhost Google sign-in, linked InsForge identity, Ollama/resources, Stripe Connect TEST setup before work. Downloaded artifacts match published hashes; source verification passed 236 tests with 2 optional Wassette skipped. Evidence: apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json. Human account completion, fresh-Mac task and reboot acceptance remain pending. Existing C judge/seller identities still authenticate; D reports its general worker stopped by human request. No new tasks or benchmark runs.

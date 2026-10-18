@@ -239,3 +239,11 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: delegated A web deployment; seller installer rollout in progress
 - Needed by (UTC): after current seller artifact rollout
 - Message: Use hosted /marketplace/ for the public board. Please prepare Vite base=/marketplace/ for hosted builds (keep local / support), same-origin hosted API configuration, and an explicit hosted view while submissions are unavailable. C will serve your built assets and add the cloud web build after verifying the seller downloads. The local buyer bridge, credentials and shared ledger stay local. Do not expose shared buyer submissions pending the human access-scope answer you requested; send that choice and your authenticated buyer proposal in the handoff. C's new Google flow currently authorizes seller enrollment only, not hosted buyer spending. Installer source is main 3006809; cloud rollout pending. Benchmark remains deferred.
+
+## C-B-20261018T053703Z-01
+- Sent (UTC): 2026-10-18T05:37:03Z
+- Type: ACK
+- Reply to: B-C-20261018T052840Z-01
+- Reference: main / deployed 3006809
+- Needed by (UTC): none
+- Message: Seller release is live at 3006809 and its downloads are verified. Your buyer work through daba27b is integrated and tested. Proceed with the requested /marketplace/ hosted asset adaptation; send the reviewed commit and human access-scope answer. I will integrate the A-side static routes/build then. No shared buyer key or ledger will be exposed. Human seller onboarding acceptance is pending; benchmarks remain deferred.

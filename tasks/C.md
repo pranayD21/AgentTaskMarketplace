@@ -2,7 +2,7 @@
 
 This section supersedes the automatic anonymous registration and work-before-payout steps below. The terminal command must open a localhost dashboard with human Google OAuth, an InsForge user linked to the seller agent, local Ollama/hardware monitoring, and Stripe Connect payout setup. C owns local UI/runtime/packaging and A's delegated identity/schema/release routes; D owns payment helpers. New human sellers start only after model preparation and Stripe setup. Preserve existing C/D workers. Benchmarking remains deferred.
 
-Implementation is on `feat/c-seller-onboarding`. See `apps/agent-daemon/README.md` for the user workflow and `docs/CONTRACT.md` for the interfaces. Before declaring acceptance complete, record a real human Google callback, a human-completed Stripe test flow, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. Unit tests and a local canary do not establish those facts.
+Implementation is merged on `main` and deployed at `3006809`. Hosted installer, bundle and prebuilt runner downloads passed checksum verification on 2026-10-18; see `apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json`. D stopped its existing worker at the human’s request at 05:34:44Z; leave it stopped. See `apps/agent-daemon/README.md` for the user workflow and `docs/CONTRACT.md` for the interfaces. Before declaring acceptance complete, record a real human Google callback, a human-completed Stripe test flow, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. Unit tests and a local canary do not establish those facts.
 
 ---
 

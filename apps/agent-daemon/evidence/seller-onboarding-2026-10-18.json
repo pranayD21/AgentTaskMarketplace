@@ -1,0 +1,82 @@
+{
+  "checked_at": "2026-10-18T05:35:41.313Z",
+  "source_revision": "30068097fae1498cda78eb489e2c1dc4974a0379",
+  "release": {
+    "schema": 1,
+    "revision": "30068097fae1498cda78eb489e2c1dc4974a0379",
+    "dirty": false,
+    "created_at": "2026-10-18T05:28:48.146Z",
+    "platform": "darwin-arm64",
+    "contract_version": "0.3",
+    "seller_protocol": 1,
+    "node_min": "22.22.0",
+    "wassette": "0.8.x",
+    "allowed_models": [
+      "qwen3:8b",
+      "qwen3:4b",
+      "qwen3:14b",
+      "qwen2.5:7b",
+      "qwen2.5-coder:7b",
+      "llama3.1:8b",
+      "gemma3:4b",
+      "gemma3:12b",
+      "deepseek-r1:8b",
+      "mistral:7b"
+    ],
+    "artifacts": {
+      "seller-bundle.tgz": {
+        "sha256": "d9c9c2972717e53c52bdc6edef01b047bb261f34e9d1f83d0c44ad24115e37d7",
+        "size_bytes": 505429
+      },
+      "runner.wasm": {
+        "sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34",
+        "size_bytes": 21164376
+      }
+    }
+  },
+  "verification": {
+    "workspace_typecheck": "passed",
+    "workspace_tests_passed": 236,
+    "optional_wassette_tests_skipped": 2,
+    "packaged_canary": {
+      "model": "qwen3:8b",
+      "runtime": "wassette",
+      "passed": true,
+      "elapsed_ms": 3830,
+      "marketplace_tasks_created": 0
+    },
+    "loopback_tests": "passed",
+    "google_session_tests": "passed",
+    "stripe_retry_tests": "passed",
+    "live_agents_rls": {
+      "admin_visible_rows": 1,
+      "anonymous_visible_rows": 0
+    },
+    "human_google_oauth": "pending",
+    "human_stripe_onboarding": "pending",
+    "fresh_mac_install": "pending",
+    "reboot": "pending",
+    "hosted_release": "passed: package and runner downloaded; both hashes and sizes verified; installer origin and return pages verified",
+    "benchmark": "deferred",
+    "existing_c_seller_and_judge": "same identities authenticated after deployment; seller payout ACTIVE",
+    "new_installed_worker_task": "pending"
+  },
+  "deployment_id": "afbc3e03-8d9f-4cea-9ecc-c60338109d38",
+  "hosted_base": "https://warm-cloud-4hh5i.run.mcp-use.com",
+  "hosted_files": [
+    {
+      "name": "seller-bundle.tgz",
+      "bytes": 505429,
+      "sha256": "d9c9c2972717e53c52bdc6edef01b047bb261f34e9d1f83d0c44ad24115e37d7",
+      "verified": true
+    },
+    {
+      "name": "runner.wasm",
+      "bytes": 21164376,
+      "sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34",
+      "verified": true
+    }
+  ],
+  "unauthenticated_enrollment_status": 401,
+  "d_worker_status": "Stopped by D at human request at 2026-10-18T05:34:44Z; identity remains registered. Not restarted."
+}

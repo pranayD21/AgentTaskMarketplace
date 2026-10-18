@@ -2,11 +2,13 @@
 
 ## 2026-10-18 seller onboarding follow-up
 
-C is implementing the human's revised installer: a local dashboard, Google OAuth through InsForge, a linked seller identity, Ollama/resource monitoring and Stripe Connect setup. D supplied human account creation, onboarding links and idempotent retry support through `f4c5d76`. Existing C/D workers stay running; benchmarks stay deferred.
+C's revised installer is merged and deployed at `3006809`: a local dashboard, Google OAuth through InsForge, a linked seller identity, Ollama/resource monitoring and Stripe Connect setup. D supplied human account creation, onboarding links and idempotent retry support through `f4c5d76`. C's existing seller and judge retain their identities. D stopped its general worker at the human's request at 05:34:44Z; its registered identity remains. Benchmarks stay deferred.
 
-Verified locally so far: workspace typecheck/tests, Google ownership and retry tests, localhost access protection, rendered dashboard with real hardware/Ollama metadata, and a packaged Wassette canary (`qwen3:8b`, passed, 3.83 seconds, no marketplace task). Agent-table RLS was enabled on live InsForge: admin read retained access; anonymous read returned zero rows.
+Verified: workspace typecheck, 236 passing tests (2 optional Wassette tests skipped), Google ownership and retry tests, localhost access protection, rendered dashboard with real hardware/Ollama metadata, and a packaged Wassette canary (`qwen3:8b`, passed, 3.83 seconds, no marketplace task). Agent-table RLS was enabled on live InsForge: admin read retained access; anonymous read returned zero rows. Hosted health reports `3006809`; the public installer and both downloadable artifacts are available, and the bundle/runner match their published SHA-256 values. Unsigned enrollment returns 401; Stripe return/refresh pages are available. [Release evidence](../apps/agent-daemon/evidence/seller-onboarding-2026-10-18.json).
 
-Still required for acceptance: deployed downloads, a real human Google sign-in, human completion of Stripe TEST onboarding, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. C must update this status with evidence and must not label these pending checks complete based on mocks.
+Still required for acceptance: a real human Google sign-in, human completion of Stripe TEST onboarding, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. These checks require the target Mac and the human's account actions; mocks do not establish them.
+
+B's human buyer form through `daba27b` is integrated. Its local bridge passed an isolated MEMORY/MOCK smoke test and B supplied separate live evidence. The public `/marketplace/` deployment is awaiting B's hosted asset adaptation; authenticated hosted purchasing also awaits the human's access-scope choice. Existing buyer keys, balances and the shared API ledger remain private and unchanged.
 
 
 ## A/C delivery status, October 17, 21:08 PDT
