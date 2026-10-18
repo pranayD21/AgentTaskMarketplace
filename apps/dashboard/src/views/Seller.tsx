@@ -67,7 +67,7 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
             <div className="min-w-0">
               <dt className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Local model</dt>
               <dd className="mt-0.5">
-                <Select aria-label="Seller model" className="h-7 text-[12.5px]" value={status?.seller_model ?? ""} disabled={running || busy || !sellable.length} onChange={(e) => chooseModel(e.target.value)}>
+                <Select aria-label="Seller model" className="[&>select]:h-7 [&>select]:text-[12.5px]" value={status?.seller_model ?? ""} disabled={running || busy || !sellable.length} onChange={(e) => chooseModel(e.target.value)}>
                   <option value="">{sellable.length ? `Any accepted (${sellable.length})` : machine ? "None installed" : "—"}</option>
                   {sellable.map((m) => <option key={m} value={m}>{m}</option>)}
                 </Select>
