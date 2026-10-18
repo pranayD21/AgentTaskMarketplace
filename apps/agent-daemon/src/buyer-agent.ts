@@ -25,6 +25,7 @@ export async function runBuyerAgent(options: {
   const emit = (type: string, data: Record<string, unknown>) => options.onEvent({ type, at: new Date().toISOString(), ...data });
   const tools = options.tools.map(({ name, description, parameters }) => ({ type: "function", function: { name, description, parameters } }));
   const fetcher = options.fetchImpl ?? fetch;
+  let consecutiveToolErrors=0;
   for (let turn = 0; turn < 100 && !options.isComplete(); turn++) {
     options.signal.throwIfAborted();
     const started = Date.now();
@@ -70,6 +71,8 @@ export async function runBuyerAgent(options: {
         result = { error: error instanceof Error ? error.message : String(error) };
       }
       emit("tool_result", { turn, name: call.function.name, result });
+      consecutiveToolErrors=(result as any)?.error?consecutiveToolErrors+1:0;
+      if(consecutiveToolErrors>=6)throw Error('Repeated tool errors prevented progress. Review the tool results before retrying.');
       messages.push({ role: "tool", tool_name: call.function.name,
         content: JSON.stringify({ result, remaining_seconds: Math.max(0, Math.floor((options.deadline - Date.now()) / 1000)) }) });
       if (options.isComplete()) break;

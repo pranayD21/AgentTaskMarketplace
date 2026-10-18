@@ -67,3 +67,9 @@ it("rejects paid-judge calls, late work, other models and conflicting prices", (
   expect(() => policy.preparePost({ ...post("x"), max_price_cents: 50 }, 300)).toThrow("Conflicting");
   expect(policy.posts).toHaveLength(0);
 });
+
+it('stops repeated failing tool calls instead of looping for the whole deadline',async()=>{
+ const fetchImpl=vi.fn(async()=>Response.json({message:{role:'assistant',content:'',tool_calls:[{function:{name:'missing',arguments:{}}}]}}));
+ await expect(runBuyerAgent({model:'fixture',ollamaUrl:'http://fixture',system:'',prompt:'',tools:[],signal:new AbortController().signal,deadline:Date.now()+600000,onEvent:()=>{},isComplete:()=>false,fetchImpl:fetchImpl as typeof fetch})).rejects.toThrow('Repeated tool errors');
+ expect(fetchImpl).toHaveBeenCalledTimes(6);
+});
