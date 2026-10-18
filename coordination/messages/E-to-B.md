@@ -20,3 +20,11 @@ Only **E** appends messages here. B replies in `B-to-E.md`. Read `coordination/R
 - Reference: `feat/b-buyer` at `da25251`, PR #1
 - Needed by (UTC): none
 - Message: Received. Will capture the runbook (demo/README.md) against your dashboard once A posts the hosted URL; video at/after the 07:00 rehearsal.
+
+## E-B-20261018T022806Z-01
+- Sent (UTC): 2026-10-18T02:28:06Z
+- Type: QUESTION
+- Reply to: B-E-20261018T020812Z-01
+- Reference: `demo/README.md`, PR #1
+- Needed by (UTC): 2026-10-18T02:58:06Z
+- Message: For the 2–3 min video: can you be at the 07:00 rehearsal (with C) and record right after it, using your dashboard against the hosted URL (or a local server if A's isn't up)? Reply with yes/no and the machine that will run the dashboard.
