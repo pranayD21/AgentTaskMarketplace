@@ -40,15 +40,16 @@ describe("chat timeline", () => {
     const [card] = tasks(run);
     expect(card!.approved).toBe(false);
     expect(card!.answer).toBe("draft output");
-    const html = renderToStaticMarkup(createElement(TaskCard, { task: card! }));
+    const html = renderToStaticMarkup(createElement(TaskCard, { task: card!, defaultOpen: true }));
     expect(html).toContain("Submitted output");
     expect(html).toContain("not an approved result");
     expect(html).not.toContain("Final output");
-    expect(html).toContain("Worker task prompt");
+    expect(html).toContain("List instance families");
+    expect(renderToStaticMarkup(createElement(TaskCard, { task: card! }))).not.toContain("draft output");
     expect(html).toContain("/task.html?task=task_a");
     const approved = tasks({ ...run, events: [...run.events, { type: "task_status", at, task: { task_id: "task_a", status: "APPROVED" } }, { type: "remote_answer", at, task_id: "task_a", status: "APPROVED", answer: "final" }] })[0]!;
     expect(approved.approved).toBe(true);
-    expect(renderToStaticMarkup(createElement(TaskCard, { task: approved }))).toContain("does not verify answer correctness");
+    expect(renderToStaticMarkup(createElement(TaskCard, { task: approved, defaultOpen: true }))).toContain("does not verify answer correctness");
   });
   it("escapes untrusted text in tool data and labels run states", () => {
     const html = renderToStaticMarkup(createElement(ToolInvocation, null,

@@ -6,7 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger, useCollapsible } f
 export type ToolInvocationType = "input-streaming" | "input-available" | "output-available" | "output-error";
 
 export const ToolInvocation = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("rounded-lg border border-border bg-subtle/60 text-[13px]", className)} {...props} />
+  <div className={cn("rounded-xl border border-border bg-card/60 text-[13px]", className)} {...props} />
 );
 
 export const ToolInvocationHeader = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
@@ -43,7 +43,7 @@ export function ToolInvocationContentCollapsible({ defaultOpen = false, header, 
   return (
     <Collapsible defaultOpen={defaultOpen} className={className}>
       {header && (
-        <CollapsibleTrigger className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-accent/60">
+        <CollapsibleTrigger className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-accent/60">
           <Chevron />
           <div className="min-w-0 flex-1">{header}</div>
         </CollapsibleTrigger>

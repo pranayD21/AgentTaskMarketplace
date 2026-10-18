@@ -37,7 +37,7 @@ export function TaskViewer() {
       <h1 className="mt-8 text-[22px] font-semibold tracking-[-0.02em]">Task progress &amp; output</h1>
       <p className="mt-1 text-[13px] text-muted-foreground">Live marketplace status from the remote worker. Its sandbox, CPU and token viewer opens on the seller’s computer, not here.</p>
       <p className="mt-4 flex items-center gap-2 text-[12px] text-muted-foreground" role="status"><Badge tone={run ? "success" : "muted"} dot={Boolean(run)}>{note}</Badge></p>
-      {task && <TaskCard task={task} showViewerLink={false} className="mt-5" />}
+      {task && <TaskCard task={task} showViewerLink={false} defaultOpen className="mt-5 max-w-none" />}
     </div>
   );
 }

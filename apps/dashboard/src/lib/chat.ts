@@ -24,7 +24,9 @@ export type TimelineItem =
   | { kind: "assistant"; key: string; content: string; thinking?: string; streaming: boolean }
   | { kind: "tool"; key: string; name: string; args: unknown; result?: unknown; state: ToolState }
   | { kind: "task"; key: string; task: TaskState }
-  | { kind: "note"; key: string; text: string; tone?: "muted" | "warning" };
+  | { kind: "note"; key: string; text: string; tone?: "muted" | "warning" }
+  /** Where network results re-entered the conversation; task cards render here so the final answer stays last. */
+  | { kind: "results"; key: string };
 
 export interface TaskView {
   task_id: string; index: number; status: string; label: string; seller_id?: string | null; model_id?: string | null;
@@ -74,7 +76,7 @@ export function timeline(run: Run): TimelineItem[] {
         break;
       }
       case "remote_answer": case "remote_preview": break; // shown on task cards
-      case "resumed": items.push({ kind: "note", key, text: "Network results arrived · continuing" }); break;
+      case "resumed": if (!items.some((i) => i.kind === "results")) items.push({ kind: "results", key }); break;
       case "stopped":
         if (event.reason !== "model_finished")
           items.push({ kind: "note", key, text: `Agent stopped: ${String(event.reason ?? run.status).replaceAll("_", " ")}`, tone: "warning" });
