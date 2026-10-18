@@ -1,18 +1,20 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Power } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, type Status } from "@/lib/api";
 import { cn, gb } from "@/lib/utils";
-import { useWorkspace } from "@/hooks/workspace";
+import { useWorkspace, type Sample } from "@/hooks/workspace";
 import { useLiveView } from "@/hooks/live";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AreaChart } from "@/components/ui/area-chart";
+import { fmtClock, type LiveModel } from "@/lib/live";
 import { LiveWorkspace } from "@/components/live-workspace";
 import { SetupSteps } from "./SetupSteps";
 
 /** Seller mode: one switch, the facts that matter, and the worker's current task as it happens. */
 export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
-  const { status, setup, busy, act } = useWorkspace();
+  const { status, setup, samples, busy, act } = useWorkspace();
   const machine = status?.machine;
   const worker = status?.worker ?? {};
   const running = setup.selling;
@@ -76,6 +78,8 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
           )}
         </Card>
 
+        <ComputeCard machine={machine} samples={samples} vm={live.model.vm} running={running} />
+
         <Card className="mt-4 overflow-hidden">
           <LiveWorkspace model={live.model} connection={live.connection} running={running} blocked={blocked} />
         </Card>
@@ -86,7 +90,46 @@ export function Seller({ onOpenAccount }: { onOpenAccount: () => void }) {
   );
 }
 
-function Fact({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "danger" }) {
+/** Four live graphs: the whole computer (sampled by the dashboard) and the sandbox process (reported by the worker). */
+function ComputeCard({ machine, samples, vm, running }: { machine: Status["machine"] | undefined; samples: Sample[]; vm: LiveModel["vm"]; running: boolean }) {
+  const totalGb = (machine?.memory_bytes ?? 0) / 1024 ** 3;
+  const cores = machine?.cpu_cores ?? 1;
+  const load = samples.map((s) => s.load), free = samples.map((s) => s.free / 1024 ** 3);
+  const cpu = running ? vm?.cpu ?? [] : [], rss = running ? (vm?.rss ?? []).map((b) => b / 1048576) : [];
+  const up = vm ? (vm.closedAt ?? Date.now()) - vm.startedAt : 0;
+  const tone = !running || !vm ? "muted" : vm.state === "crashed" ? "danger" : vm.state === "busy" ? "info" : vm.state === "ready" ? "success" : "muted";
+  const idle = !running ? "Sandbox starts with seller mode" : !vm ? "Sandbox not started yet" : vm.closedAt ? "Sandbox closed" : undefined;
+  return (
+    <Card className="mt-4 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-5 py-3">
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Compute</h2>
+        <Badge tone={tone} dot={running && (vm?.state === "busy" || vm?.state === "ready")}>{running && vm && !vm.closedAt ? `Sandbox · ${vm.state}` : "Sandbox off"}</Badge>
+        {running && vm && !vm.closedAt && <span className="font-mono text-[11.5px] text-muted-foreground">{vm.id}{vm.pid ? ` · pid ${vm.pid}` : ""} · up {fmtClock(up)}{vm.version ? ` · wassette ${vm.version}` : ""}</span>}
+        <span className="ml-auto text-[11.5px] text-muted-foreground">Sampled every 5 s · sandbox every 1 s</span>
+      </div>
+      <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+        <Graph title="System load" hint={`1-minute average · ${cores} cores`} value={load.at(-1)?.toFixed(2)} values={load} max={Math.max(cores, ...load)} className="text-info" />
+        <Graph title="Free memory" hint={`of ${totalGb ? `${totalGb.toFixed(0)} GB` : "—"}`} value={free.at(-1) !== undefined ? `${free.at(-1)!.toFixed(1)} GB` : undefined} values={free} max={totalGb || undefined} className="text-success" format={(v) => `${v.toFixed(1)} GB`} />
+        <Graph title="Sandbox CPU" hint="Wasm process · one core = 100%" value={cpu.at(-1) !== undefined ? `${cpu.at(-1)!.toFixed(0)}%` : undefined} values={cpu} max={Math.max(100, ...cpu)} className="text-foreground" format={(v) => `${v.toFixed(0)}%`} empty={idle} />
+        <Graph title="Sandbox memory" hint="Resident set of the Wasm process" value={rss.at(-1) !== undefined ? `${rss.at(-1)!.toFixed(0)} MB` : undefined} values={rss} className="text-muted-foreground" format={(v) => `${v.toFixed(0)} MB`} empty={idle} />
+      </div>
+    </Card>
+  );
+}
+
+function Graph({ title, hint, value, values, max, className, format, empty }: { title: string; hint: string; value?: string; values: number[]; max?: number; className?: string; format?: (v: number) => string; empty?: string }) {
+  return (
+    <div className="bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0"><div className="whitespace-nowrap text-[12.5px] font-semibold">{title}</div><div className="truncate text-[11px] text-muted-foreground">{hint}</div></div>
+        <strong className="whitespace-nowrap text-[17px] font-semibold tracking-[-0.02em]">{value ?? "—"}</strong>
+      </div>
+      <AreaChart values={values} max={max} className={cn("mt-3 h-[64px]", className)} label={title} format={format} empty={empty ?? "Collecting samples…"} />
+    </div>
+  );
+}
+
+function Fact({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "danger" }) {
   return (
     <div className="min-w-0">
       <dt className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{label}</dt>
