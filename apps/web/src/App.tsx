@@ -24,7 +24,7 @@ function statusTone(status: string) {
     ? "good"
     : ["REJECTED", "SUSPENDED"].includes(status)
       ? "bad"
-      : ["RUNNING", "JUDGING", "PAYLOAD_READY", "HELD"].includes(status)
+      : ["RUNNING", "JUDGING", "PAYLOAD_READY", "HELD", "PAID"].includes(status)
         ? "warm"
         : "";
 }
@@ -181,7 +181,7 @@ export function DashboardView({
                       >
                         {t.payment.mode === "mock"
                           ? `MOCK · ${t.payment.state}`
-                          : `STRIPE_TEST · ${t.payment.state}`}
+                          : `${t.payment.mode === "mpp" ? "MPP · STRIPE_TEST" : "STRIPE_TEST"} · ${t.payment.state}`}
                       </Badge>
                       {stripeLink(t.payment.stripe_payment_intent_id) && (
                         <a
@@ -341,7 +341,7 @@ export function DashboardView({
                         </div>
                         <div className="record-bottom">
                           <Badge tone={s.kind === "MOCK" ? "warm" : ""}>
-                            {s.kind}
+                            {s.kind === "MPP" ? "MPP · STRIPE_TEST" : s.kind}
                           </Badge>
                           <span>{s.state}</span>
                         </div>
@@ -481,7 +481,9 @@ export function App() {
               {data
                 ? data.payments.mode === "mock"
                   ? "MOCK · SIMULATED PAYMENTS"
-                  : "STRIPE TEST MODE"
+                  : data.payments.mode === "mpp"
+                    ? "MPP · STRIPE TEST MODE"
+                    : "STRIPE TEST MODE"
                 : "PAYMENT MODE UNCONFIRMED"}
             </Badge>
           </div>

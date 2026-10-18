@@ -1,6 +1,6 @@
 # Computer B verification — 2026-10-18 UTC
 
-Branch: `feat/b-buyer`, initially based on `19f7431`; merged main through `700f952` in merge commit `961dc8a`. This records completed checks separately from the remaining Armature dependency. No private responses, credentials, or ciphertext are included.
+Branch: `feat/b-buyer`, initially based on `19f7431`; merged main through `700f952` in merge commit `961dc8a`, then incorporated C's integration through `c215b89`. This records completed checks separately from the remaining Armature dependency. No private responses, credentials, or ciphertext are included.
 
 ## Local checks
 
@@ -9,9 +9,9 @@ Branch: `feat/b-buyer`, initially based on `19f7431`; merged main through `700f9
 | `pnpm install --frozen-lockfile` | Pass with the generated web dependency lockfile update. |
 | `pnpm -r typecheck` | All seven workspace packages pass. |
 | `pnpm --filter @atm/web build` | Pass; Vite production bundle generated. |
-| `pnpm --filter @atm/web test` | 13 tests pass (latest run after v0.2 integration): public rendering, payment/runtime labels, filtering, links/leases, MCP response handling, input validation, endpoint-bound identity, commitment failure handling, and unfamiliar settlement rail fallback. |
+| `pnpm --filter @atm/web test` | 14 tests pass (latest run after v0.2 / MPP integration): public rendering, payment/runtime labels, filtering, links/leases, MCP response handling, input validation, endpoint-bound identity, commitment failure handling, and unfamiliar settlement rail fallback. |
 | Crypto tests | Initially six passed; seven pass in the merged workspace suite. |
-| `pnpm test` after merging A's tests | Pass: web 12, crypto 7, runner-core 19, agent-daemon 6 (+1 Wassette test skipped), marketplace server 19. The subsequent focused web run passes 13 tests after the settlement fallback fix. The original missing-server-tests failure is resolved. |
+| `pnpm test` after merging C's integration | Pass: 76 tests — web 14, crypto 7, runner-core 19, agent-daemon 6 (+1 Wassette test skipped), marketplace server 30. The original missing-server-tests failure is resolved. |
 | Skill creator `quick_validate.py skills/marketplace` | Pass. PyYAML installed in an ignored local validation environment. |
 | `node scripts/buyer.mjs whoami` | Registers once, privately stores the key, then reuses the buyer. |
 | `node scripts/buyer.mjs wait task_0406a62309ba9383 --timeout 1` | APPROVED, commitment verified, CAPTURED; redundant ciphertext absent from CLI result. |
@@ -53,12 +53,12 @@ At 02:27Z B verified `curl --silent --show-error --connect-timeout 3 --max-time 
 
 The dashboard now reads C's server from B's ignored `apps/web/.env.local`. Browser verification showed a live refresh, the new `computer-c-v02` seller with a latest-claim key, and 25 task rows. Screenshot: `.atm-state/screenshots/dashboard-v02-c-server.png`. Fixtures now include the required v0.2 `runner.key_source`. MEMORY storage displays an explicit temporary-development-data notice.
 
-D's parallel testing added settlement kind `MPP` to the shared database before its contract was merged. That caused the previous strict settlement-kind parser to reject an otherwise valid dashboard snapshot. The parser now maps unfamiliar kinds to a fixed `UNRECOGNIZED PAYMENT RAIL` label and keeps the board available without rendering arbitrary text. A render regression test covers it; exact MPP labeling/payment instructions still await the adopted contract. Card/STRIPE_TEST and MOCK labels remain explicit.
+D's parallel testing added settlement kind `MPP` to the shared database before its contract was merged. That caused the previous strict settlement-kind parser to reject an otherwise valid dashboard snapshot. The parser now maps unfamiliar kinds to a fixed `UNRECOGNIZED PAYMENT RAIL` label and keeps the board available without rendering arbitrary text. A render regression test covers it; C subsequently merged the MPP contract in `b1f8c09`; B preserved its exact MPP / STRIPE_TEST labels and `task.paid` event support, added PAID emphasis, and documented the wallet sequence. The unknown-kind fallback remains for future rails. Card/STRIPE_TEST and MOCK labels remain explicit.
 
-`pnpm smoke` was attempted twice here. The first invocation exited before a successful health check; the diagnostic retry reached contract 0.2 / MEMORY / mock discovery but failed with `seller daemon timed out`. No Stripe purchases or external model calls were made by this offline smoke harness. This is a local failed check, not a passing integration result; C/A need to assess it alongside their own smoke evidence. Workspace tests and the focused web typecheck, 13 tests, and production build pass.
+`pnpm smoke` was attempted twice here. The first invocation exited without a successful health summary; the diagnostic retry reached contract 0.2 / MEMORY / mock discovery but failed with `seller daemon timed out`. No Stripe purchases or external model calls were made by this offline smoke harness. This is a local failed check, not a passing integration result; C/A need to assess it alongside their own smoke evidence. C independently reports a passing smoke run on integrated main `b1f8c09` in `C-B-20261018T022940Z-01`. This does not turn B's local timeout into a pass.
 
 A accepted B's four wording findings and merged them in `69b8e88` / `bc05530`; the pending wording requests above are resolved. A approved B's generated lockfile and delegated live integration/deployment to C in `A-B-20261018T021200Z-01` and `A-C-20261018T021200Z-02`.
 
 ## Still pending
 
-The human asked B to contact A and wait for A to arrange Armature access. A has now delegated deployment to C, and B contacted C. C supplied the reachable LAN endpoint and has asked the human to sign in to Manufact and Armature. The LAN endpoint is not a public hosted URL and may not be reachable by Armature's evaluator. No usable team account session or public Manufact MCP URL has been handed to B yet. The prepared [evaluation cases](evaluation.md) are not a completed Armature evaluation. If C performs it, B will verify and incorporate redacted evidence rather than duplicate purchases. C will integrate D's payment contract before B adopts exact MPP semantics.
+The human asked B to contact A and wait for A to arrange Armature access. A has now delegated deployment to C, and B contacted C. C supplied the reachable LAN endpoint and has asked the human to sign in to Manufact and Armature. The LAN endpoint is not a public hosted URL and may not be reachable by Armature's evaluator. No usable team account session or public Manufact MCP URL has been handed to B yet. The prepared [evaluation cases](evaluation.md) are not a completed Armature evaluation. If C performs it, B will verify and incorporate redacted evidence rather than duplicate purchases. D's MPP contract is now integrated; B's wallet recipe describes it without claiming a completed human Link-wallet evaluation.

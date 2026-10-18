@@ -141,6 +141,17 @@ describe("public dashboard boundary", () => {
     expect(html).toContain("wassette");
     expect(html).not.toContain("UNSANDBOXED");
   });
+  it("renders MPP settlements from a mixed-rail server and labels them as test payments", () => {
+    const raw = fixture();
+    raw.tasks[0]!.payment.mode = "mpp";
+    raw.tasks[0]!.payment.state = "PAID";
+    raw.settlements[0]!.kind = "MPP";
+    const data = Dashboard.parse(raw);
+    const html = renderToStaticMarkup(<DashboardView data={data} now={Date.parse(stamp)} filter="ALL" search="" />);
+    expect(html).toContain("MPP · STRIPE_TEST");
+    expect(html).not.toContain(privateMarker);
+  });
+
   it("does not display unrecognized event text", () => {
     const raw = fixture();
     raw.events[0]!.type = privateMarker;

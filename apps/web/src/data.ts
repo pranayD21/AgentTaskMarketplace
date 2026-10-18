@@ -11,6 +11,7 @@ const eventTypes = [
   "agent.registered",
   "seller.registered",
   "task.posted",
+  "task.paid",
   "task.claimed",
   "task.running",
   "task.released",
@@ -59,7 +60,9 @@ export const Dashboard = z.object({
         id: z.string(),
         task_id: z.string(),
         kind: z.string().transform((kind) =>
-          kind === "STRIPE_TEST" || kind === "MOCK" ? kind : "UNRECOGNIZED PAYMENT RAIL",
+          kind === "STRIPE_TEST" || kind === "MPP" || kind === "MOCK"
+            ? kind
+            : "UNRECOGNIZED PAYMENT RAIL",
         ),
         state: z.string(),
         seller_payout_cents: z.number().int().nonnegative(),

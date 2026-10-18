@@ -22,7 +22,10 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 | 19:03 | **Contract v0.2 server side** + server hardening + memory DB + 18 server tests, `pnpm smoke` green (real server, both daemons, per-claim claim). Commit `e7ae1b3` on `claude/zen-mccarthy-0xradq`. |
 | 19:06 | `mcp-use build` → `.mcp-use/build/index.js`; `mcp-use start` from the build serves 21 tools (memory mode). Manufact login/deploy not attempted: device flow needs the human's browser and Manufact is not reachable from this container. |
 | 19:10 | Merged E's `feat/e-judge-inkbox` (contains C's `feat/c-seller`) onto v0.2: no conflicts; C's `sellerKeyMode()` reads this server as `per-claim`. |
+| 19:30 | Spend cap reserved by compare-and-swap before the hold (`7198f51`; 22 server tests). SECURITY.md and README claims corrected: Wassette grants are per hostname not port, there is no liveness canary, plaintext is deleted at submit (not claim), and per-claim keys are not attestation. CONTRACT §6 documents `run-cycle` / `judge-cycle`. |
 | 19:15 | GitHub refused pushes (Claude GitHub App not installed on the repo); the human installed it. Branch and `main` pushed. **C is acting integrator** (A-C-20261018T021200Z-02): live Insforge/Stripe check, Manufact deploy, Armature for B, merging D (`f30e441`) and B (`da25251`), rehearsal. |
+
+| 19:25–19:29 (C, acting for A) | Live v0.2 seller and judge both ran in Wassette: task_e6a9f587177d49b4 APPROVED with verified commitment and per-claim key. D payments integrated; Stripe TEST captured and transferred 75c, released 25c. A atomic caps integrated; payment retries and MPP expiry/cap handling tested. LAN MCP is http://192.168.4.163:3000/mcp. Manufact and Armature need human sign-in. |
 
 ## 2. Commits on `main`
 
@@ -120,6 +123,15 @@ Pure-JS so it runs in Node **and** inside the Wasm component. `generateKeypair`,
   ```
   Not yet run against Insforge + Stripe test mode (container cannot reach them); first server started from this commit on a LAN machine will add the four columns itself.
 
+### Live integration on C, 19:25–19:29
+
+- `pnpm dev:server --no-open --no-inspector --host 0.0.0.0`: LAN `/health` reports contract `0.2`, database `Insforge Postgres`, payments `card`. Remote-computer reachability has been requested from B; the local LAN request succeeds.
+- `node scripts/buyer.mjs post "What is the capital of Peru? One word." --expect Lima --max 100` created `task_e6a9f587177d49b4`. `pnpm daemon --role seller --runtime wassette --display-name computer-c-v02 --once --task-id task_e6a9f587177d49b4` logged `key mode=per-claim` and submitted `result_4fcd6cbea2c388b0`.
+- `pnpm daemon --role judge --runtime wassette --display-name computer-c-integration-judge --once` approved that result after D's payment integration. `get_result` verifies the commitment; `get_seller_reputation` reports `runner.key_source=per-claim`. Stripe test settlement: 75c captured, 75c transferred, 25c released; transfer `tr_3URjl8F42f8esBiW0fOWPlCB`.
+- The first judge attempt picked an older MPP task and reproduced D's wrong-rail capture failure. The integrated router now follows each task's stored mode and refuses settlement if that mode cannot be configured. Payment failures leave the task pending and publish no new verdict.
+- `pnpm install --frozen-lockfile`, `pnpm -r typecheck`, `pnpm test`, `pnpm smoke` passed. `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test` passed 7 tests, including real sandbox denial, restart, timeout, race and fresh-key checks. Component SHA-256: `38f3cd26002156f2ce320ea5d678b9106899363daaf9fd8c3e5c43123a5943c9`.
+- Inkbox rejected creation of another identity because the plan has three slots. Existing team identities were preserved; notification creation for this new test seller is unverified.
+
 ## 5. Findings worth knowing (saved you an hour each)
 
 - **mcp-use v2:** `import { MCPServer } from "mcp-use"`; tools use `inputSchema` (zod 4 ok), callbacks get `(params, ctx)` with `ctx.request` (Hono request) — read the `Authorization` header there. Custom HTTP routes: `server.get/post(...)` (Hono). The CLI (`mcp-use dev`) imports the entry (`index.ts` / `src/index.ts` / `server.ts`), requires `export default server`, and calls `listen` itself; it loads `.env` from the package dir, hence the symlink `apps/marketplace-mcp/.env → ../../.env`.
@@ -146,6 +158,10 @@ Updates 19:06 (A): item 1 server half **done** (contract v0.2, `e7ae1b3`); item 
 8. The seller's `register_seller` runner key becomes advisory once per-claim keys land (issue 1); the dashboard should show the per-claim key id instead.
 9. **[C — FIXED in `4cc4fb7`; server guard in `69b8e88`] Node runtime seller used the judge keypair as its runner key.** `apps/agent-daemon/src/main.ts` constructs `NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64)` for both roles, and `pnpm daemon` loads the root `.env`, so on any machine holding the shared `.env` the seller registers `runner-0d5c3e52…` = the judge key id. Fix: pass the judge key only when `role === "judge"`. Related operational rule: only the judge machine should hold `JUDGE_PRIVATE_KEY_B64` and `ANTHROPIC_API_KEY`. Once C's fix is on `main`, A will make the server refuse a runner key equal to the judge key.
 10. **[D] `payments.ts`** has two `PAYMENT_FAILED` errors without `next_action` (Stripe refused the hold; unexpected PaymentIntent status).
-11. **[A] Spend-cap check is not atomic.** `post_task` checks `reserved + spent + max ≤ cap` on the row read at auth time and `adjustBuyerBalance` is read-modify-write, so two concurrent posts from one buyer could both pass. Low risk for the demo (one buyer agent, sequential posts); fix with a conditional update if time allows.
+11. **[A — FIXED in `7198f51`] Spend-cap check was not atomic.** `post_task` checks `reserved + spent + max ≤ cap` on the row read at auth time and `adjustBuyerBalance` is read-modify-write, so two concurrent posts from one buyer could both pass. Low risk for the demo (one buyer agent, sequential posts); fix with a conditional update if time allows.
 12. **[A] Live verification pending.** This session's container cannot reach Insforge/Stripe/Inkbox/Manufact; v0.2 is verified against the memory DB and mock payments only. Needs one run of `node scripts/buyer.mjs post … --expect Lima` + both daemons against Insforge + Stripe test mode on a LAN machine.
 13. **[A] Manufact deploy** still needs the human's browser login (`npx -y mcp-use@latest login`); `pnpm build` and `mcp-use start` from the build are verified.
+
+### Integration update from C (19:29)
+
+Earlier issues above are historical. The per-call key blocker (#1), D payout integration (#2), payment error guidance (#10), and live v0.2 verification (#12) are resolved by the integration described in §4. E's Inkbox code is merged; its account identity limit remains an operational constraint. Manufact deployment and Armature evaluation still require the human account sign-ins.

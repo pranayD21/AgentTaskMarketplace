@@ -42,7 +42,7 @@ import {
   type VerdictReasonCode,
 } from "@atm/shared";
 import { hashApiKey } from "./auth.js";
-import { countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
+import { adjustBuyerBalance, countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
@@ -279,20 +279,6 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
   return toSellerPublic(rows[0]!, agent);
 }
 
-async function adjustBuyerBalance(buyerId: string, delta: { reserved?: number; spent?: number }): Promise<void> {
-  const buyer = await getAgent(buyerId);
-  if (!buyer) return;
-  unwrap(
-    await db()
-      .from("agents")
-      .update({
-        reserved_cents: Math.max(0, buyer.reserved_cents + (delta.reserved ?? 0)),
-        spent_cents: Math.max(0, buyer.spent_cents + (delta.spent ?? 0)),
-      })
-      .eq("id", buyerId),
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Buyer: post / list / read / cancel
 // ---------------------------------------------------------------------------
@@ -321,20 +307,33 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
       next_action: `Re-post with ${min} <= max_price_cents <= ${MAX_PRICE_CENTS}.`,
     });
   }
-  const projected = buyer.reserved_cents + buyer.spent_cents + input.max_price_cents;
-  if (projected > buyer.spend_cap_cents) {
+  // Reserve against the cap atomically before any money moves, so concurrent
+  // posts from one buyer cannot jointly exceed what the human approved.
+  const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true });
+  if (reservation.refused) {
+    const b = reservation.buyer!;
+    const projected = b.reserved_cents + b.spent_cents + input.max_price_cents;
     throw new MarketplaceError(
       "SPEND_CAP_EXCEEDED",
-      `This would bring reserved+spent to ${projected}c, above your cap of ${buyer.spend_cap_cents}c (reserved ${buyer.reserved_cents}c, spent ${buyer.spent_cents}c).`,
+      `This would bring reserved+spent to ${projected}c, above your cap of ${b.spend_cap_cents}c (reserved ${b.reserved_cents}c, spent ${b.spent_cents}c).`,
       { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
+  const unreserve = () => adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents });
 
   const id = newId("task");
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
   const plaintext: ServerPlaintext = { prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
-  const hold = await payments().hold({ id, max_price_cents: input.max_price_cents }, buyer);
+  let hold: Awaited<ReturnType<ReturnType<typeof payments>["hold"]>>;
+  try {
+    hold = await payments().hold({ id, max_price_cents: input.max_price_cents }, buyer);
+  } catch (err) {
+    await unreserve();
+    throw err;
+  }
+  // Only a placed hold keeps the reservation; an unpaid (mpp) task reserves when it is paid.
+  if (hold.payment_state !== "HELD" && hold.payment_state !== "MOCK") await unreserve();
 
   const row = {
     id,
@@ -354,9 +353,6 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
   };
   const inserted = unwrap(await db().from("tasks").insert(row).select()) as TaskRow[];
   const task = inserted[0]!;
-  if (hold.payment_state === "HELD" || hold.payment_state === "MOCK") {
-    await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents });
-  }
   await logEvent("task.posted", {
     task_id: id,
     agent_id: buyer.id,
@@ -444,7 +440,7 @@ export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskP
   const rel = await payments().release(task, "cancelled by buyer");
   const rows = unwrap(await db().from("tasks").update({ status: "CANCELLED", payment_state: rel.payment_state, plaintext_enc_server: null, updated_at: nowIso() }).eq("id", taskId).eq("status", task.status).select()) as TaskRow[];
   if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task changed state while cancelling; read it again.", { next_action: "Call get_task, then cancel_task again if it is still OPEN." });
-  await recordSettlement(task, { kind: payments().mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel.note });
+  await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel.note });
   await adjustBuyerBalance(buyer.id, { reserved: -task.max_price_cents });
   await logEvent("task.cancelled", { task_id: taskId, agent_id: buyer.id });
   return toTaskPublic(rows[0]!);
@@ -737,6 +733,22 @@ export async function submitVerdict(judge: AgentRow, input: SubmitVerdictInput) 
   const res = await one<ResultRow>(await db().from("results").select("*").eq("id", input.result_id).eq("task_id", task.id).limit(1));
   if (!res) throw new MarketplaceError("NOT_FOUND", `Result ${input.result_id} not found for task ${task.id}.`, { next_action: "Use the result_id from fetch_review_package." });
 
+  // Payment failures leave the task reviewable and do not publish a verdict.
+  // Retrying the same rail operation uses its task-scoped Stripe idempotency key.
+  const sellerAgent = task.seller_id ? await getAgent(task.seller_id) : null;
+  const price = task.price_cents ?? 0;
+  let cap: Awaited<ReturnType<ReturnType<typeof payments>["capture"]>> | undefined;
+  let rel: Awaited<ReturnType<ReturnType<typeof payments>["release"]>> | undefined;
+  try {
+    if (input.verdict === "APPROVE") cap = await payments().capture(task, sellerAgent, price);
+    else rel = await payments().release(task, "judge rejected result");
+  } catch {
+    throw new MarketplaceError("PAYMENT_FAILED", "Settlement could not be completed; the task remains pending review.", {
+      retryable: true,
+      next_action: "Retry submit_verdict with the same task, result and verdict after checking the payment provider.",
+    });
+  }
+
   const verdictId = newId("verdict");
   unwrap(
     await db().from("verdicts").insert({
@@ -752,32 +764,28 @@ export async function submitVerdict(judge: AgentRow, input: SubmitVerdictInput) 
     }),
   );
 
-  const sellerAgent = task.seller_id ? await getAgent(task.seller_id) : null;
   const seller = task.seller_id ? await getSeller(task.seller_id) : null;
   let sellerStatus: string | null = seller?.status ?? null;
   let settlement: SettlementRow;
   let finalStatus: TaskStatus;
-  const price = task.price_cents ?? 0;
 
   if (input.verdict === "APPROVE") {
-    const cap = await payments().capture(task, sellerAgent, price);
     settlement = await recordSettlement(task, {
-      kind: payments().mode,
+      kind: task.payment_mode,
       seller_payout_cents: price,
       buyer_refund_cents: task.max_price_cents - price,
-      stripe_capture_id: cap.stripe_capture_id,
-      stripe_transfer_id: cap.stripe_transfer_id,
-      note: cap.note,
+      stripe_capture_id: cap!.stripe_capture_id,
+      stripe_transfer_id: cap!.stripe_transfer_id,
+      note: cap!.note,
     });
     finalStatus = "APPROVED";
-    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: cap.payment_state, updated_at: nowIso() }).eq("id", task.id));
+    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: cap!.payment_state, updated_at: nowIso() }).eq("id", task.id));
     if (seller) unwrap(await db().from("sellers").update({ approvals: seller.approvals + 1 }).eq("agent_id", seller.agent_id));
     await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents, spent: price });
   } else {
-    const rel = await payments().release(task, "judge rejected result");
-    settlement = await recordSettlement(task, { kind: payments().mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel.note });
+    settlement = await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel!.note });
     finalStatus = "REJECTED";
-    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: rel.payment_state, updated_at: nowIso() }).eq("id", task.id));
+    unwrap(await db().from("tasks").update({ status: finalStatus, payment_state: rel!.payment_state, updated_at: nowIso() }).eq("id", task.id));
     if (seller) {
       const strikes = seller.strikes + 1;
       sellerStatus = strikes >= env().SUSPEND_AFTER_STRIKES ? "SUSPENDED" : seller.status;
@@ -817,7 +825,7 @@ async function recordSettlement(task: TaskRow, s: { kind: string; seller_payout_
 }
 
 async function finalizeExpired(task: TaskRow, reason: string): Promise<TaskRow> {
-  const rel = task.payment_state === "HELD" || task.payment_state === "MOCK" ? await payments().release(task, reason) : null;
+  const rel = task.payment_state === "HELD" || task.payment_state === "MOCK" || task.payment_state === "PAID" ? await payments().release(task, reason) : null;
   const rows = unwrap(
     await db()
       .from("tasks")
@@ -827,7 +835,7 @@ async function finalizeExpired(task: TaskRow, reason: string): Promise<TaskRow> 
       .select(),
   ) as TaskRow[];
   if (!rows.length) return task;
-  await recordSettlement(task, { kind: payments().mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: `expired: ${reason}` });
+  await recordSettlement(task, { kind: task.payment_mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: `expired: ${reason}` });
   await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents });
   await logEvent("task.expired", { task_id: task.id, meta: { reason, previous_status: task.status } });
   return rows[0]!;

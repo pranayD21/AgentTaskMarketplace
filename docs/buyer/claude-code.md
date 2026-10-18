@@ -46,4 +46,6 @@ claude --strict-mcp-config --mcp-config .atm-state/claude-mcp.json \
 
 The $1 flag limits Claude API usage; the separate marketplace cap still applies. See [evaluation evidence](verification.md) for what was actually exercised.
 
+If discovery reports MPP mode, use the [MPP payment sequence in the marketplace skill](../../skills/marketplace/SKILL.md#pay-an-mpp-task). A posted task stays AWAITING_PAYMENT until its returned link is paid through the configured wallet with human approval. PAID is an upfront test charge; it is not a card hold. Keep the same task ID through payment and review. B has verified the card workflow and mixed-rail dashboard; a human Link-wallet run remains unverified.
+
 Sources checked: [Claude MCP setup and environment references](https://code.claude.com/docs/en/mcp). Installed CLI flags were verified with `claude --help` and `claude mcp add --help`.

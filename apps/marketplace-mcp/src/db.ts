@@ -177,6 +177,39 @@ export function ensureSchema(): Promise<void> {
   return schemaReady ?? Promise.resolve();
 }
 
+const BALANCE_CAS_ATTEMPTS = 8;
+
+/**
+ * Change a buyer's reserved/spent counters by compare-and-swap, so concurrent
+ * tool calls cannot lose an update or jointly overshoot the cap. With
+ * `enforceCap`, nothing is written and `refused` is true when reserved + spent
+ * would exceed spend_cap_cents; `buyer` is then the row that was checked.
+ */
+export async function adjustBuyerBalance(
+  buyerId: string,
+  delta: { reserved?: number; spent?: number },
+  opts: { enforceCap?: boolean } = {},
+): Promise<{ buyer: AgentRow | null; refused: boolean }> {
+  for (let attempt = 0; attempt < BALANCE_CAS_ATTEMPTS; attempt++) {
+    const cur = await one<AgentRow>(await db().from("agents").select("*").eq("id", buyerId).limit(1));
+    if (!cur) return { buyer: null, refused: false };
+    const reserved = Math.max(0, cur.reserved_cents + (delta.reserved ?? 0));
+    const spent = Math.max(0, cur.spent_cents + (delta.spent ?? 0));
+    if (opts.enforceCap && reserved + spent > cur.spend_cap_cents) return { buyer: cur, refused: true };
+    const rows = unwrap(
+      await db()
+        .from("agents")
+        .update({ reserved_cents: reserved, spent_cents: spent })
+        .eq("id", buyerId)
+        .eq("reserved_cents", cur.reserved_cents)
+        .eq("spent_cents", cur.spent_cents)
+        .select(),
+    ) as AgentRow[];
+    if (rows.length) return { buyer: rows[0]!, refused: false };
+  }
+  throw new MarketplaceError("INTERNAL_ERROR", "Buyer balance kept changing under concurrent calls.", { retryable: true });
+}
+
 /** Task counts per status for the dashboard. */
 export async function countTasksByStatus(): Promise<Record<string, number>> {
   if (env().DB_MODE === "memory") {

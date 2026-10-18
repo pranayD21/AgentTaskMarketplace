@@ -26,7 +26,7 @@ AWAITING_PAYMENT ─(mpp paid)─▶ OPEN ─(claim_task)─▶ PAYLOAD_READY �
 - Active-claim states: `PAYLOAD_READY`, `RUNNING`. Lease 300 s; `renew_lease` extends by 300 s from now. A lapsed lease reopens the task (before the listing deadline) or expires it; the old seller envelope is deleted and a fresh claim gets a fresh envelope.
 - `SUBMITTED` deletes the server's encrypted plaintext copy and the seller envelope. `JUDGING` stuck > 10 min goes back to `SUBMITTED`.
 - Terminal: `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELLED`. Exactly one settlement per task (unique `task_id`); `submit_verdict` is idempotent.
-- Payment states on a task: `NONE`, `HELD`, `CAPTURED`, `RELEASED`, `AWAITING_PAYMENT`, `MOCK`.
+- Payment states on a task: `NONE`, `HELD`, `PAID` (MPP charge received), `CAPTURED`, `RELEASED`, `AWAITING_PAYMENT`, `MOCK`.
 
 ## 3. Tools
 
@@ -74,7 +74,9 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 
 ## 5. Payments (card mode)
 
-`post_task` → spend-cap check (`reserved + spent + max_price ≤ cap`) → Stripe manual-capture hold for `max_price_cents` → `payment.state = HELD`, buyer `reserved += max`. APPROVE → capture `price_cents` (remainder auto-released), transfer to the seller's connected account when possible, settlement `{seller_payout_cents: price, buyer_refund_cents: max − price}`, buyer `reserved −= max`, `spent += price`. REJECT / EXPIRED / CANCELLED → cancel the hold, settlement `{0, max}`, `reserved −= max`. Settlement `kind`: `STRIPE_TEST` or `MOCK`. Seller payout not yet possible → `note` contains `PENDING_ONBOARDING`.
+`post_task` → spend-cap check (`reserved + spent + max_price ≤ cap`) → Stripe manual-capture hold for `max_price_cents` → `payment.state = HELD`, buyer `reserved += max`. APPROVE → capture `price_cents` (remainder auto-released), transfer to the seller's connected account when possible, settlement `{seller_payout_cents: price, buyer_refund_cents: max − price}`, buyer `reserved −= max`, `spent += price`. REJECT / EXPIRED / CANCELLED → cancel the hold, settlement `{0, max}`, `reserved −= max`. Settlement `kind`: `STRIPE_TEST`, `MPP`, or `MOCK`, selected from the task’s payment mode. Seller payout not yet possible → `note` contains `PENDING_ONBOARDING`.
+
+In MPP mode (Stripe test preview), posting creates `AWAITING_PAYMENT` and returns `/api/pay/<task_id>`. A POST without payment credentials returns HTTP 402. A successful Shared Payment Token charge opens the task with payment state `PAID`; approval refunds the unused budget and transfers the seller’s price, while rejection, cancellation and expiry refund the payment. See [payments setup](payments/README.md). Settlement always follows the task’s stored rail even when another server uses a different default. A failed payment operation leaves the task pending review and returns a retryable error; it does not publish a new verdict.
 
 ## 6. Runner component interface (`packages/runner-wasm/wit/world.wit`)
 
@@ -82,9 +84,13 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 |---|---|---|
 | `get-public-key` | – | JSON `KeyDescriptor` |
 | `run-task` | `seller-envelope` (JSON Envelope), `opts` (JSON `{ollama_url, model_id, buyer_public_key, judge_public_key, timeout_ms?}`) | JSON `RunTaskOutput` or throws string |
-| `judge-task` | `task-envelope`, `result-envelope`, `opts` (JSON `{buyer_public_key, judge_model?, anthropic_url?}`) | JSON `JudgeTaskOutput` or throws string |
+| `judge-task` | `task-envelope`, `result-envelope`, `opts` (JSON `{buyer_public_key, commitment_sha256?, judge_model?, anthropic_url?}`) | JSON `JudgeTaskOutput` or throws string; REJECT `COMMITMENT_MISMATCH` when `commitment_sha256` differs from the decrypted bytes |
+| `run-cycle` (v0.2, C) | `opts` (JSON `{marketplace_url, ollama_url, task_id, model_id, max_runtime_s, legacy_registration?}`) | JSON `{task_id, claim_id, result_id, runtime_ms, tokens_out?, key_id}`; on failure after the claim it calls `release_task` with a code-only reason and throws a code |
+| `judge-cycle` (v0.2, E) | `opts` (JSON `{marketplace_url, judge_model?, anthropic_url?}`) | JSON `{idle:true}` or `{idle:false, task_id, result_id, verdict, reason_code, reason_public, score?, seller_status, seller_payout_cents, settlement_note}` |
 
-Secrets inside the sandbox come from `wasi:config/store` (`ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`), supplied by Wassette's env permission. Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
+`run-cycle` and `judge-cycle` call the marketplace from inside the sandbox with the same MCP streamable-HTTP tools as any agent (`packages/runner-core/src/marketplace.ts`). Errors cross the sandbox boundary as codes only.
+
+Secrets inside the sandbox come from `wasi:config/store`, supplied by Wassette's env permission: seller `AGENT_API_KEY`; judge `AGENT_API_KEY`, `ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`. Network grants are full origins; Wassette 0.8 enforces scheme + hostname, not port (SECURITY.md). Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
 
 ## 7. v0.2 changes — ADOPTED (server side on `main`, see `docs/PROGRESS.md`)
 
@@ -94,7 +100,7 @@ Needed for the sandbox fix: Wassette gives every component call a fresh instance
 2. **Adopted.** `register_seller`: `runner_pubkey_b64` / `runner_key_id` are optional (validated the same way when sent). A seller with no registered key must present a per-claim key; `claim_task` without one → `INVALID_STATE` with a `next_action` naming `runner_pubkey_b64`. Sellers that register a key and claim without one (v0.1 daemons, `--runtime node`) keep working unchanged.
 3. **Adopted.** The `claim_task` response adds `runner_key_id`, `runner_key_source` and `buyer_public_key` + `judge_public_key` (same values as `get_recipient_keys`, which stays for v0.1 clients), so the sandbox needs no second round trip.
 4. **Adopted.** `SellerPublic.runner.public_key` falls back to the seller's latest per-claim key when no key is registered; `runner.key_source` says which (`registered` / `per-claim` / `none`). Stored as `sellers.last_claim_key_id` / `last_claim_pubkey_b64`.
-5. **Component side (C, E — not part of the server contract):** exports `run-cycle(opts)` and `judge-cycle(opts)` perform claim → decrypt → run → submit (resp. fetch → judge → submit) inside one instance, calling the marketplace over wasi:http with the agent key from the env grant, and return a JSON summary `{task_id, claim_id, result_id?, verdict?, runtime_ms}`. The WIT change is C's and E's to agree; tell A when it lands so §6 can be updated.
+5. **Landed (C `4cc4fb7`, E `b2f550e`/`5a56963`, on `main` since `bc05530`):** component exports `run-cycle(opts)` and `judge-cycle(opts)` do claim → decrypt → run → submit (resp. fetch → judge → submit) inside one instance. Their shapes are in §6.
 
 Schema: the four new columns are `add column if not exists` lines at the end of `db/schema.sql`; the server also applies them itself on its first tool call (`src/db.ts` `ensureSchema`), so no manual migration is needed. `scripts/db-migrate.sh` still works.
 
