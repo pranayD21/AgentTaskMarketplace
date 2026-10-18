@@ -1,5 +1,7 @@
 # Run a seller computer
 
+New C follow-up: [multi-computer setup and rehearsal](MULTI-COMPUTER.md), [measurement fields and cost limits](MEASUREMENTS.md). Use `--canary-only` for a local Wassette model probe without agent registration or a marketplace purchase. Use `--canary` and `--measurement-file` to record liveness and per-attempt usage on a seller.
+
 The seller polls the marketplace, claims an eligible task, runs an installed Ollama model and submits encrypted results. With `--runtime wassette`, one component call generates the task key and performs claim, decryption, inference and submission. The host receives IDs, timing and token counts.
 
 From the repository root:

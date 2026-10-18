@@ -7,7 +7,7 @@
 import { restoreRandom } from "./wizer-shim.js";
 import { get } from "wasi:config/store@0.2.0-rc.1";
 import { keypairFromSecretB64 } from "@atm/crypto";
-import { createRunner, judgeCycle as runJudgeCycle, runCycle as sellerCycle, safeFailureCode, type Runner, type RunnerHost } from "@atm/runner-core";
+import { measuredCycle, modelCanary as canary, createRunner, judgeCycle as runJudgeCycle, runCycle as sellerCycle, safeFailureCode, type Runner, type RunnerHost } from "@atm/runner-core";
 
 const host: RunnerHost = {
   fetch: globalThis.fetch.bind(globalThis),
@@ -68,5 +68,16 @@ export async function judgeTask(taskEnvelope: string, resultEnvelope: string, op
 export async function judgeCycle(opts: string): Promise<string> {
   restoreRandom();
   try { return JSON.stringify(await runJudgeCycle(host, JSON.parse(opts))); }
+  catch (err) { throw safeFailureCode(err); }
+}
+
+export async function runCycleMeasured(opts: string): Promise<string> {
+  restoreRandom();
+  return JSON.stringify(await measuredCycle(host, JSON.parse(opts)));
+}
+
+export async function modelCanary(opts: string): Promise<string> {
+  restoreRandom();
+  try { return JSON.stringify(await canary(host, JSON.parse(opts))); }
   catch (err) { throw safeFailureCode(err); }
 }

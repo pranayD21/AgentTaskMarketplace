@@ -3,7 +3,7 @@
  * it does is visible to the host. Labelled as such wherever it appears.
  */
 import { keypairFromSecretB64, type Keypair } from "@atm/crypto";
-import { createRunner, judgeCycle, type JudgeCycleOpts, type Runner, type RunnerHost } from "@atm/runner-core";
+import { modelCanary, type CanaryOpts, createRunner, judgeCycle, type JudgeCycleOpts, type Runner, type RunnerHost } from "@atm/runner-core";
 import type { Runtime, RuntimeInfo } from "./types.js";
 
 export class NodeRuntime implements Runtime {
@@ -29,5 +29,6 @@ export class NodeRuntime implements Runtime {
     if (!this.judgeKey) throw new Error("JUDGE_PRIVATE_KEY_B64 is required for the judge role");
     return judgeCycle(this.host, opts);
   }
+  async modelCanary(opts: CanaryOpts) { return modelCanary(this.host, opts); }
   async close() {}
 }
