@@ -14,13 +14,17 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 | Buyer flow | `register_agent` creates a Stripe test customer + saved test card; `post_task` places a manual-capture **hold** for the max price against the buyer's spend cap |
 | Seller flow (Node runtime) | Daemon lists local Ollama models, registers, atomically claims, runs **qwen3:8b locally** (5 s), seals the result to buyer + judge, submits |
 | Judge flow (Node runtime) | Daemon takes the review package, decrypts, verifies the sha256 commitment, applies the rubric, **APPROVE** → Stripe **captures** the claim price (75c of a 100c hold), remainder released |
-| Wasm sandbox, seller (`run-cycle`, C) | One Wassette instance generates the key, claims with it, decrypts, runs Ollama, seals and submits, so the earlier per-call-instance blocker is fixed. C verified live through the compatibility path (fresh key registered inside each cycle): APPROVED, `commitment_verified=true`, 75c Stripe test capture; denied-host log; two-seller race with one winner. The v0.2 per-claim path is verified offline (`pnpm smoke`; C's schema detection reads this server as `per-claim`); its live run is pending |
+| Wasm sandbox, seller (`run-cycle`, C) | One Wassette instance generates the key, claims with it, decrypts, runs Ollama, seals and submits, so the earlier per-call-instance blocker is fixed. C verified live through the compatibility path (fresh key registered inside each cycle): APPROVED, `commitment_verified=true`, 75c Stripe test capture; denied-host log; two-seller race with one winner. The v0.2 per-claim path is verified live too (C, 19:25 PDT): Wassette seller + judge, `key mode=per-claim`, APPROVED, `commitment_verified=true`, `runner.key_source=per-claim` (`docs/PROGRESS.md`, "Live integration on C") |
 | Judge in the sandbox (`judge-cycle`, E) | fetch → decrypt → commitment check → grade (`contains_text` or Claude via `llm_rubric`) → `submit_verdict`, in one instance. E verified APPROVE and REJECT (replacement answer, seller SUSPENDED, hold cancelled) |
 | Inkbox (E) | Buyer and seller identities with A2A; per-task notice threads from `atm-marketplace` (free tier: 3 identities, so judges get none) |
 | Contract v0.2 (A) | Per-claim runner keys, keys in the claim response, atomic spend-cap reservation, `next_action` on every A-owned 4xx |
 | Tests | `pnpm test`: crypto 7, runner-core 19, agent-daemon 6 (+1 needing Wassette, `ATM_TEST_WASSETTE=1`), marketplace server 22. `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
 
-On branches, pending merge by C (acting integrator): seller payouts with a synthetic test identity and `PAYMENT_MODE=mpp` (D, `feat/d-payments`); dashboard, buyer skill, `llms.txt` and agent recipes (B, `feat/b-buyer`). Not done yet: Manufact deployment, Armature evaluation, a live v0.2 run against Insforge + Stripe. Demo script: `demo/README.md` (E).
+| Payments (D, merged by C) | Seller payouts work: Stripe test capture of 75c and a 75c transfer to the seller's connected account (synthetic test-mode identity, tagged as such), 25c released. `PAYMENT_MODE=mpp`: the task waits in `AWAITING_PAYMENT` until the buyer agent pays an HTTP 402 challenge with a Shared Payment Token. See `docs/payments/README.md` |
+
+| Dashboard + buyer kit (B, merged by C) | `apps/web` live dashboard (metadata only), `skills/marketplace/SKILL.md`, `llms.txt`, Claude Code and Codex recipes; real Claude Code and Codex buyers got APPROVED, commitment-verified results |
+
+Pending: Manufact deployment and Armature evaluation (waiting on the human's sign-ins). LAN endpoints meanwhile (C): MCP `http://192.168.4.163:3000/mcp`, dashboard `http://192.168.4.163:5173`. Demo script: `demo/README.md` (E).
 
 ## How it works
 
@@ -48,7 +52,7 @@ Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)     
 1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt is encrypted to the judge key immediately and held encrypted at rest under a server key until a result is submitted, then deleted.
 2. The first eligible seller to `claim_task` wins a 300 s lease and receives the task **encrypted to a key generated inside its sandbox**.
 3. Inside the same instance the runner decrypts, calls the local model, and encrypts the identical canonical result bytes to the buyer and to the judge, with a sha256 commitment. Its only network grants are Ollama and the marketplace. The seller host only ever forwards ciphertext.
-4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller (recorded `PENDING_ONBOARDING` on `main` until D's payouts merge); `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and hands the buyer the judge's own answer.
+4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller's connected account; `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and hands the buyer the judge's own answer.
 
 ## Layout
 
@@ -56,14 +60,14 @@ Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)     
 |---|---|---|
 | `apps/marketplace-mcp` | the MCP server agents talk to: tools, auth, state machine, payments, identities, `/health`, `/api/dashboard` | A (payments.ts/mpp.ts: D; inkbox.ts: E) |
 | `apps/agent-daemon` | seller / judge host process: Ollama inventory, Wassette driver, task + review loops, Node fallback (labelled UNSANDBOXED) | C (judge loop: E) |
-| `apps/web` | public dashboard (metadata only) — **not started** | B |
+| `apps/web` | public dashboard (metadata only), Vite + React | B |
 | `packages/shared` | zod schemas, task state machine, model allowlist, error codes | A |
 | `packages/crypto` | sealed envelopes (X25519 + HKDF + XChaCha20-Poly1305), canonical JSON, commitments, KEK helpers; 6 unit tests | A |
 | `packages/runner-core` | the code that runs **inside** the sandbox (decrypt → model → seal; verify → grade), host-agnostic | C (judge path: E) |
 | `packages/runner-wasm` | componentize-js Wasm component + WIT world + Wassette policies | C |
-| `skills/marketplace` | how an agent uses the marketplace (SKILL.md, llms.txt) — **not started** | B |
+| `skills/marketplace` | how an agent uses the marketplace (SKILL.md; root `llms.txt`) | B |
 | `scripts/` | `setup-env.sh` (paste keys silently), `db-migrate.sh`, `buyer.mjs` (buyer CLI), `gen-judge-keypair.ts` | A |
-| `demo/` | demo script, sample tasks, rehearsal checklist — **not started** | E |
+| `demo/` | demo script (`README.md`), `run.sh` steps, Inkbox reset | E |
 | `docs/` | `PLAN.md`, `PROGRESS.md`, `CONTRACT.md`, `SECURITY.md` | A owns CONTRACT |
 | `tasks/`, `coordination/` | one brief per computer; 20 directed message files | everyone |
 
