@@ -241,7 +241,7 @@ export function DashboardView({
                     <div key={m.model_id}>
                       <code>{m.model_id}</code>
                       <strong>
-                        {money(m.ask_cents)} <small>/ task</small>
+                        <small>Accepts task offers</small>
                       </strong>
                     </div>
                   ))}

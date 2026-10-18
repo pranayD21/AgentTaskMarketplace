@@ -196,7 +196,7 @@ export type JudgeTaskOutput = z.infer<typeof JudgeTaskOutput>;
 export const ModelInfo = z.object({
   model_id: z.string().min(1).describe("Exact Ollama model tag, e.g. qwen3:8b"),
   digest: z.string().optional().describe("Self-reported Ollama digest (not attestation)"),
-  ask_cents: z.number().int().nonnegative().describe("Price the seller asks per task, in US cents (test mode)"),
+  ask_cents: z.number().int().nonnegative().optional().describe("Deprecated compatibility field; ignored. Sellers accept the posted task price."),
   tok_per_s: z.number().nonnegative().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfo>;

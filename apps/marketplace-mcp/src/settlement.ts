@@ -10,6 +10,7 @@
  *   balances    keyed compare-and-swap (`settle:<task>`), buyer and job
  *   finalized   `finalized_at` set by the one call that wins the guard
  */
+import { randomUUID } from "node:crypto";
 import { MarketplaceError, isInfraReason, nowIso, plusSecondsIso, publicReason, retryDelaySeconds, type Envelope, type TaskStatus } from "@atm/shared";
 import {
   adjustBuyerBalance,
@@ -113,14 +114,18 @@ async function moveMoney(task: TaskRow, s: SettlementRow, d: SettlementDecision)
       const seller = task.seller_id ? await one<AgentRow>(await db().from("agents").select("*").eq("id", task.seller_id).limit(1)) : null;
       const cap = await payments().capture(task, seller, s.seller_payout_cents);
       const owed = s.seller_payout_cents;
-      const transferred = cap.stripe_transfer_id ? owed : 0;
+      const transferred = cap.transferred_cents;
       return {
         payment_state: cap.payment_state,
         stripe_capture_id: cap.stripe_capture_id,
         stripe_transfer_id: cap.stripe_transfer_id,
         note: cap.note,
         payout_transferred_cents: transferred,
-        transfer_state: owed === 0 || cap.payment_state === "MOCK" ? "NOT_APPLICABLE" : transferred ? "TRANSFERRED" : "PENDING",
+        transfer_state: cap.transfer_state,
+        transfer_pending_reason: cap.pending_reason ?? null,
+        transfer_manual_review: cap.pending_reason === "MISMATCH",
+        transfer_retry_safe_to_advance: (cap as { retry_safe_to_advance?: boolean }).retry_safe_to_advance === true,
+        transfer_key_created_at: s.created_at,
       };
     }
     // A REJECT always follows a hold; CANCEL lets the rail decide; EXPIRE releases only what was reserved.
@@ -145,9 +150,10 @@ export async function recomputeReputation(sellerId: string): Promise<string | nu
   for (let attempt = 0; attempt < REPUTATION_CAS_ATTEMPTS; attempt++) {
     const cur = await one<SellerRow>(await db().from("sellers").select("*").eq("agent_id", sellerId).limit(1));
     if (!cur) return null;
-    const verdicts = unwrap(await db().from("verdicts").select("verdict,reason_code").eq("seller_id", sellerId).limit(10_000)) as Pick<VerdictRow, "verdict" | "reason_code">[];
-    const approvals = verdicts.filter((v) => v.verdict === "APPROVE").length;
-    const rejections = verdicts.filter((v) => v.verdict === "REJECT" && !isInfraReason(v.reason_code)).length;
+    const verdicts = unwrap(await db().from("verdicts").select("task_id,verdict,reason_code").eq("seller_id", sellerId).limit(10_000)) as Pick<VerdictRow, "task_id" | "verdict" | "reason_code">[];
+    const decisions = [...new Map(verdicts.map((v) => [v.task_id, v])).values()];
+    const approvals = decisions.filter((v) => v.verdict === "APPROVE").length;
+    const rejections = decisions.filter((v) => v.verdict === "REJECT" && !isInfraReason(v.reason_code)).length;
     const strikes = rejections;
     const status = cur.status === "SUSPENDED" || strikes >= env().SUSPEND_AFTER_STRIKES ? "SUSPENDED" : cur.status;
     if (approvals === cur.approvals && rejections === cur.rejections && strikes === cur.strikes && status === cur.status) return status;
@@ -196,9 +202,9 @@ export async function finalizeSettlement(taskId: string): Promise<Finalized> {
   // 2. the verdict row, with the server's public reason
   const quality = outcome === "APPROVE" || outcome === "REJECT";
   if (quality && !(await verdictOf(taskId))) {
-    unwrap(
+    try { unwrap(
       await db().from("verdicts").insert({
-        id: newId("verdict"),
+        id: `verdict_${s.id}`,
         task_id: taskId,
         result_id: s.result_id,
         judge_id: d.judge_id ?? "unknown",
@@ -209,7 +215,9 @@ export async function finalizeSettlement(taskId: string): Promise<Finalized> {
         score: d.score ?? null,
         replacement_enc_buyer: d.replacement_enc_buyer ?? null,
       }),
-    );
+    ); } catch (error) {
+      if (!(await verdictOf(taskId))) throw error;
+    }
   }
 
   // 3. the task's final state
@@ -266,41 +274,56 @@ export async function finalizeSettlement(taskId: string): Promise<Finalized> {
  * implements the optional retryTransfer (D); otherwise the PENDING state stays
  * visible and truthful.
  */
-type RetryTransfer = (task: TaskRow, seller: AgentRow | null, amountCents: number) => Promise<{ transfer_id: string | null; note: string }>;
-
 export async function retryPendingTransfers(limit = 10): Promise<{ attempted: number; transferred: number }> {
-  const provider = payments() as ReturnType<typeof payments> & { retryTransfer?: RetryTransfer };
-  if (typeof provider.retryTransfer !== "function") return { attempted: 0, transferred: 0 };
+  const provider = payments();
   const now = Date.now();
   const due = (unwrap(await db().from("settlements").select("*").eq("transfer_state", "PENDING").order("created_at", { ascending: true }).limit(limit * 3)) as SettlementRow[])
-    .filter((s) => s.finalized_at && (!s.transfer_retry_at || Date.parse(s.transfer_retry_at) <= now))
+    .filter((s) => s.finalized_at && !s.transfer_manual_review && (!s.transfer_retry_at || Date.parse(s.transfer_retry_at) <= now) && (!s.transfer_lease_until || Date.parse(s.transfer_lease_until) <= now))
     .slice(0, limit);
   let attempted = 0, transferred = 0;
   for (const s of due) {
+    const safeAdvance = s.transfer_retry_safe_to_advance === true;
+    const keyCreated = s.transfer_key_created_at ?? s.created_at;
+    if (!safeAdvance && now - Date.parse(keyCreated) > 23 * 3600_000) {
+      unwrap(await db().from("settlements").update({ transfer_manual_review: true, transfer_pending_reason: "IDEMPOTENCY_WINDOW", note: "Unknown transfer outcome is older than the safe replay window; operator reconciliation required." }).eq("id", s.id).eq("transfer_state", "PENDING"));
+      continue;
+    }
     const attempts = (s.transfer_attempts ?? 0) + 1;
-    // Claim this attempt; a concurrent sweep that read the same row loses here.
-    const claimed = unwrap(
-      await db().from("settlements").update({ transfer_attempts: attempts, transfer_retry_at: plusSecondsIso(retryDelaySeconds(attempts)), updated_at: nowIso() }).eq("id", s.id).eq("transfer_attempts", s.transfer_attempts ?? 0).select(),
-    ) as SettlementRow[];
+    const keyAttempt = (s.transfer_key_attempt ?? 0) + (safeAdvance ? 1 : 0);
+    const token = randomUUID();
+    let q = db().from("settlements").update({
+      transfer_attempts: attempts, transfer_key_attempt: keyAttempt,
+      transfer_key_created_at: safeAdvance ? nowIso() : keyCreated,
+      transfer_retry_safe_to_advance: false, transfer_lease_token: token,
+      transfer_lease_until: plusSecondsIso(300), updated_at: nowIso(),
+    }).eq("id", s.id).eq("transfer_state", "PENDING").eq("transfer_attempts", s.transfer_attempts ?? 0);
+    q = s.transfer_lease_token ? q.eq("transfer_lease_token", s.transfer_lease_token) : q.is("transfer_lease_token", null);
+    const claimed = unwrap(await q.select()) as SettlementRow[];
     if (!claimed.length) continue;
+    attempted++;
     const task = await taskRow(s.task_id);
     if (!task) continue;
     const seller = task.seller_id ? await one<AgentRow>(await db().from("agents").select("*").eq("id", task.seller_id).limit(1)) : null;
-    attempted++;
     const owed = s.payout_owed_cents ?? s.seller_payout_cents;
-    let r: { transfer_id: string | null; note: string };
-    try {
-      r = await provider.retryTransfer(task, seller, owed);
-    } catch (err) {
-      r = { transfer_id: null, note: `transfer retry failed: ${(err as Error).message.slice(0, 160)}` };
-    }
-    const patch = r.transfer_id
-      ? { transfer_state: "TRANSFERRED", stripe_transfer_id: r.transfer_id, payout_transferred_cents: owed, transfer_retry_at: null, note: `${s.note ?? ""}; ${r.note}`.slice(0, 1000) }
-      : { note: `${s.note ?? ""}; retry ${attempts}: ${r.note}`.slice(-1000) };
-    unwrap(await db().from("settlements").update({ ...patch, updated_at: nowIso() }).eq("id", s.id).eq("transfer_state", "PENDING"));
-    if (r.transfer_id) {
+    let r: Awaited<ReturnType<typeof provider.retryTransfer>> & { retry_safe_to_advance?: boolean };
+    try { r = await provider.retryTransfer(task, seller, owed, { attempt: keyAttempt, known_transfer_id: s.stripe_transfer_id }); }
+    catch { r = { transfer_id: null, state: "PENDING", amount_cents: 0, pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false, note: "Transfer outcome unknown; the same idempotency key will be reused." }; }
+    const paid = r.state === "TRANSFERRED" && !!r.transfer_id && r.amount_cents === owed;
+    const mismatch = r.pending_reason === "MISMATCH" || (!!r.transfer_id && !paid);
+    const patch = {
+      transfer_state: paid ? "TRANSFERRED" : "PENDING",
+      stripe_transfer_id: paid ? r.transfer_id : s.stripe_transfer_id,
+      payout_transferred_cents: paid ? r.amount_cents : s.payout_transferred_cents ?? 0,
+      transfer_retry_at: paid || mismatch ? null : plusSecondsIso(retryDelaySeconds(attempts)),
+      transfer_lease_token: null, transfer_lease_until: null,
+      transfer_retry_safe_to_advance: !mismatch && r.retry_safe_to_advance === true,
+      transfer_manual_review: mismatch, transfer_pending_reason: mismatch ? "MISMATCH" : r.pending_reason ?? null,
+      note: r.note.slice(0, 1000), updated_at: nowIso(),
+    };
+    const saved = unwrap(await db().from("settlements").update(patch).eq("id", s.id).eq("transfer_state", "PENDING").eq("transfer_lease_token", token).select()) as SettlementRow[];
+    if (paid && saved.length) {
       transferred++;
-      await logEvent("settlement.transferred", { task_id: s.task_id, meta: { attempts, amount_cents: owed } });
+      await logEvent("settlement.transferred", { task_id: s.task_id, meta: { attempts, amount_cents: r.amount_cents } });
     }
   }
   return { attempted, transferred };

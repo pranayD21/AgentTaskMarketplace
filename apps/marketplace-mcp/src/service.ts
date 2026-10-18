@@ -51,13 +51,14 @@ import {
   type VerdictReasonCode,
 } from "@atm/shared";
 import { hashApiKey } from "./auth.js";
-import { adjustBuyerBalance, adjustJobBudget, countTasksByStatus, db, dbLabel, ensureSchema, type JobRow, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
+import { countTasksByStatus, db, dbLabel, ensureSchema, prepareTask, type JobRow, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
 import { kekOpen, kekSeal } from "./kek.js";
 import { notifyTask } from "./notices.js";
 import { payments } from "./payments.js";
+import { cancelPosting, finishPost, resumePosts } from "./posting.js";
 import { deferReview, reviewDue, reviewOf } from "./review.js";
 import { RESUME_AFTER_S, finalizeSettlement, outcomeForStatus, recordIntent, retryPendingTransfers, settlementOf } from "./settlement.js";
 
@@ -125,7 +126,7 @@ export function toTaskPublic(t: TaskRow): TaskPublic {
     claim_id: t.claim_id,
     seller_id: t.seller_id,
     model_id: t.model_id,
-    price_cents: t.price_cents,
+    price_cents: t.price_cents ?? (["OPEN", "AWAITING_PAYMENT"].includes(t.status) ? t.max_price_cents : null),
     lease_expires_at: t.lease_expires_at,
     payment: {
       mode: t.payment_mode,
@@ -285,13 +286,6 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
       next_action: `Advertise only allowlisted models: ${Object.keys(MODEL_ALLOWLIST).join(", ")}.`,
     });
   }
-  const min = payments().min_cents;
-  const tooCheap = input.models.filter((m) => m.ask_cents < min).map((m) => m.model_id);
-  if (tooCheap.length) {
-    throw new MarketplaceError("VALIDATION_ERROR", `ask_cents must be at least ${min} (${payments().label}) for: ${tooCheap.join(", ")}.`, {
-      next_action: `Re-call register_seller with ask_cents >= ${min} for every model.`,
-    });
-  }
   if (input.runner_key_id && !input.runner_pubkey_b64) {
     throw new MarketplaceError("VALIDATION_ERROR", "runner_key_id was sent without runner_pubkey_b64.", {
       next_action: "Send both, or neither and present runner_pubkey_b64 on every claim_task instead.",
@@ -299,7 +293,7 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
   }
   const key = input.runner_pubkey_b64 ? runnerKey(input.runner_pubkey_b64, input.runner_key_id) : null;
   const patch = {
-    models: input.models,
+    models: input.models.map(({ ask_cents: _ignored, ...capability }) => capability),
     runner_pubkey_b64: key?.public_key_b64 ?? null,
     runner_key_id: key?.key_id ?? null,
     runner_wasm_sha256: input.runner_wasm_sha256 ?? null,
@@ -321,7 +315,8 @@ export interface PostTaskInput {
   prompt: string;
   context?: string;
   allowed_models: string[];
-  max_price_cents: number;
+  price_cents?: number;
+  max_price_cents?: number;
   max_runtime_s?: number;
   expires_in_s?: number;
   rubric: Rubric;
@@ -331,6 +326,19 @@ export interface PostTaskInput {
   part_key?: string;
   part_label?: string;
   client_request_id?: string;
+}
+
+/** Resolve the posted offer before reserving budgets or placing a hold. */
+export function taskOffer(input: Pick<PostTaskInput, "price_cents" | "max_price_cents">): number {
+  const { price_cents: price, max_price_cents: alias } = input;
+  if (price !== undefined && alias !== undefined && price !== alias) {
+    throw new MarketplaceError("VALIDATION_ERROR", "price_cents and max_price_cents disagree.", { next_action: "Send price_cents alone, or the same value for both fields." });
+  }
+  const offer = price ?? alias;
+  if (!Number.isSafeInteger(offer) || offer! < payments().min_cents || offer! > MAX_PRICE_CENTS) {
+    throw new MarketplaceError("VALIDATION_ERROR", `price_cents must be an integer from ${payments().min_cents} to ${MAX_PRICE_CENTS}.`, { next_action: "Choose a posted price within your available buyer and job budgets." });
+  }
+  return offer!;
 }
 
 /** A part whose latest attempt ended like this may be posted again as a new attempt. */
@@ -367,7 +375,9 @@ function validatePostKeys(input: PostTaskInput): void {
   }
 }
 
-export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{ task: TaskPublic; idempotent: boolean; payment_note: string; payment_label: string }> {
+export async function postTask(buyer: AgentRow, raw: PostTaskInput): Promise<{ task: TaskPublic; idempotent: boolean; payment_note: string; payment_label: string }> {
+  const offer = taskOffer(raw);
+  const input = { ...raw, max_price_cents: offer };
   validatePostKeys(input);
   let job: JobRow | null = null;
   if (input.job_id) {
@@ -390,63 +400,29 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
       next_action: `Re-post with ${min} <= max_price_cents <= ${MAX_PRICE_CENTS}.`,
     });
   }
-  // Reserve against the cap atomically before any money moves, so concurrent
-  // posts from one buyer cannot jointly exceed what the human approved.
   const id = newId("task");
-  if (job) {
-    const jr = await adjustJobBudget(job.id, { reserved: input.max_price_cents }, { enforceCap: true, key: `reserve:${id}` });
-    if (jr.refused) {
-      const j = jr.job!;
-      throw new MarketplaceError(
-        "JOB_BUDGET_EXCEEDED",
-        `This part would bring job ${j.id} to ${j.reserved_cents + j.spent_cents + input.max_price_cents}c, above its ${j.budget_cents}c budget (reserved ${j.reserved_cents}c, spent ${j.spent_cents}c).`,
-        { next_action: "Call get_job to see which parts are live; lower max_price_cents, cancel an OPEN part, or create a new job with a larger budget within your cap." },
-      );
-    }
-  }
-  const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true, key: `reserve:${id}` });
-  if (reservation.refused) {
-    if (job) await adjustJobBudget(job.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
-    const b = reservation.buyer!;
-    const projected = b.reserved_cents + b.spent_cents + input.max_price_cents;
-    throw new MarketplaceError(
-      "SPEND_CAP_EXCEEDED",
-      `This would bring reserved+spent to ${projected}c, above your cap of ${b.spend_cap_cents}c (reserved ${b.reserved_cents}c, spent ${b.spent_cents}c).`,
-      { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
-    );
-  }
-  const unreserve = async () => {
-    await adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
-    if (job) await adjustJobBudget(job.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
-  };
-
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
   const plaintext: ServerPlaintext = { prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
-  let hold: Awaited<ReturnType<ReturnType<typeof payments>["hold"]>>;
-  try {
-    hold = await payments().hold({ id, max_price_cents: input.max_price_cents }, buyer);
-  } catch (err) {
-    await unreserve();
-    throw err;
-  }
-  // Only a placed hold keeps the reservation; an unpaid (mpp) task reserves when it is paid.
-  if (hold.payment_state !== "HELD" && hold.payment_state !== "MOCK") await unreserve();
-
   const row = {
     id,
     buyer_id: buyer.id,
     allowed_models: input.allowed_models,
     max_price_cents: input.max_price_cents,
+    price_cents: offer,
+    pricing_mode: "task_offer",
     max_runtime_s: input.max_runtime_s ?? DEFAULT_MAX_RUNTIME_SECONDS,
-    status: hold.task_status,
+    status: "AWAITING_PAYMENT" as const,
+    post_state: "HOLDING",
+    created_at: nowIso(),
+    updated_at: nowIso(),
     expires_at: plusSecondsIso(input.expires_in_s ?? DEFAULT_LISTING_TTL_SECONDS),
     plaintext_enc_server: kekSeal(plaintext),
     payload_enc_judge: sealJson(judgeKey(), judgePayload),
     payment_mode: payments().mode,
-    payment_state: hold.payment_state,
-    stripe_payment_intent_id: hold.stripe_payment_intent_id,
-    payment_link: hold.payment_link,
+    payment_state: "POSTING",
+    stripe_payment_intent_id: null,
+    payment_link: null,
     claim_count: 0,
     job_id: job?.id ?? null,
     part_key: input.part_key ?? null,
@@ -456,38 +432,22 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
   };
   let task: TaskRow;
   try {
-    task = (unwrap(await db().from("tasks").insert(row).select()) as TaskRow[])[0]!;
+    task = await prepareTask(row);
   } catch (err) {
-    await compensateHold(row, hold.payment_state, unreserve);
-    // A concurrent identical post won the unique index: hand back its task (contract §10).
-    const winner = isUniqueViolation(err) ? await existingPost(buyer, input) : null;
-    if (winner) return { task: toTaskPublic(winner), idempotent: true, payment_note: "A concurrent identical post was accepted first; its task is returned and this hold was released.", payment_label: payments().label };
+    // The database may have committed before its response was lost. Read by
+    // our stable id before doing anything to the payment or reservation.
+    const accepted = await getTask(id);
+    const winner = accepted ?? (isUniqueViolation(err) ? await existingPost(buyer, input) : null);
+    if (winner) return { task: toTaskPublic(winner), idempotent: true, payment_note: "The recorded post is returned. No new hold was created; poll get_task while payment is pending.", payment_label: payments().label };
     throw err;
   }
+  task = await finishPost(task, buyer);
   await logEvent("task.posted", {
     task_id: id,
     agent_id: buyer.id,
-    meta: { allowed_models: input.allowed_models, max_price_cents: input.max_price_cents, rubric_kind: input.rubric.kind, payment_state: hold.payment_state, job_id: job?.id ?? null, part_key: input.part_key ?? null, attempt },
+    meta: { allowed_models: input.allowed_models, max_price_cents: input.max_price_cents, rubric_kind: input.rubric.kind, payment_state: task.payment_state, job_id: job?.id ?? null, part_key: input.part_key ?? null, attempt },
   });
-  return { task: toTaskPublic(task), idempotent: false, payment_note: hold.note, payment_label: payments().label };
-}
-
-/**
- * post_task placed a hold but could not store the task (contract §9, P1):
- * cancel the hold and give the reservation back before reporting the error.
- */
-async function compensateHold(row: Record<string, unknown>, paymentState: string, unreserve: () => Promise<unknown>): Promise<void> {
-  const taskId = String(row.id);
-  if (paymentState !== "HELD" && paymentState !== "MOCK") return; // unpaid mpp tasks reserved nothing
-  try {
-    await payments().release({ ...row, status: "CANCELLED" } as unknown as TaskRow, "task could not be stored");
-  } catch {
-    // The reservation stays while the hold may still exist; the error below is reported to the buyer.
-    console.error(`[post_task] ${taskId}: hold could not be released after a failed insert; reservation kept`);
-    return;
-  }
-  await unreserve();
-  await logEvent("task.post_compensated", { task_id: taskId, agent_id: String(row.buyer_id), meta: { payment_state: paymentState } });
+  return { task: toTaskPublic(task), idempotent: false, payment_note: task.post_hold?.note ?? "Task offer recorded.", payment_label: payments().label };
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +617,7 @@ function resultGuidance(task: TaskRow, replacement: TaskPublic["replacement_stat
 export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskPublic> {
   const task = await mustGetTask(taskId);
   if (task.buyer_id !== buyer.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.", { next_action: "Call list_my_tasks for your own task ids." });
+  if (task.post_state === "HOLDING" || task.post_state === "CANCEL_PENDING") return toTaskPublic(await cancelPosting(task, buyer));
   if (task.status !== "OPEN" && task.status !== "AWAITING_PAYMENT") {
     throw new MarketplaceError("INVALID_STATE", `Only OPEN tasks can be cancelled; this one is ${task.status}.`, {
       next_action: "A claimed task settles through the judge; poll get_task / get_result instead.",
@@ -701,7 +662,7 @@ export async function listOpenTasksFor(agent: AgentRow, limit = OPEN_TASKS_DEFAU
   const rows = unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(n)) as TaskRow[];
   const tasks = rows
     .map((t) => {
-      const eligible = myModels.filter((m) => t.allowed_models.includes(m.model_id) && m.ask_cents <= t.max_price_cents).map((m) => m.model_id);
+      const eligible = myModels.filter((m) => t.allowed_models.includes(m.model_id)).map((m) => m.model_id);
       return { ...toTaskPublic(t), eligible_models: eligible };
     })
     .filter((t) => myModels.length === 0 || t.eligible_models.length > 0);
@@ -744,11 +705,7 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
   }
   const mine = seller.models.find((m) => m.model_id === modelId);
   if (!mine) throw new MarketplaceError("MODEL_NOT_ALLOWED", `${modelId} is not in your registration.`, { next_action: "Call register_seller with your current Ollama models." });
-  if (mine.ask_cents > task.max_price_cents) {
-    throw new MarketplaceError("MODEL_NOT_ALLOWED", `Your ask of ${mine.ask_cents}c exceeds the buyer's max of ${task.max_price_cents}c.`, {
-      next_action: "Skip this task, or lower ask_cents with register_seller.",
-    });
-  }
+  const price = task.price_cents ?? task.max_price_cents;
   const active = unwrap(await db().from("tasks").select("id").eq("seller_id", agent.id).in("status", [...ACTIVE_CLAIM_STATUSES]).limit(1)) as { id: string }[];
   if (active.length) {
     throw new MarketplaceError("CLAIM_CONFLICT", `You already hold an active claim (${active[0]!.id}); finish or release it first.`, {
@@ -771,7 +728,8 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
         claim_id: claimId,
         seller_id: agent.id,
         model_id: modelId,
-        price_cents: mine.ask_cents,
+        price_cents: price,
+        pricing_mode: "task_offer",
         lease_expires_at: lease,
         payload_enc_seller: envelope,
         claim_runner_key_id: sealTo.key_id,
@@ -790,15 +748,15 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
       .update({ last_seen: nowIso(), ...(claimKey ? { last_claim_key_id: claimKey.key_id, last_claim_pubkey_b64: claimKey.public_key_b64 } : {}) })
       .eq("agent_id", agent.id),
   );
-  await logEvent("task.claimed", { task_id: task.id, agent_id: agent.id, meta: { claim_id: claimId, model_id: modelId, price_cents: mine.ask_cents, lease_expires_at: lease, runner_key_id: sealTo.key_id, runner_key_source: keySource } });
+  await logEvent("task.claimed", { task_id: task.id, agent_id: agent.id, meta: { claim_id: claimId, model_id: modelId, price_cents: price, lease_expires_at: lease, runner_key_id: sealTo.key_id, runner_key_source: keySource } });
   const updated = rows[0]!;
-  await notifyTask(updated, { type: "assignment", to_handle: agent.inkbox_handle, text: `Task ${task.id} assigned to you (${modelId}, ${mine.ask_cents}c). Lease until ${lease}.` });
+  await notifyTask(updated, { type: "assignment", to_handle: agent.inkbox_handle, text: `Task ${task.id} assigned to you (${modelId}, ${price}c). Lease until ${lease}.` });
   return {
     claim_id: claimId,
     task_id: task.id,
     seller_id: agent.id,
     model_id: modelId,
-    price_cents: mine.ask_cents,
+    price_cents: price,
     lease_expires_at: lease,
     seller_envelope: envelope,
     max_runtime_s: updated.max_runtime_s,
@@ -1035,7 +993,7 @@ async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
   const rows = unwrap(
     await db()
       .from("tasks")
-      .update({ status: "OPEN", claim_id: null, seller_id: null, model_id: null, price_cents: null, lease_expires_at: null, payload_enc_seller: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
+      .update({ status: "OPEN", claim_id: null, seller_id: null, model_id: null, lease_expires_at: null, payload_enc_seller: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
       .eq("id", task.id)
       .eq("claim_id", task.claim_id)
       .select(),
@@ -1047,7 +1005,7 @@ async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
 export async function expireStale(): Promise<{ expired: number; reopened: number; requeued: number; resumed: number; transfers_retried: number; failed: number }> {
   await ensureSchema();
   const now = nowIso();
-  let expired = 0, reopened = 0, requeued = 0, resumed = 0, failed = 0;
+  let expired = 0, reopened = 0, requeued = 0, resumed = await resumePosts(), failed = 0;
   // One task whose Stripe release or update fails must not block the rest of the sweep.
   const each = async (t: TaskRow, fn: () => Promise<unknown>) => {
     try {
@@ -1060,7 +1018,7 @@ export async function expireStale(): Promise<{ expired: number; reopened: number
     }
   };
   const deadListings = unwrap(await db().from("tasks").select("*").in("status", ["OPEN", "AWAITING_PAYMENT"]).lt("expires_at", now).limit(50)) as TaskRow[];
-  for (const t of deadListings) if (await each(t, () => finalizeExpired(t, "listing deadline passed"))) expired++;
+  for (const t of deadListings) if (t.post_state !== "HOLDING" && await each(t, () => finalizeExpired(t, "listing deadline passed"))) expired++;
   const deadLeases = unwrap(await db().from("tasks").select("*").in("status", [...ACTIVE_CLAIM_STATUSES]).lt("lease_expires_at", now).limit(50)) as TaskRow[];
   for (const t of deadLeases) {
     if (isPast(t.expires_at)) { if (await each(t, () => finalizeExpired(t, "lease expired after listing deadline"))) expired++; }
@@ -1158,5 +1116,49 @@ export async function dashboard() {
     settlements,
     jobs,
     events,
+  };
+}
+
+/** Bounded metadata observations; classes do not imply equal prompt complexity. */
+export async function marketPriceObservations() {
+  await ensureSchema();
+  const rows = unwrap(await db().from("tasks").select("id,allowed_models,max_runtime_s,price_cents,max_price_cents,status,created_at,claim_count").eq("pricing_mode", "task_offer").order("created_at", { ascending: false }).limit(500)) as TaskRow[];
+  const ids = rows.map((t) => t.id);
+  const events = ids.length ? unwrap(await db().from("events").select("task_id,created_at").in("task_id", ids).eq("type", "task.claimed").order("created_at", { ascending: true }).limit(5000)) as { task_id: string; created_at: string }[] : [];
+  const firstClaim = new Map<string, string>();
+  for (const e of events) if (!firstClaim.has(e.task_id)) firstClaim.set(e.task_id, e.created_at);
+  const grouped = new Map<string, TaskRow[]>();
+  for (const t of rows) {
+    const key = JSON.stringify([[...new Set(t.allowed_models)].sort(), t.max_runtime_s]);
+    grouped.set(key, [...(grouped.get(key) ?? []), t]);
+  }
+  const band = (values: number[]) => {
+    const v = [...values].sort((a,b) => a-b);
+    const at = (q: number) => v.length ? v[Math.floor((v.length - 1) * q)]! : null;
+    return { p25: at(.25), median: at(.5), p75: at(.75) };
+  };
+  return {
+    mode: "task_offer", generated_at: nowIso(), sample_limit: 500, sample_count: rows.length,
+    coverage: "Most recent 500 task-offer listings; at most 5000 claim events. Legacy seller-ask rows excluded.",
+    limitation: "Model set and runtime limit do not measure prompt complexity. These observations do not establish market equilibrium or authorize spending.",
+    groups: [...grouped.values()].map((tasks) => {
+      const accepted = tasks.filter((t) => t.claim_count > 0);
+      const fill = accepted.flatMap((t) => {
+        const time = firstClaim.get(t.id);
+        return time ? [Math.max(0, Date.parse(time) - Date.parse(t.created_at))] : [];
+      });
+      return {
+        allowed_models: [...new Set(tasks[0]!.allowed_models)].sort(), max_runtime_s: tasks[0]!.max_runtime_s,
+        sample_count: tasks.length, accepted_count: accepted.length,
+        sample_status: accepted.length >= 5 ? "observations_available" : "insufficient_data",
+        posted_price_cents: band(tasks.map((t) => t.price_cents ?? t.max_price_cents)),
+        accepted_price_cents: band(accepted.map((t) => t.price_cents ?? t.max_price_cents)),
+        fill_time_ms: band(fill), fill_time_sample_count: fill.length,
+        claim_rate: accepted.length / tasks.length,
+        expiry_rate: tasks.filter((t) => t.status === "EXPIRED").length / tasks.length,
+        approved_count: tasks.filter((t) => t.status === "APPROVED").length,
+        open_count: tasks.filter((t) => t.status === "OPEN").length,
+      };
+    }),
   };
 }

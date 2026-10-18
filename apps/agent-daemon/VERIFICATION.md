@@ -1,5 +1,13 @@
 # Computer C verification
 
+## Combined A/C build, October 17, 20:52 PDT
+
+The human assigned both A and C work to this computer. Task offers, parent jobs, E's review/replacement loop and D's checked transfer reconciliation are integrated. A/C added transactional task/budget creation before holds, durable post recovery, payout leases with stable retry keys, balance revisions and deterministic verdict ids. The seller UI compatibility edit removes its ask quote.
+
+Verification: workspace typecheck; 189 tests (crypto 7, web 17, core 49, daemon 22 including real Wassette, server 94); smoke APPROVED twice at 100c per task, commitment verification, reserved 0c/spent 200c MOCK. Component SHA-256 `a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34`. The additive schema was applied to Insforge; `node scripts/verify-postgres-posting.mjs` passed the actual atomic posting function and removed its synthetic fixtures. Insforge disallows transaction-control statements, so the check uses exact fixture cleanup instead of a rollback wrapper. No payment calls in that verification.
+
+Deployment remains pending D's idempotent hold/error metadata; B's grouped job UI and physical C/D execution are not yet verified. Historical evidence below retains its original scope.
+
 ## C follow-up status, October 17, 20:37 PDT
 
 - D is available and replied READY in `D-C-20261018T033115Z-01`. D passed the measured Wassette canary. C independently read the hosted dashboard and confirmed D seller `seller_0213ff3d1ffc3278` is ACTIVE and its standalone task `task_1197eab50f2c0367` is APPROVED. The shared parent job with overlapping C/D execution remains pending A/B implementation and deployment.
