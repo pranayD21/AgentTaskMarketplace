@@ -5,13 +5,14 @@ import path from "node:path";
 import http from "node:http";
 import { createHash } from "node:crypto";
 import { createSellerDashboard } from "../src/seller-dashboard.js";
+const paymentState=vi.hoisted(()=>({status:"READY"}));
 vi.mock("../src/marketplace.js", () => ({ Marketplace: class {
- async call(name:string) { return name === "whoami" ? {kind:"buyer",agent_id:"buyer_fixture",owner:{user_id:"human-fixture"},buyer_payment:{buyer_payment_status:"READY"},provider_budget:{enforced:true,available:true}} : {buyer_payment_status:"SETUP_REQUIRED",setup_url:"https://checkout.stripe.com/setup/fixture"}; }
+ async call(name:string) { return name === "whoami" ? {kind:"buyer",agent_id:"buyer_fixture",owner:{user_id:"human-fixture"},buyer_payment:{buyer_payment_status:paymentState.status},provider_budget:{enforced:true,available:true}} : {buyer_payment_status:"SETUP_REQUIRED",setup_url:"https://checkout.stripe.com/setup/fixture"}; }
  async close() {}
 } }));
 const realFetch=globalThis.fetch;
 const cleanup: Array<()=>Promise<void>>=[];
-afterEach(async()=>{vi.unstubAllGlobals();for(const fn of cleanup.splice(0))await fn();});
+afterEach(async()=>{paymentState.status="READY";vi.unstubAllGlobals();for(const fn of cleanup.splice(0))await fn();});
 async function fixture() {
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'atm-dashboard-'));
  const actions={status:vi.fn(async()=>({service:'stopped'})),prepare:vi.fn(async()=>{}),start:vi.fn(async()=>{}),stop:vi.fn(async()=>{}),payout:vi.fn(async()=>({payout_status:'PENDING_ONBOARDING',payout_onboarding_url:'https://connect.stripe.com/setup/fixture'}))};
@@ -86,4 +87,14 @@ it('requires a matching Google owner for buyer actions and hides state files',as
  expect((await f.request('/api/buyer-payment','POST',{Origin:'https://evil.example'})).status).toBe(403);
  expect((await f.request('/api/buyer-payment','POST')).status).toBe(200);
  expect((await f.request('/api/buyer','POST',{'X-ATM-Request':'','Content-Type':'application/json'})).status).toBe(400);
+});
+
+it('requires buying setup before starting a seller but always permits stopping',async()=>{
+ const f=await fixture();
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.writeFileSync(path.join(f.root,'buyer.json'),JSON.stringify({agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'human-fixture'},marketplace_url:'https://marketplace.example/mcp'}));
+ paymentState.status='SETUP_REQUIRED';
+ expect((await f.request('/api/start','POST')).status).toBe(402);expect(f.actions.start).not.toHaveBeenCalled();
+ expect((await f.request('/api/stop','POST')).status).toBe(200);expect(f.actions.stop).toHaveBeenCalledOnce();
+ paymentState.status='READY';expect((await f.request('/api/start','POST')).status).toBe(200);expect(f.actions.start).toHaveBeenCalledOnce();
 });

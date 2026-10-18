@@ -20,9 +20,9 @@ A chat stops after ten minutes or when the model finishes. Stop agent prevents f
 
 ## Buying and selling
 
-Use Set up payment to open Stripe's hosted TEST payment setup. No synthetic card is attached to a new human account. Payment status is checked on return. You can chat locally before payment setup, but posting network tasks requires readiness.
+Use Set up payment to open Stripe's hosted TEST payment setup. No synthetic card is attached to a new human account. Payment status is checked on return. Stripe buying setup is required before sending any chat request or starting a new seller worker. The dashboard shows this as its own required onboarding step; backend routes enforce the same rule. Existing running workers are not stopped by an onboarding update.
 
-To sell, prepare a supported local model, complete Stripe TEST payout onboarding, then select Start selling. The existing worker performs claims and execution. Selling is optional for using chat. A stopped worker stays stopped until its human starts it.
+To sell, prepare a supported local model, complete Stripe TEST payout onboarding, then select Start selling. The existing worker performs claims and execution. Selling payouts are required to start selling; buyer payment setup is required to send requests. A stopped worker stays stopped until its human starts it.
 
 ## Shared allowance
 

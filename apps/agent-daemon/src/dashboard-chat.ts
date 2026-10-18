@@ -101,6 +101,8 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string})
    if(typeof input.prompt!=='string'||!input.prompt.trim()||input.prompt.length>12000)throw Error('Enter a message of up to 12000 characters.');
    const models=await fetch('http://localhost:11434/api/tags',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()) as any;
    if(typeof input.model!=='string'||!models.models?.some((m:any)=>m.name===input.model))throw Error('Choose an installed Ollama model.');
+   const gate=new Marketplace(options.marketplaceUrl,buyer.api_key);
+   try {const account:any=await gate.call('whoami');if(account.kind!=='buyer'||account.agent_id!==buyer.agent_id||account.owner?.user_id!==buyer.owner.user_id)throw Error('Sign in with the account owner.');if(!['READY','MOCK'].includes(account.buyer_payment?.buyer_payment_status)){json(402,{error:'Complete Stripe buying setup before sending requests.'});return true;}}finally{await gate.close();}
    const run:Run={id:randomUUID(),owner_id:buyer.owner.user_id,buyer_id:buyer.agent_id,prompt:input.prompt,model:input.model,status:'running',events:[],task_ids:[],posts:{},jobs:[]};
    runs.push(run);if(runs.length>30)runs.shift();persist();const controller=new AbortController();active.set(run.id,controller);void execute(run,buyer,controller);json(202,{id:run.id});
   }catch(error){json(400,{error:error instanceof Error&&/^(Sign in|Message|Enter a message|Choose an installed)/.test(error.message)?error.message:'Chat is unavailable. Check your account and local model.'});}
