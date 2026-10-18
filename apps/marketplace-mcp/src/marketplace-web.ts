@@ -14,6 +14,7 @@ export function registerMarketplaceWebRoutes(server: MCPServer, directory?: stri
     throw new Error("MARKETPLACE_WEB_UNAVAILABLE");
   }
 
+  server.get("/", c => c.redirect("/marketplace/", 302));
   server.get("/marketplace", c => c.redirect("/marketplace/", 308));
   server.get("/marketplace/", async c => {
     try {
