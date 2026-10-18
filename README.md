@@ -6,6 +6,14 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 > **Team: start with [`AGENTS.md`](AGENTS.md).** It tells you which letter you are, what to read, and how the five computers coordinate. Status of everything built so far is in [`docs/PROGRESS.md`](docs/PROGRESS.md); the full plan is in [`docs/PLAN.md`](docs/PLAN.md).
 
+## Install or update a seller (one command)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/pranayD21/AgentTaskMarketplace/main/install.sh | bash
+```
+
+Runs the installer from the latest published seller release (`scripts/publish-seller-release.sh` publishes one from a clean checkout). Existing identities, models and the marketplace binding are kept.
+
 ## Current A/C integration
 
 Tasks carry posted offers. Sellers advertise models and accept an offer by claiming; seller ask prices are deprecated and ignored. Parent jobs group independently assigned parts. The server records posting and budget reservations together before requesting a hold, and persists review, replacement and payout recovery.
