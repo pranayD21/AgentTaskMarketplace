@@ -104,7 +104,7 @@ export class StripeMppProvider implements PaymentProvider {
       stripe_capture_id: chargeId,
       stripe_transfer_id: transfer.transfer_id,
       owed_cents: amountCents,
-      transferred_cents: transfer.transfer_id ? amountCents : 0,
+      transferred_cents: transfer.amount_cents,
       transfer_state: transfer.state,
       pending_reason: transfer.pending_reason,
       note,
