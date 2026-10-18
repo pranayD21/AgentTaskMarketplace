@@ -6,7 +6,7 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 > **Team: start with [`AGENTS.md`](AGENTS.md).** It tells you which letter you are, what to read, and how the five computers coordinate. Status of everything built so far is in [`docs/PROGRESS.md`](docs/PROGRESS.md); the full plan is in [`docs/PLAN.md`](docs/PLAN.md).
 
-## What works right now (verified 2026-10-17, 18:21 PDT)
+## What works right now (updated 2026-10-17, 19:30 PDT; evidence in `docs/PROGRESS.md` and each computer's HANDOFF)
 
 | Piece | State |
 |---|---|
@@ -14,11 +14,13 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 | Buyer flow | `register_agent` creates a Stripe test customer + saved test card; `post_task` places a manual-capture **hold** for the max price against the buyer's spend cap |
 | Seller flow (Node runtime) | Daemon lists local Ollama models, registers, atomically claims, runs **qwen3:8b locally** (5 s), seals the result to buyer + judge, submits |
 | Judge flow (Node runtime) | Daemon takes the review package, decrypts, verifies the sha256 commitment, applies the rubric, **APPROVE** → Stripe **captures** the claim price (75c of a 100c hold), remainder released |
-| Wasm sandbox (`packages/runner-wasm`) | Component builds (20 MB), **loads under Wassette 0.8**, exposes `get-public-key` / `run-task` / `judge-task`, registers an in-sandbox key, claims a task |
-| **Open blocker** | Wassette instantiates the component fresh per tool call, so the keypair from `get-public-key` is gone by `run-task` → decrypt fails (`invalid tag`). Fix: runner-driven single-call claim. **Server half done (contract v0.2, Oct 17 ~19:05 PDT):** `claim_task` takes a per-claim `runner_pubkey_b64` and returns the buyer + judge keys. Component half (`run-cycle` / `judge-cycle`) is with **C** and **E**. See `docs/PROGRESS.md` → Known issues |
-| Tests | `pnpm test`: crypto (7) + marketplace server (18: v0.2 per-claim keys, full approve/reject cycles through `runner-core`, claim race, lease expiry, sweep resilience). `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
+| Wasm sandbox, seller (`run-cycle`, C) | One Wassette instance generates the key, claims with it, decrypts, runs Ollama, seals and submits, so the earlier per-call-instance blocker is fixed. C verified live through the compatibility path (fresh key registered inside each cycle): APPROVED, `commitment_verified=true`, 75c Stripe test capture; denied-host log; two-seller race with one winner. The v0.2 per-claim path is verified offline (`pnpm smoke`; C's schema detection reads this server as `per-claim`); its live run is pending |
+| Judge in the sandbox (`judge-cycle`, E) | fetch → decrypt → commitment check → grade (`contains_text` or Claude via `llm_rubric`) → `submit_verdict`, in one instance. E verified APPROVE and REJECT (replacement answer, seller SUSPENDED, hold cancelled) |
+| Inkbox (E) | Buyer and seller identities with A2A; per-task notice threads from `atm-marketplace` (free tier: 3 identities, so judges get none) |
+| Contract v0.2 (A) | Per-claim runner keys, keys in the claim response, atomic spend-cap reservation, `next_action` on every A-owned 4xx |
+| Tests | `pnpm test`: crypto 7, runner-core 19, agent-daemon 6 (+1 needing Wassette, `ATM_TEST_WASSETTE=1`), marketplace server 22. `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
 
-Not started: Stripe payouts to sellers (Accounts v2 onboarding), Stripe MPP agent-wallet mode, Inkbox identities/A2A, dashboard UI, Manufact deployment, agent-facing skill docs, demo script.
+On branches, pending merge by C (acting integrator): seller payouts with a synthetic test identity and `PAYMENT_MODE=mpp` (D, `feat/d-payments`); dashboard, buyer skill, `llms.txt` and agent recipes (B, `feat/b-buyer`). Not done yet: Manufact deployment, Armature evaluation, a live v0.2 run against Insforge + Stripe. Demo script: `demo/README.md` (E).
 
 ## How it works
 
@@ -37,16 +39,16 @@ Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)     
            ▼                                     ┌──────────────────────┐          ┌──────────────────────┐
   Insforge Postgres (ciphertext only)            │ Wassette (Wasmtime)  │          │ Wassette (Wasmtime)  │
   Stripe test mode (hold → capture/cancel)       │ runner.wasm          │          │ runner.wasm          │
-                                                 │ net: localhost:11434 │          │ net: api.anthropic   │
+                                                 │ net: localhost + mkt │          │ net: anthropic + mkt │
                                                  └──────────┬───────────┘          │ env: ANTHROPIC_KEY,  │
                                                             ▼                      │      JUDGE_PRIV_KEY  │
                                                    Ollama qwen3:8b (host GPU)      └──────────────────────┘
 ```
 
-1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt is encrypted to the judge key immediately and held encrypted-at-rest under a server key until a seller claims.
+1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt is encrypted to the judge key immediately and held encrypted at rest under a server key until a result is submitted, then deleted.
 2. The first eligible seller to `claim_task` wins a 300 s lease and receives the task **encrypted to a key generated inside its sandbox**.
-3. The runner decrypts, calls the local model (the only host it is allowed to reach), and encrypts the identical canonical result bytes to the buyer and to the judge, with a sha256 commitment. The seller host only ever forwards ciphertext.
-4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and pays the seller; `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and hands the buyer the judge's own answer.
+3. Inside the same instance the runner decrypts, calls the local model, and encrypts the identical canonical result bytes to the buyer and to the judge, with a sha256 commitment. Its only network grants are Ollama and the marketplace. The seller host only ever forwards ciphertext.
+4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller (recorded `PENDING_ONBOARDING` on `main` until D's payouts merge); `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and hands the buyer the judge's own answer.
 
 ## Layout
 
@@ -104,9 +106,9 @@ Keys live in `.env` (git-ignored, mode 600). Daemon identities are cached in `.a
 
 ## What we claim, honestly
 
-- The runner is a WebAssembly component under Wassette (Wasmtime) with deny-by-default permissions; its only network grant is the local Ollama port (seller) or the judge model API (judge). We demo a denied request.
+- The runner is a WebAssembly component under Wassette (Wasmtime) with deny-by-default permissions. Its network grants are Ollama plus the marketplace (seller), or the judge model API plus the marketplace (judge). Wassette 0.8 enforces these per **hostname, not port**. We demo a denied request.
 - Task and result payloads are encrypted end to end between the marketplace, the sandbox, the buyer and the judge. Inference tokens do cross into Ollama on the seller's GPU: that boundary is where a GPU TEE would slot in. This is **not** a TEE and we do not claim remote attestation.
-- Model identity is self-reported from Ollama (name + digest) plus a liveness canary, not cryptographically attested.
+- Model identity is self-reported from Ollama (name + digest); the runner checks that the model is installed before running. It is not cryptographically attested.
 - All payments run in Stripe **test mode**; every amount is labelled as such. The buyer trusts the marketplace operator (like any marketplace); the seller is not trusted.
 
 Full trust model: [`docs/SECURITY.md`](docs/SECURITY.md).
