@@ -71,9 +71,11 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 | A stray seller or judge takes a task | Stop it; or pin the intended seller with `bash demo/run.sh seller-task <id>`. |
 | Inkbox slow or out of slots | Notices are fire-and-forget (5 s); the flow never waits. Show an earlier thread in the console. |
 
-## Deferred: two-computer parent-job run (L1/F1)
+## Two-computer parent-job run (L1/F1)
 
 Runs after A deploys parent jobs and posted task pricing and B's buyer is ready. It is **not** complete until it has run; D's earlier standalone task (`seller_0213ff3d1ffc3278`) does not count.
+
+**Run 1, 2026-10-18 04:05–04:08 UTC (hosted source 920c052, contract 0.3, `task_offer`).** Job `job_6487101b45b433f1`, two prepared parts at a 60c posted offer each (job budget 120c). C's Mac (`seller_07a57bbbd50fd91e`) ran `task_2e401d3bac3419a5` for 88.4 s; D's Mac (`seller_0213ff3d1ffc3278`) ran `task_d7e2992aa0951f46` for 122.6 s; **execution overlapped 75.1 s** (same-claim `task.running → result.submitted`; reservation overlap 76.3 s reported separately). Both `evidence: OK`, both `APPROVE RUBRIC_MATCH` (deterministic rubric, no judge model call), each paid the accepted 60c with a Stripe TEST transfer. Public-only evidence: `demo/evidence/job_6487101b45b433f1.evidence.txt` and `.dashboard.json`. B's automatic decomposition/aggregation is not part of this run (the parts were prepared explicitly).
 
 | computer | does |
 |---|---|
