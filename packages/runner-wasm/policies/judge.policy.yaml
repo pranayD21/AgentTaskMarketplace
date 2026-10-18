@@ -1,0 +1,10 @@
+version: "1.0"
+description: "ATM judge runner: may reach only the judge model API and read two secrets"
+permissions:
+  network:
+    allow:
+      - host: "api.anthropic.com"
+  environment:
+    allow:
+      - key: "ANTHROPIC_API_KEY"
+      - key: "JUDGE_PRIVATE_KEY_B64"

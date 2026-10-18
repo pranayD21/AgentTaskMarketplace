@@ -89,16 +89,16 @@ class StripeCardProvider implements PaymentProvider {
   }
 
   async onboardSeller(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+    // Stripe refuses new Accounts v1 (type=custom) integrations; v2 core accounts
+    // with the recipient configuration can receive transfers from the platform.
     try {
-      const account = await this.stripe.accounts.create({
-        type: "custom",
-        country: "US",
-        email: `${agent.id}@example.com`,
-        business_type: "individual",
-        capabilities: { transfers: { requested: true } },
-        tos_acceptance: { date: Math.floor(Date.now() / 1000), ip: "127.0.0.1" },
-        business_profile: { mcc: "7372", product_description: "Agent compute (hackathon test account)", url: "https://example.com" },
-        individual: { first_name: "Seller", last_name: agent.id.slice(-6), email: `${agent.id}@example.com` },
+      const account = await this.stripe.v2.core.accounts.create({
+        display_name: agent.display_name,
+        contact_email: `${agent.id}@agenttaskmarket.dev`,
+        identity: { country: "us" },
+        dashboard: "none",
+        defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+        configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
         metadata: { agent_id: agent.id, app: "agent-task-marketplace" },
       });
       return { stripe_account_id: account.id };

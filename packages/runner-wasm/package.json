@@ -1,0 +1,23 @@
+{
+  "name": "@atm/runner-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle": "esbuild src/component.ts --bundle --format=esm --platform=neutral --target=es2022 --external:wasi:* --outfile=dist/component.js",
+    "componentize": "jco componentize dist/component.js --wit ./wit --world-name runner -o dist/runner.wasm",
+    "build": "pnpm bundle && pnpm componentize && shasum -a 256 dist/runner.wasm | cut -d' ' -f1 > dist/runner.wasm.sha256 && cat dist/runner.wasm.sha256",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@atm/crypto": "workspace:*",
+    "@atm/runner-core": "workspace:*",
+    "@atm/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.23.0",
+    "@bytecodealliance/jco": "^1.39.0",
+    "@napi-rs/lzma-darwin-arm64": "1.5.1",
+    "esbuild": "^0.28.2"
+  }
+}

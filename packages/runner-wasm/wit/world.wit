@@ -1,0 +1,18 @@
+package atm:runner@0.1.0;
+
+/// Agent Task Marketplace runner: executes one encrypted task (seller) or
+/// grades one encrypted result (judge) entirely inside the Wasm sandbox.
+world runner {
+  import wasi:config/store@0.2.0-rc.1;
+
+  /// Returns {"key_id","public_key_b64"} for the X25519 keypair generated inside this sandbox.
+  export get-public-key: func() -> string;
+
+  /// Decrypts the seller envelope, runs the model over the only allowed network host,
+  /// and returns JSON with result envelopes for buyer + judge plus the sha256 commitment.
+  export run-task: func(seller-envelope: string, opts: string) -> result<string, string>;
+
+  /// Decrypts the judge copies, verifies the commitment, applies the rubric,
+  /// and returns the verdict JSON (optionally with a replacement answer for the buyer).
+  export judge-task: func(task-envelope: string, result-envelope: string, opts: string) -> result<string, string>;
+}

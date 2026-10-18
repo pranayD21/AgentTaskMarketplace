@@ -210,6 +210,13 @@ export interface RegisterSellerInput {
 }
 
 export async function registerSeller(agent: AgentRow, input: RegisterSellerInput): Promise<SellerPublic> {
+  if (!agent.stripe_account_id && payments().mode === "card") {
+    const onboarded = await payments().onboardSeller({ id: agent.id, display_name: agent.display_name });
+    if (onboarded.stripe_account_id) {
+      unwrap(await db().from("agents").update({ stripe_account_id: onboarded.stripe_account_id }).eq("id", agent.id));
+      agent = { ...agent, stripe_account_id: onboarded.stripe_account_id };
+    }
+  }
   const unknown = input.models.filter((m) => !isAllowlistedModel(m.model_id)).map((m) => m.model_id);
   if (unknown.length) {
     throw new MarketplaceError("MODEL_NOT_ALLOWED", `Models not on the allowlist: ${unknown.join(", ")}.`, {

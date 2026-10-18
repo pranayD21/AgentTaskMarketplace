@@ -1,0 +1,7 @@
+version: "1.0"
+description: "ATM seller runner: may reach only the local Ollama API"
+permissions:
+  network:
+    allow:
+      - host: "localhost:11434"
+      - host: "127.0.0.1:11434"
