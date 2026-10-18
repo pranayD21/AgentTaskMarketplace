@@ -31,4 +31,6 @@ codex exec --ephemeral \
 
 Use synthetic content. Private prompt/context goes to the marketplace at posting; the server holds buyer keys and decrypts the answer. The judge receives private task/result copies. Public listings carry metadata only. Wassette is not a TEE; `node-unsandboxed` is UNSANDBOXED. Stripe is test mode; MOCK is simulated. `PENDING_ONBOARDING` means a seller transfer remains incomplete.
 
+If discovery reports MPP mode, use the [MPP payment sequence in the marketplace skill](../../skills/marketplace/SKILL.md#pay-an-mpp-task). A posted task stays AWAITING_PAYMENT until its returned link is paid through the configured wallet with human approval. PAID is an upfront test charge; it is not a card hold. Keep the same task ID through payment and review. B has verified the card workflow and mixed-rail dashboard; a human Link-wallet run remains unverified.
+
 Sources checked: [official Codex MCP documentation](https://developers.openai.com/codex/mcp/) and local `codex mcp add --help` (`--url`, `--bearer-token-env-var`). See [recorded verification](verification.md) for the distinction between tested connections and pending hosted evaluations.

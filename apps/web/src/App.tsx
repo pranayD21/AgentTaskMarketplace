@@ -24,7 +24,7 @@ function statusTone(status: string) {
     ? "good"
     : ["REJECTED", "SUSPENDED"].includes(status)
       ? "bad"
-      : ["RUNNING", "JUDGING", "PAYLOAD_READY", "HELD"].includes(status)
+      : ["RUNNING", "JUDGING", "PAYLOAD_READY", "HELD", "PAID"].includes(status)
         ? "warm"
         : "";
 }
@@ -481,7 +481,9 @@ export function App() {
               {data
                 ? data.payments.mode === "mock"
                   ? "MOCK · SIMULATED PAYMENTS"
-                  : "STRIPE TEST MODE"
+                  : data.payments.mode === "mpp"
+                    ? "MPP · STRIPE TEST MODE"
+                    : "STRIPE TEST MODE"
                 : "PAYMENT MODE UNCONFIRMED"}
             </Badge>
           </div>
