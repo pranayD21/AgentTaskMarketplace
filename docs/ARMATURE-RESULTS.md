@@ -31,7 +31,7 @@ Stripe TEST evidence: a 100-cent hold, 75 cents captured, 75 cents transferred t
 | Existing rejected result | Not run in Armature. Separate live rejection evidence is in E's handoff. |
 | Unknown post outcome | Not run in Armature. |
 
-The tool trace is retained in the signed-in Armature account and includes its disposable buyer credential. Do not export the raw trace to GitHub. A screenshot of the passed case list, with tool payloads closed, was saved in C's task outputs as `armature-accepted-pass.png`.
+The tool trace is retained in the signed-in Armature account and includes its disposable buyer credential. Do not export the raw trace to GitHub. A screenshot of the passed case list, with tool payloads closed, was saved in C's task outputs as `armature-accepted-pass.jpg`.
 
 ## Cost interpretation
 
