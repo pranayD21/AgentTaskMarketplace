@@ -6,7 +6,10 @@
 import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import {
+  APPROVE_REASON_CODES,
   CONTRACT_VERSION,
+  INFRA_REASON_CODES,
+  REJECT_REASON_CODES,
   Envelope,
   LEASE_SECONDS,
   MAX_PRICE_CENTS,
@@ -25,6 +28,7 @@ import { dbLabel } from "./db.js";
 import { env } from "./env.js";
 import { inkbox } from "./inkbox.js";
 import { payments } from "./payments.js";
+import { fetchReplacementPackage, submitReplacement } from "./review.js";
 import * as svc from "./service.js";
 
 type ToolResult = {
@@ -86,7 +90,8 @@ export function registerTools(server: MCPServer): void {
         how_to_buy: [
           "register_agent(kind='buyer', display_name, spend_cap_cents) → save the api_key; send it as Authorization: Bearer on every call",
           "whoami → check spend.available_cents; list_sellers → check that a seller is online with one of your models at an ask within your max",
-          "post_task(prompt, allowed_models, max_price_cents, rubric) → the prompt is never published; only models + price are",
+          "post_task(prompt, allowed_models, max_price_cents, rubric, client_request_id) → the prompt is never published; only models + price are. If the response is lost, repeat with the same client_request_id: you get the existing task, not a second hold",
+          "Several parts? create_job(budget_cents) → post_task(job_id, part_key) per part → get_job shows progress across sellers; combine only APPROVED, commitment-verified parts",
           "get_task(task_id) about every 3 s, with a bounded wait (give up after roughly max_runtime_s + 120 s), to watch OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED|REJECTED",
           "get_result(task_id) → the decrypted answer. From SUBMITTED on it may show commitment_verified=true: that proves you and the judge see the same bytes, not that the judge approved them. Trust the answer once the task is APPROVED; if REJECTED, use replacement_answer (judge-produced) when present",
         ],
@@ -199,6 +204,10 @@ export function registerTools(server: MCPServer): void {
         expires_in_s: z.number().int().positive().max(86_400).optional().describe("How long the listing stays open; default 3600."),
         rubric: Rubric.describe("How the judge grades: contains_text (deterministic) or llm_rubric (criteria graded by the judge model)."),
         max_tokens: z.number().int().positive().max(4096).optional().describe("Output token cap for the seller model; default 512."),
+        client_request_id: z.string().min(8).max(64).optional().describe("Recommended. A random id you choose for this post; if the response is lost, post again with the same id and the existing task comes back (idempotent: true), with no second hold."),
+        job_id: z.string().optional().describe("Post this task as a part of a job from create_job (requires part_key)."),
+        part_key: z.string().min(1).max(64).optional().describe("PUBLIC stable id of the part within the job, e.g. part-1. Re-posting a part whose latest attempt is live returns it; after REJECTED/EXPIRED/CANCELLED it creates the next attempt."),
+        part_label: z.string().max(60).optional().describe("PUBLIC short label shown on the dashboard. Never put task content here."),
         ...apiKeyField,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -209,6 +218,57 @@ export function registerTools(server: MCPServer): void {
         const { api_key: _k, ...input } = p;
         const out = await svc.postTask(buyer, input);
         return { ...out, next: `Poll get_task('${out.task.task_id}') until SUBMITTED/APPROVED, then get_result.` };
+      }),
+  );
+
+  server.tool(
+    {
+      name: "create_job",
+      description:
+        "Buyer: start a job, which groups the parts of one request so they can run on different sellers in parallel. budget_cents caps the total of all its parts (retries included) and must fit your available spend cap; it reserves nothing by itself. A job stores no task text. Then post_task(job_id, part_key, …) once per part and poll get_job.",
+      inputSchema: z.object({
+        budget_cents: z.number().int().positive().max(MAX_PRICE_CENTS).describe("Ceiling for the sum of max_price_cents over every part attempt (US cents, test mode)."),
+        label_public: z.string().max(60).optional().describe("PUBLIC label shown on the dashboard. Never put task content here."),
+        client_job_key: z.string().min(8).max(64).optional().describe("Recommended. A random key; repeating create_job with it returns the same job."),
+        ...apiKeyField,
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const buyer = await requireActor(ctx as ToolCtx, p, ["buyer"]);
+        const { api_key: _k, ...input } = p;
+        const out = await svc.createJob(buyer, input);
+        return { ...out, next: `post_task with job_id='${out.job.job_id}' and a part_key per part, then poll get_job.` };
+      }),
+  );
+
+  server.tool(
+    {
+      name: "get_job",
+      description:
+        "Buyer: a job's parts (every attempt), progress over the latest attempt of each part, budget use, and status (EMPTY, IN_PROGRESS, COMPLETE, PARTIAL_FAILURE). Combine only parts whose get_result is APPROVED with commitment_verified=true, and keep failed parts visible.",
+      inputSchema: z.object({ job_id: z.string(), ...apiKeyField }),
+      annotations: { readOnlyHint: true },
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const buyer = await requireActor(ctx as ToolCtx, p, ["buyer"]);
+        return svc.getJobForBuyer(buyer, p.job_id);
+      }),
+  );
+
+  server.tool(
+    {
+      name: "list_my_jobs",
+      description: "Buyer: your jobs (newest first, up to 50) with progress and budget use.",
+      inputSchema: z.object({ ...apiKeyField }),
+      annotations: { readOnlyHint: true },
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const buyer = await requireActor(ctx as ToolCtx, p, ["buyer"]);
+        return { jobs: await svc.listJobsForBuyer(buyer) };
       }),
   );
 
@@ -422,13 +482,13 @@ export function registerTools(server: MCPServer): void {
     {
       name: "submit_verdict",
       description:
-        "Judge: record APPROVE (captures the buyer's hold for the seller's price and pays the seller) or REJECT (releases the hold, strikes the seller, optionally attaches a replacement answer encrypted to the buyer). Idempotent per task.",
+        "Judge: record APPROVE (captures the buyer's hold for the seller's price and pays the seller) or REJECT (releases the hold, strikes the seller, optionally attaches a replacement answer encrypted to the buyer). If the judge model failed (unavailable, timeout, unreadable grade), send a judge infrastructure reason_code instead: the review is deferred and retried, with no strike and no money moved. Idempotent per task: a repeated call finishes the first recorded decision. The public explanation is chosen by the server from reason_code.",
       inputSchema: z.object({
         task_id: z.string(),
         result_id: z.string(),
         verdict: Verdict,
-        reason_code: VerdictReasonCode.describe(`One of ${VERDICT_REASON_CODES.join(", ")}`),
-        reason_public: z.string().max(400).describe("Shown to buyer and seller; must not quote private text."),
+        reason_code: VerdictReasonCode.describe(`APPROVE: ${APPROVE_REASON_CODES.join(", ")}. REJECT: ${REJECT_REASON_CODES.join(", ")}. Defer (any verdict): ${INFRA_REASON_CODES.join(", ")}.`),
+        reason_public: z.string().max(400).optional().describe("Ignored: the server publishes a fixed explanation for reason_code. Accepted so older judges keep working."),
         score: z.number().min(0).max(1).optional(),
         replacement_enc_buyer: Envelope.optional(),
         ...apiKeyField,
@@ -439,6 +499,41 @@ export function registerTools(server: MCPServer): void {
         const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
         const { api_key: _k, ...input } = p;
         return svc.submitVerdict(judge, input);
+      }),
+  );
+
+  server.tool(
+    {
+      name: "fetch_replacement_package",
+      description:
+        "Judge: take the oldest REJECTED task whose buyer has not yet received a judge-produced answer (leased to you for 5 minutes). Returns the judge copy of the task and the buyer's public key; produce the answer, seal it to the buyer and call submit_replacement. Null when nothing is waiting.",
+      inputSchema: z.object({ ...apiKeyField }),
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
+        return { package: await fetchReplacementPackage(judge), judge_key_id: env().JUDGE_KEY_ID };
+      }),
+  );
+
+  server.tool(
+    {
+      name: "submit_replacement",
+      description:
+        "Judge: deliver the replacement answer for a REJECTED task (replacement_enc_buyer sealed to the buyer), or report that the judge model could not produce one (reason_code JUDGE_UNAVAILABLE / JUDGE_TIMEOUT / JUDGE_MALFORMED; retried with backoff, UNAVAILABLE after 5 attempts). Never moves money or changes reputation. Idempotent once delivered.",
+      inputSchema: z.object({
+        task_id: z.string(),
+        result_id: z.string(),
+        replacement_enc_buyer: Envelope.optional(),
+        reason_code: VerdictReasonCode.optional(),
+        ...apiKeyField,
+      }),
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const judge = await requireActor(ctx as ToolCtx, p, ["judge"]);
+        const { api_key: _k, ...input } = p;
+        return submitReplacement(judge, input);
       }),
   );
 }

@@ -24,6 +24,8 @@ interface Column {
 interface Table {
   name: string;
   columns: Map<string, Column>;
+  /** Multi-column unique indexes; like Postgres, a row with any NULL in them never conflicts. */
+  uniques: string[][];
   rows: Row[];
   seq: number;
 }
@@ -68,7 +70,9 @@ function parseColumn(def: string): Column | null {
     serial: /serial$/i.test(type),
   };
   const d = /\bdefault\s+('(?:[^']|'')*'(?:::\w+)?|[\w.()-]+)/i.exec(def);
-  if (d) col.default = parseDefault(d[1]!);
+  // Postgres array literal: only the empty array is used in db/schema.sql.
+  if (d && type.endsWith("[]") && d[1] === "'{}'") col.default = () => [];
+  else if (d) col.default = parseDefault(d[1]!);
   return col;
 }
 
@@ -76,12 +80,15 @@ export function parseSchema(sql: string): Map<string, Table> {
   const clean = sql.replace(/--[^\n]*/g, "");
   const tables = new Map<string, Table>();
   for (const m of clean.matchAll(/create table if not exists (\w+)\s*\(([\s\S]*?)\n\);/gi)) {
-    const table: Table = { name: m[1]!, columns: new Map(), rows: [], seq: 0 };
+    const table: Table = { name: m[1]!, columns: new Map(), uniques: [], rows: [], seq: 0 };
     for (const part of splitTopLevel(m[2]!)) {
       const col = parseColumn(part);
       if (col) table.columns.set(col.name, col);
     }
     tables.set(table.name, table);
+  }
+  for (const m of clean.matchAll(/create unique index if not exists \w+ on (\w+)\s*\(([^)]+)\);/gi)) {
+    tables.get(m[1]!)?.uniques.push(m[2]!.split(",").map((c) => c.trim()));
   }
   for (const m of clean.matchAll(/alter table (\w+) add column if not exists ([^;]+);/gi)) {
     const table = tables.get(m[1]!);
@@ -118,7 +125,7 @@ class Query implements PromiseLike<DbResult> {
   private orders: { col: string; ascending: boolean }[] = [];
   private max: number | undefined;
 
-  constructor(private readonly table: Table) {}
+  constructor(private readonly table: Table, private readonly fault: (op: "select" | "insert" | "update") => DbError | null = () => null) {}
 
   select(columns = "*"): this {
     if (this.op === "select") this.columns = columns;
@@ -142,6 +149,11 @@ class Query implements PromiseLike<DbResult> {
   }
   in(col: string, values: readonly unknown[]): this {
     this.filters.push((r) => r[col] != null && values.includes(r[col]));
+    return this;
+  }
+  /** PostgREST `is`: matches NULL / true / false exactly (unlike eq, which never matches NULL). */
+  is(col: string, value: null | boolean): this {
+    this.filters.push((r) => (r[col] ?? null) === value);
     return this;
   }
   lt(col: string, value: unknown): this {
@@ -179,6 +191,12 @@ class Query implements PromiseLike<DbResult> {
   }
 
   private checkRow(row: Row, ignore?: Row): void {
+    for (const cols of this.table.uniques) {
+      if (cols.some((c) => row[c] == null)) continue;
+      if (this.table.rows.some((r) => r !== ignore && cols.every((c) => r[c] === row[c]))) {
+        this.fail("23505", `duplicate key value violates unique constraint on "${this.table.name}(${cols.join(", ")})"`);
+      }
+    }
     for (const col of this.table.columns.values()) {
       if (col.notNull && row[col.name] == null) this.fail("23502", `null value in column "${col.name}" of relation "${this.table.name}" violates not-null constraint`);
       if (col.unique && row[col.name] != null && this.table.rows.some((r) => r !== ignore && r[col.name] === row[col.name])) {
@@ -213,6 +231,8 @@ class Query implements PromiseLike<DbResult> {
   }
 
   private execute(): DbResult {
+    const injected = this.fault(this.op);
+    if (injected) throw injected;
     if (this.op === "select") return { data: this.project(this.matching()), error: null };
 
     if (this.op === "insert") {
@@ -245,15 +265,31 @@ class Query implements PromiseLike<DbResult> {
   }
 }
 
+type Fault = { table: string; op: "select" | "insert" | "update"; remaining: number };
+
 export class MemoryDb {
   readonly tables: Map<string, Table>;
+  private faults: Fault[] = [];
   constructor(schemaSql: string) {
     this.tables = parseSchema(schemaSql);
   }
   from(name: string): Query {
     const table = this.tables.get(name);
     if (!table) throw new Error(`memdb: unknown table ${name}`);
-    return new Query(table);
+    return new Query(table, (op) => this.takeFault(name, op));
+  }
+  /** Tests: make the next `times` statements of this kind fail as if the database were unreachable. */
+  injectFault(table: string, op: Fault["op"], times = 1): void {
+    this.faults.push({ table, op, remaining: times });
+  }
+  clearFaults(): void {
+    this.faults = [];
+  }
+  private takeFault(table: string, op: Fault["op"]): DbError | null {
+    const f = this.faults.find((x) => x.table === table && x.op === op && x.remaining > 0);
+    if (!f) return null;
+    f.remaining--;
+    return { code: "INJECTED", message: `injected ${op} failure on ${table}` };
   }
   /** Rows of a table (copies), for aggregates the builder cannot express. */
   rows(name: string): Row[] {

@@ -189,3 +189,12 @@ Earlier issues above are historical. The per-call key blocker (#1), D payout int
 - Armature now has three passing scenarios: accepted purchase, cap rejection and simulated task-ID recovery, each 5/5 across three criteria. Recovery was rerun after correcting its fixture description; this is four runs across three scenarios. See [the detailed report](ARMATURE-RESULTS.md).
 - Follow-ups added no marketplace charges. Original buyer: 75c spent, 0 reserved, 25 available; one approved task, no OPEN or REJECTED fixture. Pending-seller and rejected-result cases remain unrun because the available cap is below the 50c minimum for a new fixture. No identity or cap bypass was used.
 - E’s final demo and Inkbox notice handoff is still awaiting its human. The team rehearsal and recording remain outstanding.
+
+### A, 20:15–20:55 PDT (completion-audit items, offline verification)
+
+- Contract v0.3 published (`docs/CONTRACT.md` §8–§12) before implementation; DECISIONs sent to B, D and E, and an ACK to C.
+- `9622d2d` J1–J3 and P1/P2 server side. `62b0e46` F1 jobs and parts, V1 idempotent posting, I1 Inkbox persistence and the B1 `UsageRecord` schema.
+- Evidence (memory DB, mock payments, injected DB and payment faults; no live services, which this container cannot reach): `pnpm -r typecheck` clean; `pnpm test` gave 127 passing tests (marketplace-mcp 65, 32 of them new acceptance tests) with 2 Wassette skips; `pnpm smoke` passed with contract 0.3. Six mutations to key fixes each made the new tests fail.
+- Still open: deployment and live checks after C merges (hosted `/api/health` is not reachable from A's container); D's `retryTransfer` provider hook; E's use of the new judge codes and replacement loop; B's job orchestration and UI. X1 is design only (`docs/X1-CONFIDENTIAL-COMPUTE.md`), and host confidentiality remains unmet.
+- Corrected claims in PLAN/README/SECURITY: protection is from the seller daemon, not the machine owner; there is no liveness canary; replacement delivery is explicit, not guaranteed; judge outages never strike.
+

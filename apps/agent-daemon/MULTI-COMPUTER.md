@@ -1,6 +1,6 @@
 # C's seller setup and live rehearsal
 
-C owns the first seller and integration. D is assigned the second physical seller, B the buyer/dashboard and E the judge. A owns shared contracts. The human reported on October 17 that a second machine is not yet available for the live check. D separately reported installed Ollama/Wassette on a distinct machine; that is setup evidence, not a completed multi-computer job.
+C owns the first seller and integration. D is assigned the second physical seller, B the buyer/dashboard and E the judge. A owns shared contracts. The human confirmed on October 17 that D is available. D also reported an approved standalone hosted task. C and D still need to complete different parts of one parent job at overlapping times.
 
 ## Prepare the second seller without buying a task
 
@@ -51,7 +51,7 @@ Send metadata through the appropriate directed file:
 - Canary pass/fail and redacted measurement rows. Never send `.env`, seller state or a raw model response.
 - Readiness to accept a specified child task at the declared price.
 
-Current C seller: `seller_07a57bbbd50fd91e`, saved display name `computer-c-v02`. C hardware measured locally: Apple M5 Pro, 18 CPU cores, 48 GiB memory. D reported Apple M4 Pro, 24 GB and LAN `192.168.4.160`; C is `192.168.4.163`. D still needs to supply its live seller ID and execution evidence.
+Current C seller: `seller_07a57bbbd50fd91e`, saved display name `computer-c-v02`. C hardware measured locally: Apple M5 Pro, 18 CPU cores, 48 GiB memory. D reported Apple M4 Pro, 24 GB and LAN `192.168.4.160`; C is `192.168.4.163`. D is seller `seller_0213ff3d1ffc3278`, using `.atm-state/seller-c9470e09c5.json`. D reported task `task_1197eab50f2c0367`, claim `claim_e1df93f85c0765d7`, result `result_e2a4f612f9ae4d80`, submitted at 2026-10-18T03:22:30Z and later approved. These are D-reported standalone-task results; C must still verify the joint parent-job trace.
 
 ## Run the job when dependencies are ready
 

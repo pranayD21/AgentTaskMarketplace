@@ -1,5 +1,9 @@
 # Computer D — payments: seller payouts and the Stripe agent-wallet showcase
 
+## Second computer is available: resume L1/F1 now
+
+The human confirmed on October 17 that D is available and should join the network to complete the deferred two-computer job demonstration. Read the newest C-to-D message, acknowledge READY in D-to-C, run the local canary, and retain seller `seller_0213ff3d1ffc3278` with its existing private state. Your approved standalone task proves connectivity. The remaining check requires you and C to execute different parts of one parent job at overlapping times, then verify results and payments. A supplies the parent-job/task-pricing server, B the buyer job and child IDs, C integration and first seller, E judge and evidence. Do not create a substitute task while waiting for the real child ID.
+
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)
 
 The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically.

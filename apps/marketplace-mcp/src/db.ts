@@ -8,6 +8,7 @@ import { memoryDb } from "./memdb.js";
 // ---------------------------------------------------------------------------
 
 export interface AgentRow {
+  balance_keys?: string[] | null;
   id: string;
   kind: AgentKind;
   display_name: string;
@@ -63,6 +64,20 @@ export interface TaskRow {
   lease_expires_at: string | null;
   claim_runner_key_id: string | null;
   claim_runner_pubkey_b64: string | null;
+  review_status?: string | null;
+  review_attempts?: number | null;
+  review_retry_at?: string | null;
+  replacement_status?: string | null;
+  replacement_attempts?: number | null;
+  replacement_retry_at?: string | null;
+  settle_pending?: boolean | null;
+  job_id?: string | null;
+  part_key?: string | null;
+  part_label?: string | null;
+  attempt?: number | null;
+  client_request_id?: string | null;
+  inkbox_thread_owner?: string | null;
+  inkbox_buyer_context_id?: string | null;
   claim_count: number;
   judge_id: string | null;
   payment_mode: "card" | "mpp" | "mock";
@@ -96,6 +111,7 @@ export interface VerdictRow {
   reason_public: string;
   score: number | null;
   replacement_enc_buyer: Envelope | null;
+  seller_id?: string | null;
   created_at: string;
 }
 
@@ -110,6 +126,45 @@ export interface SettlementRow {
   stripe_transfer_id: string | null;
   note: string | null;
   created_at: string;
+  // v0.3 §9
+  outcome?: "APPROVE" | "REJECT" | "CANCEL" | "EXPIRE" | null;
+  result_id?: string | null;
+  verdict_reason_code?: string | null;
+  decision?: SettlementDecision | null;
+  payment_state?: string | null;
+  finalized_at?: string | null;
+  updated_at?: string | null;
+  payout_owed_cents?: number | null;
+  payout_transferred_cents?: number | null;
+  transfer_state?: "NOT_APPLICABLE" | "PENDING" | "TRANSFERRED" | null;
+  transfer_attempts?: number | null;
+  transfer_retry_at?: string | null;
+}
+
+/** What a settlement intent remembers so any later call can finish it the same way. */
+export interface SettlementDecision {
+  judge_id?: string | null;
+  score?: number | null;
+  replacement_enc_buyer?: Envelope | null;
+  /** Task payment_state when the decision was recorded. */
+  prior_payment_state: string;
+  /** Buyer reservation to give back (0 when none was taken, e.g. an unpaid mpp task). */
+  release_reserved_cents: number;
+  /** Reason passed to the payment provider when the hold is released. */
+  release_reason?: string | null;
+}
+
+export interface JobRow {
+  id: string;
+  buyer_id: string;
+  label_public: string | null;
+  budget_cents: number;
+  reserved_cents: number;
+  spent_cents: number;
+  balance_keys: string[] | null;
+  client_job_key: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface EventRow {
@@ -147,11 +202,58 @@ export function dbLabel(): string {
  * so a server started from main brings an older database up to date without
  * anyone remembering to run scripts/db-migrate.sh.
  */
-const SCHEMA_PATCHES = [
+export const SCHEMA_PATCHES = [
+  // v0.2
   "alter table tasks add column if not exists claim_runner_key_id text",
   "alter table tasks add column if not exists claim_runner_pubkey_b64 text",
   "alter table sellers add column if not exists last_claim_key_id text",
   "alter table sellers add column if not exists last_claim_pubkey_b64 text",
+  // v0.3 §8
+  "alter table tasks add column if not exists review_status text",
+  "alter table tasks add column if not exists review_attempts integer not null default 0",
+  "alter table tasks add column if not exists review_retry_at timestamptz",
+  "alter table tasks add column if not exists replacement_status text",
+  "alter table tasks add column if not exists replacement_attempts integer not null default 0",
+  "alter table tasks add column if not exists replacement_retry_at timestamptz",
+  // v0.3 §9
+  "alter table tasks add column if not exists settle_pending boolean not null default false",
+  "alter table verdicts add column if not exists seller_id text",
+  "alter table settlements add column if not exists outcome text",
+  "alter table settlements add column if not exists result_id text",
+  "alter table settlements add column if not exists verdict_reason_code text",
+  "alter table settlements add column if not exists decision jsonb",
+  "alter table settlements add column if not exists payment_state text",
+  "alter table settlements add column if not exists finalized_at timestamptz",
+  "alter table settlements add column if not exists updated_at timestamptz",
+  "alter table settlements add column if not exists payout_owed_cents integer",
+  "alter table settlements add column if not exists payout_transferred_cents integer",
+  "alter table settlements add column if not exists transfer_state text",
+  "alter table settlements add column if not exists transfer_attempts integer not null default 0",
+  "alter table settlements add column if not exists transfer_retry_at timestamptz",
+  "alter table agents add column if not exists balance_keys text[] not null default '{}'",
+  // v0.3 §10
+  "create table if not exists jobs (id text primary key, buyer_id text not null references agents(id), label_public text, budget_cents integer not null, reserved_cents integer not null default 0, spent_cents integer not null default 0, balance_keys text[] not null default '{}', client_job_key text, created_at timestamptz not null default now(), updated_at timestamptz not null default now())",
+  "create index if not exists jobs_buyer_idx on jobs(buyer_id)",
+  "alter table tasks add column if not exists job_id text",
+  "alter table tasks add column if not exists part_key text",
+  "alter table tasks add column if not exists part_label text",
+  "alter table tasks add column if not exists attempt integer",
+  "alter table tasks add column if not exists client_request_id text",
+  "create index if not exists tasks_job_idx on tasks(job_id)",
+  "create unique index if not exists tasks_job_part_attempt_uniq on tasks(job_id, part_key, attempt)",
+  "create unique index if not exists tasks_buyer_request_uniq on tasks(buyer_id, client_request_id)",
+  "create unique index if not exists jobs_buyer_key_uniq on jobs(buyer_id, client_job_key)",
+  // v0.3 §12
+  "alter table tasks add column if not exists inkbox_thread_owner text",
+  "alter table tasks add column if not exists inkbox_buyer_context_id text",
+  // Backfills for rows written before v0.3 (each is a no-op once applied).
+  // Pre-v0.3 settlements were written after their money moved and were never resumed.
+  "update settlements set finalized_at = created_at, payment_state = coalesce(payment_state, 'LEGACY') where finalized_at is null and outcome is null",
+  "update settlements set payout_owed_cents = seller_payout_cents, payout_transferred_cents = case when stripe_transfer_id is not null then seller_payout_cents else 0 end, transfer_state = case when seller_payout_cents = 0 then 'NOT_APPLICABLE' when stripe_transfer_id is not null then 'TRANSFERRED' else 'PENDING' end where transfer_state is null",
+  "update verdicts v set seller_id = r.seller_id from results r where v.result_id = r.id and v.seller_id is null",
+  "update tasks set review_status = 'FINAL' where review_status is null and status in ('APPROVED','REJECTED')",
+  "update tasks set replacement_status = 'NOT_NEEDED' where replacement_status is null and status = 'APPROVED'",
+  "update tasks t set replacement_status = case when exists (select 1 from verdicts v where v.task_id = t.id and v.replacement_enc_buyer is not null) then 'DELIVERED' else 'UNAVAILABLE' end where t.replacement_status is null and t.status = 'REJECTED'",
 ];
 
 let schemaReady: Promise<void> | undefined;
@@ -165,19 +267,73 @@ let schemaFailedAt = 0;
 export function ensureSchema(): Promise<void> {
   if (env().DB_MODE === "memory") return Promise.resolve();
   if (!schemaReady && Date.now() - schemaFailedAt > 30_000) {
-    schemaReady = rawSql(SCHEMA_PATCHES.join(";\n") + ";").then(
-      () => undefined,
-      (err: unknown) => {
+    // One statement per request, so a statement Insforge rejects cannot block the rest.
+    schemaReady = (async () => {
+      const failed: number[] = [];
+      for (const [i, stmt] of SCHEMA_PATCHES.entries()) {
+        try {
+          await rawSql(stmt);
+        } catch {
+          failed.push(i);
+        }
+      }
+      if (failed.length) {
         schemaFailedAt = Date.now();
         schemaReady = undefined;
-        console.error(`[db] schema patch failed (will retry): ${(err as Error).message}`);
-      },
-    );
+        console.error(`[db] ${failed.length} schema patch(es) failed (indexes ${failed.join(",")}); will retry`);
+      }
+    })();
   }
   return schemaReady ?? Promise.resolve();
 }
 
 const BALANCE_CAS_ATTEMPTS = 8;
+
+export interface BalanceDelta {
+  reserved?: number;
+  spent?: number;
+}
+
+export interface BalanceOpts {
+  /** Refuse (write nothing) when reserved + spent would exceed the cap. */
+  enforceCap?: boolean;
+  /**
+   * Exactly-once key (contract §9), e.g. `settle:<task_id>`. Recorded in the row's
+   * balance_keys in the same write; a key already present makes the call a no-op.
+   */
+  key?: string;
+}
+
+type CounterRow = { reserved_cents: number; spent_cents: number; balance_keys?: string[] | null };
+
+async function adjustCounters<R extends CounterRow>(
+  table: "agents" | "jobs",
+  id: string,
+  capOf: (row: R) => number,
+  delta: BalanceDelta,
+  opts: BalanceOpts,
+): Promise<{ row: R | null; refused: boolean; applied: boolean }> {
+  for (let attempt = 0; attempt < BALANCE_CAS_ATTEMPTS; attempt++) {
+    const cur = await one<R>(await db().from(table).select("*").eq("id", id).limit(1));
+    if (!cur) return { row: null, refused: false, applied: false };
+    const keys = cur.balance_keys ?? [];
+    if (opts.key && keys.includes(opts.key)) return { row: cur, refused: false, applied: false };
+    const reserved = Math.max(0, cur.reserved_cents + (delta.reserved ?? 0));
+    const spent = Math.max(0, cur.spent_cents + (delta.spent ?? 0));
+    if (opts.enforceCap && reserved + spent > capOf(cur)) return { row: cur, refused: true, applied: false };
+    const rows = unwrap(
+      await db()
+        .from(table)
+        .update({ reserved_cents: reserved, spent_cents: spent, ...(opts.key ? { balance_keys: [...keys, opts.key] } : {}) })
+        .eq("id", id)
+        .eq("reserved_cents", cur.reserved_cents)
+        .eq("spent_cents", cur.spent_cents)
+        .select(),
+    ) as R[];
+    if (rows.length) return { row: rows[0]!, refused: false, applied: true };
+  }
+  throw new MarketplaceError("INTERNAL_ERROR", `${table === "agents" ? "Buyer balance" : "Job budget"} kept changing under concurrent calls.`, { retryable: true });
+}
 
 /**
  * Change a buyer's reserved/spent counters by compare-and-swap, so concurrent
@@ -185,29 +341,15 @@ const BALANCE_CAS_ATTEMPTS = 8;
  * `enforceCap`, nothing is written and `refused` is true when reserved + spent
  * would exceed spend_cap_cents; `buyer` is then the row that was checked.
  */
-export async function adjustBuyerBalance(
-  buyerId: string,
-  delta: { reserved?: number; spent?: number },
-  opts: { enforceCap?: boolean } = {},
-): Promise<{ buyer: AgentRow | null; refused: boolean }> {
-  for (let attempt = 0; attempt < BALANCE_CAS_ATTEMPTS; attempt++) {
-    const cur = await one<AgentRow>(await db().from("agents").select("*").eq("id", buyerId).limit(1));
-    if (!cur) return { buyer: null, refused: false };
-    const reserved = Math.max(0, cur.reserved_cents + (delta.reserved ?? 0));
-    const spent = Math.max(0, cur.spent_cents + (delta.spent ?? 0));
-    if (opts.enforceCap && reserved + spent > cur.spend_cap_cents) return { buyer: cur, refused: true };
-    const rows = unwrap(
-      await db()
-        .from("agents")
-        .update({ reserved_cents: reserved, spent_cents: spent })
-        .eq("id", buyerId)
-        .eq("reserved_cents", cur.reserved_cents)
-        .eq("spent_cents", cur.spent_cents)
-        .select(),
-    ) as AgentRow[];
-    if (rows.length) return { buyer: rows[0]!, refused: false };
-  }
-  throw new MarketplaceError("INTERNAL_ERROR", "Buyer balance kept changing under concurrent calls.", { retryable: true });
+export async function adjustBuyerBalance(buyerId: string, delta: BalanceDelta, opts: BalanceOpts = {}): Promise<{ buyer: AgentRow | null; refused: boolean; applied: boolean }> {
+  const r = await adjustCounters<AgentRow>("agents", buyerId, (a) => a.spend_cap_cents, delta, opts);
+  return { buyer: r.row, refused: r.refused, applied: r.applied };
+}
+
+/** The same compare-and-swap for a job's budget (contract §10). */
+export async function adjustJobBudget(jobId: string, delta: BalanceDelta, opts: BalanceOpts = {}): Promise<{ job: JobRow | null; refused: boolean; applied: boolean }> {
+  const r = await adjustCounters<JobRow>("jobs", jobId, (j) => j.budget_cents, delta, opts);
+  return { job: r.row, refused: r.refused, applied: r.applied };
 }
 
 /** Task counts per status for the dashboard. */
