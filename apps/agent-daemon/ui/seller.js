@@ -17,8 +17,8 @@ async function refresh() {
   $('memory').textContent=gb(m.memory_bytes);$('free').textContent=`${gb(m.free_memory_bytes)} free physical memory`;
   $('approvals').textContent=w.approvals??'—'; $('activity').textContent=running?'Worker running · approved tasks':'Worker stopped · approved tasks';
   $('ollama').textContent=m.ollama_online?'Ollama connected':'Ollama offline';
-  $('google-detail').textContent=hasOwner?`Signed in as ${data.owner.email}`:'Create your human identity and link this seller to you.';
-  $('google').textContent=hasOwner?'Sign in again':'Continue with Google ↗'; $('google').disabled=posting||data.busy||running;
+  $('google-detail').textContent=hasOwner&&!data.buyer_id?`Signed in as ${data.owner.email}. Sign in once more to enable chat and buying for this existing account.`:hasOwner?`Signed in as ${data.owner.email}`:'One Google login connects buying and selling.';
+  $('google').textContent=hasOwner&&!data.buyer_id?'Enable chat with Google ↗':hasOwner?'Sign in again':'Continue with Google ↗'; $('google').disabled=posting||data.busy;
   $('model-detail').textContent=prepared?'Local model passed its liveness check in the Wasm sandbox.':'Uses a supported installed model, or downloads Qwen3 8B (about 5.2 GB).';
   $('prepare').textContent=data.busy?'Preparing…':prepared?'Check model again':'Prepare model';$('prepare').disabled=posting||!hasOwner||data.busy||running;
   $('stripe-detail').textContent=paid?'Stripe test transfer capability is active. This does not confirm a real bank payout.':prepared?'Complete Stripe’s hosted payout setup for this seller account.':'Prepare your model to create your Stripe payout account.';
@@ -57,7 +57,7 @@ function refreshAccount() {
  const names=models.map(x=>x.name);
  if(JSON.stringify(names)!==select.dataset.models){select.replaceChildren(...names.map(name=>new Option(name,name)));select.dataset.models=JSON.stringify(names);if(names.includes(previous))select.value=previous;}
  $('chat-send').disabled=!linked||!names.length||chatSending;
- $('chat-notice').textContent=!linked?'Continue with Google below to start.':!names.length?'Prepare a local model below before chatting.':!ready?'Local work is available. Network tasks require payment setup and shared provider allowance.':'Your agent can request network help within the account’s existing spending limits.';
+ $('chat-notice').textContent=!linked?(data?.owner?'Your seller login needs one upgrade. Select Enable chat with Google below; your worker can keep running.':'Continue with Google below to start.'):!names.length?'Prepare a local model below before chatting.':!ready?'Local work is available. Network tasks require payment setup and shared provider allowance.':'Your agent can request network help within the account’s existing spending limits.';
 }
 const originalRefresh=refresh;
 refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
