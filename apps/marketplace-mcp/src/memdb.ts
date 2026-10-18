@@ -5,7 +5,9 @@
  * not have fails here exactly as it would against Insforge. DB_MODE=memory
  * only: tests and offline development; nothing persists across restarts.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Row = Record<string, unknown>;
 type DbError = { code: string; message: string; details?: string };
@@ -263,8 +265,11 @@ let instance: MemoryDb | undefined;
 
 export function memoryDb(): MemoryDb {
   if (!instance) {
-    const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
-    instance = new MemoryDb(schema);
+    // src/memdb.ts under `mcp-use dev` and tests; the package root under `mcp-use start` (bundled build).
+    const candidates = [fileURLToPath(new URL("../db/schema.sql", import.meta.url)), path.resolve(process.cwd(), "db/schema.sql")];
+    const file = candidates.find((f) => existsSync(f));
+    if (!file) throw new Error(`DB_MODE=memory needs db/schema.sql; looked in ${candidates.join(", ")}`);
+    instance = new MemoryDb(readFileSync(file, "utf8"));
   }
   return instance;
 }

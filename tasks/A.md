@@ -9,7 +9,7 @@ git clone git@github.com:pranayD21/AgentTaskMarketplace.git && cd AgentTaskMarke
 pnpm install && pnpm -r typecheck && pnpm test
 # .env from the human; or pnpm setup:env. You need all server keys: INSFORGE_*, STRIPE_SECRET_KEY, INKBOX_API_KEY, SERVER_KEK_B64, JUDGE_PUBLIC_KEY_B64, JUDGE_KEY_ID, JUDGE_REGISTRATION_SECRET.
 bash scripts/db-migrate.sh          # idempotent; the schema is already applied to the team's Insforge project
-pnpm dev:server -- --no-open        # http://localhost:3000/mcp
+pnpm dev:server --no-open        # http://localhost:3000/mcp
 curl -s localhost:3000/health
 ```
 

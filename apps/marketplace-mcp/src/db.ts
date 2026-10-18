@@ -157,7 +157,11 @@ const SCHEMA_PATCHES = [
 let schemaReady: Promise<void> | undefined;
 let schemaFailedAt = 0;
 
-/** Apply SCHEMA_PATCHES once per process; never throws. A failure is logged and retried after 30 s. */
+/**
+ * Apply SCHEMA_PATCHES once per process, lazily on the first authenticated
+ * tool call or sweep (not at import, so `mcp-use build` never touches the
+ * database). Never throws; a failure is logged and retried after 30 s.
+ */
 export function ensureSchema(): Promise<void> {
   if (env().DB_MODE === "memory") return Promise.resolve();
   if (!schemaReady && Date.now() - schemaFailedAt > 30_000) {

@@ -1,5 +1,4 @@
 import { MCPServer } from "mcp-use";
-import { ensureSchema } from "./src/db.js";
 import { registerRoutes } from "./src/routes.js";
 import { registerTools } from "./src/tools.js";
 
@@ -13,7 +12,5 @@ const server = new MCPServer({
 
 registerTools(server);
 registerRoutes(server);
-// Bring older databases up to the current schema (idempotent; logs and retries on failure).
-void ensureSchema().catch(() => undefined);
 
 export default server;

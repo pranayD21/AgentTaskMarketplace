@@ -16,6 +16,11 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 | 18:24–18:28 | `packages/runner-wasm` builds after fixing (a) missing native `@napi-rs/lzma-darwin-arm64`, (b) Wizer snapshot trapping on `wasi:random` because zod and noble-curves touch randomness at import time → `src/wizer-shim.ts`. Output `dist/runner.wasm` 20.6 MB, sha256 `7bf3a544…`. |
 | 18:29 | Wassette runtime driver written. Seller daemon with `--runtime wassette`: component **loaded** under Wassette (reported server version 3.5.0), tools `get-public-key`, `run-task`, `judge-task` visible, network grants applied, seller registered with in-sandbox key `runner-2802…`, task **claimed**, then `run-task` failed: `invalid tag` (see Known issues #1). Task released and reopened automatically. |
 | 18:32 | Work paused to document and split across five computers (this file, PLAN, CONTRACT, SECURITY, AGENTS, tasks/, coordination/). |
+| 18:44 | C asks A for contract v0.2 (`C-A-20261018T014443Z-01`). |
+| 18:47 | Computer **A** picks up `tasks/A.md` in a Claude Code **cloud** session (not on the LAN). `pnpm install` + `pnpm -r typecheck` green; `pnpm test` red because `apps/marketplace-mcp` had no test files. The container's egress policy **denies Insforge, Stripe, Inkbox and Manufact** (proxy `connect_rejected`), so nothing in this session touches the team's live services; verification below uses `DB_MODE=memory` + `PAYMENT_MODE=mock`. |
+| 18:55 | Found `pnpm daemon --role …` broken under pnpm 10.33: the root script's trailing `--` reached `parseArgs` as a positional. Fixed in root `package.json`; `pnpm dev:server --no-open` (no `--`) is the working form. |
+| 19:03 | **Contract v0.2 server side** + server hardening + memory DB + 18 server tests, `pnpm smoke` green (real server, both daemons, per-claim claim). Commit `e7ae1b3` on `claude/zen-mccarthy-0xradq`. |
+| 19:06 | `mcp-use build` → `.mcp-use/build/index.js`; `mcp-use start` from the build serves 21 tools (memory mode). Manufact login/deploy not attempted: device flow needs the human's browser and Manufact is not reachable from this container. |
 
 ## 2. Commits on `main`
 
@@ -24,7 +29,10 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 | `32838d5` | feat: scaffold TypeScript monorepo with schemas and sealed envelopes |
 | `7c976d7` | feat(marketplace-mcp): MCP server with Insforge state and Stripe holds |
 | `dd290a5` | feat(daemon): seller and judge loops with a shared sandbox-side runner core |
-| (next) | docs + runner-wasm + Wassette runtime + buyer CLI + Stripe Accounts v2 onboarding (this push) |
+| `021eb1e` | feat(sandbox): Wasm runner component, Wassette runtime, buyer CLI |
+| `c212dee` | docs: document progress, plan and five-computer split |
+| `19f7431` | coord: C requests per-claim runner key support |
+| `e7ae1b3` | feat(contract): v0.2 per-claim runner keys (+ hardening, memory DB, tests, `pnpm smoke`) — on `claude/zen-mccarthy-0xradq`, pending merge to `main` |
 
 ## 3. What exists, file by file
 
@@ -35,6 +43,7 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 - `scripts/setup-env.sh` — interactive, `read -s` so pasted keys never echo; updates or appends keys; generates `SERVER_KEK_B64` (openssl) and the judge keypair (`scripts/gen-judge-keypair.ts`); prints set/missing per key, never values.
 - `scripts/db-migrate.sh` — posts `apps/marketplace-mcp/db/schema.sql` to Insforge's admin raw-SQL endpoint. Idempotent.
 - `scripts/buyer.mjs` — buyer CLI without MCP SDK dependency: `post`, `result`, `task`, `tasks`, `whoami`. Registers a buyer once into `.atm-state/buyer.json`.
+- `scripts/smoke-local.ts` (`pnpm smoke`) — offline end-to-end check: starts the server on :3917 with `DB_MODE=memory`, `PAYMENT_MODE=mock` and a throwaway KEK + judge keypair, a fake Ollama on :11939 (test double, fixed answer), registers buyer/seller/judge, runs both daemons `--runtime node --once` (v0.1 path), then a v0.2 per-claim claim through the tool layer (no-key → `INVALID_STATE`, 31-byte key → `VALIDATION_ERROR`, sealed-to-key check, judge APPROVE, `commitment_verified`).
 
 ### `packages/shared` (`@atm/shared`)
 zod 4 schemas and constants used everywhere: `TASK_STATUSES`, `ACTIVE_CLAIM_STATUSES`, `LEASE_SECONDS=300`, `KeyDescriptor`, `Envelope`, `Rubric` (`contains_text` | `llm_rubric`), `SellerPayload`, `JudgePayload`, `ResultPlaintext`, `RunTaskOutput`, `JudgeTaskOutput`, `Verdict`, `VERDICT_REASON_CODES`, `ModelInfo`, `MODEL_ALLOWLIST` (qwen3:8b/4b/14b, qwen2.5:7b, qwen2.5-coder:7b, llama3.1:8b, gemma3:4b/12b, deepseek-r1:8b, mistral:7b), `TaskPublic`, `SellerPublic`, `ClaimPublic`, `ERROR_CODES`, `MarketplaceError` (code, status, retryable, next_action, `toJSON()`), `nowIso`, `plusSecondsIso`, `isPast`.
@@ -61,10 +70,12 @@ Pure-JS so it runs in Node **and** inside the Wasm component. `generateKeypair`,
 - `src/ids.ts` — `newId(prefix)`, `newApiKey()` (`atm_sk_` + 32 random bytes base64url).
 - `src/payments.ts` — `PaymentProvider` interface; `MockProvider`; `StripeCardProvider` (refuses non-`sk_test_` keys; customer + `pm_card_visa`; manual-capture hold; capture + transfer; cancel; **Accounts v2 recipient onboarding** `stripe.v2.core.accounts.create({... configuration.recipient.capabilities.stripe_balance.stripe_transfers ...})` because Stripe now rejects `type:"custom"` v1 accounts).
 - `src/service.ts` — the state machine: `registerAgent`, `registerSeller` (retries connected-account onboarding when missing), `postTask`, `listTasksForBuyer`, `getTaskForActor`, `getResultForBuyer` (decrypts with the server-held buyer key, verifies commitment, surfaces replacement answer), `cancelTask`, `listOpenTasksFor`, `claimTask` (atomic), `recipientKeys`, `renewLease`, `startTask`, `releaseTask`, `submitResult`, `fetchReviewPackage` (atomic SUBMITTED→JUDGING), `submitVerdict` (capture/transfer or release; approvals/rejections/strikes/suspension; idempotent via unique settlement), `expireStale` (listings, leases, stuck JUDGING > 10 min), `listSellers`, `sellerReputation`, `dashboard`.
-- `src/tools.ts` — 21 tools (CONTRACT.md §3). Every error is `{error:{code,message,retryable,next_action?}}`.
+- `src/tools.ts` — 21 tools (CONTRACT.md §3). Every error is `{error:{code,message,retryable,next_action?}}`. v0.2: `claim_task` takes `runner_pubkey_b64?`/`runner_key_id?`, `register_seller` keys optional, `list_open_tasks` takes `limit?`, `post_task.max_price_cents ≤ 100 000`, `marketplace_info` reports `contract_version` and `storage`.
+- `src/memdb.ts` — `DB_MODE=memory`: the PostgREST subset the service uses (`from/select/insert/update`, `eq/in/lt`, `order`, `limit`), tables parsed from `db/schema.sql`; unknown columns, NOT NULL and UNIQUE fail as in Postgres. Labelled `MEMORY` in `/health`, `marketplace_info.storage`, dashboard `db`.
+- `test/` — vitest: `service.test.ts` (v0.2 keys, back-compat, APPROVE/REJECT cycles via `runner-core`, race, lease expiry, sweep resilience, bounds), `memdb.test.ts`; `setup.ts` sets memory/mock env and a throwaway judge key.
 - `src/routes.ts` — `GET /health`, `GET /api/dashboard` (CORS).
 - `src/inkbox.ts` — **stub** (returns null / no-op) with the signatures the service calls.
-- `db/schema.sql` — 7 tables + indexes, idempotent.
+- `db/schema.sql` — 7 tables + indexes, idempotent. v0.2 adds `tasks.claim_runner_key_id`, `tasks.claim_runner_pubkey_b64`, `sellers.last_claim_key_id`, `sellers.last_claim_pubkey_b64` (`add column if not exists`); `src/db.ts` `ensureSchema` applies the same lines on the first tool call.
 
 ### `apps/agent-daemon` (`@atm/agent-daemon`)
 - `src/main.ts` — CLI: `--role seller|judge`, `--runtime wassette|node` (default `ATM_RUNTIME` or wassette), `--model <tag>` (repeatable), `--ask-cents` (default 75), `--display-name`, `--poll-ms` (3000), `--once`. Registers once (`.atm-state/<role>.json`, or `AGENT_API_KEY`). Seller loop: inventory → `register_seller` → poll `list_open_tasks` → `claim_task` → `start_task` → `get_recipient_keys` → `rt.runTask` (lease renewed every 120 s) → `submit_result`; on failure `release_task`. Judge loop: `fetch_review_package` → `rt.judgeTask` → `submit_verdict`.
@@ -85,6 +96,23 @@ Pure-JS so it runs in Node **and** inside the Wasm component. `generateKeypair`,
 - Dashboard: `counts {APPROVED:1}`, settlement `kind STRIPE_TEST`, `stripe_capture_id ch_3URiihF42f8esBiW1u7OTjOZ`, events `agent.registered ← seller.registered ← task.claimed ← task.running ← result.submitted ← agent.registered ← task.judging ← verdict.recorded`.
 - Wasm: `jco componentize` → `OK Successfully written dist/runner.wasm`; Wassette: `loaded atm-seller-runner (sha256 7bf3a544e6e7…) tools: get-public-key, run-task, judge-task, get-policy`; seller registered with `runtime=wassette`, key `runner-2802469df3c96149`; claimed `task_d7575f5ac20408ea`; `run-task` → `invalid tag`.
 
+- **19:03 (cloud A, memory DB + mock payments, no live services):** `pnpm -r typecheck` clean; `pnpm test` → crypto 7/7, marketplace-mcp 18/18. `pnpm smoke` printed:
+  ```
+  health: contract=0.2 payments=mock db=MEMORY — in-process tables, dev/test only, lost on restart
+  [seller] listed qwen3:8b@75c | runtime=node-unsandboxed (UNSANDBOXED …) | key=runner-0cf0a04b4f8d9779 | status=ACTIVE
+  [seller] claimed task_… price=75c   [seller] submitted result_… in 13ms
+  [judge] APPROVE task_…: RUBRIC_MATCH | payout 75c | mock payout of 75c (no payment rail)
+  get_result: APPROVED, commitment_verified=true, settlement MOCK payout 75c refund 25c
+  register_seller without key → runner.key_source=none
+  claim_task without key → INVALID_STATE (next_action present)
+  claim_task with a 31-byte key → VALIDATION_ERROR
+  claim_task with key runner-020c… → claim_…, sealed to it, buyer=buyer-… judge=judge-…
+  [judge] APPROVE … payout 60c
+  get_result: APPROVED, commitment_verified=true; seller runner key runner-020c… (per-claim)
+  ✔ smoke passed — buyer spend: reserved 0c, spent 135c of 1000c (MOCK)
+  ```
+  Not yet run against Insforge + Stripe test mode (container cannot reach them); first server started from this commit on a LAN machine will add the four columns itself.
+
 ## 5. Findings worth knowing (saved you an hour each)
 
 - **mcp-use v2:** `import { MCPServer } from "mcp-use"`; tools use `inputSchema` (zod 4 ok), callbacks get `(params, ctx)` with `ctx.request` (Hono request) — read the `Authorization` header there. Custom HTTP routes: `server.get/post(...)` (Hono). The CLI (`mcp-use dev`) imports the entry (`index.ts` / `src/index.ts` / `server.ts`), requires `export default server`, and calls `listen` itself; it loads `.env` from the package dir, hence the symlink `apps/marketplace-mcp/.env → ../../.env`.
@@ -93,8 +121,13 @@ Pure-JS so it runs in Node **and** inside the Wasm component. `generateKeypair`,
 - **componentize-js / Wizer:** module top-level runs at build time; any call into `wasi:random` traps. zod (`randomString`) and `@noble/curves` (`probeRandomBytes` in `ScalarMultiplier`) do that → shim both during build, restore at first export call. `--external:wasi:*` must be quoted in zsh. jco needs `@napi-rs/lzma-<platform>` which pnpm skipped.
 - **Wassette 0.8:** `wassette run` is MCP over stdio; component id = file stem; results come back as `{"result": …}`, `result<T,E>` as `{ok}`/`{err}`; it reports server version `3.5.0` over MCP. **A new instance per tool call** → no in-memory state between calls (the blocker below). Network permission is host(:port); env permission surfaces variables through `wasi:config/store`.
 - **Ollama 0.40:** `/api/chat` with `think:false` suppresses qwen3 reasoning; `eval_count` gives output tokens.
+- **pnpm 10:** a root script ending in `--` (`pnpm --filter x start --`) forwards a literal `--` to the child, and `node:util` `parseArgs` then rejects every flag as positional. Write `pnpm daemon --role seller` / `pnpm dev:server --no-open`, no extra `--`.
+- **mcp-use build** imports the entry module to collect the manifest, so module top-level side effects run at build time. Keep startup work lazy (that is why `ensureSchema` runs on the first tool call, not at import).
+- **`node --env-file`**: variables already in the environment win over the file, so `JUDGE_PRIVATE_KEY_B64= pnpm daemon …` blanks a value from `.env` for one run.
 
 ## 6. Known issues / open items
+
+Updates 19:06 (A): item 1 server half **done** (contract v0.2, `e7ae1b3`); item 7 documented in CONTRACT §2 (reserved, never written); item 8 resolved by `SellerPublic.runner.key_source`; items 9–13 new.
 
 1. **[BLOCKER, C+A] Wassette per-call instance loses the runner keypair.** `get-public-key` and `run-task` run in different instances → `invalid tag` on decrypt. Fix: runner-driven single call (`run-cycle` / `judge-cycle`) that claims, decrypts, runs and submits inside one instance, with the marketplace host added to the network grant and `AGENT_API_KEY` to the env grant; server accepts a per-claim `runner_pubkey_b64` on `claim_task` and returns buyer + judge public keys. See PLAN §5 and tasks/C.md, tasks/A.md.
 2. **[D] Seller payouts:** Stripe Accounts v2 recipient accounts are created (`acct_…`) but `transfers.create` fails until `configuration.recipient.capabilities.stripe_balance.stripe_transfers` is active (identity/onboarding). Currently recorded as `PENDING_ONBOARDING` in `settlements.note`.
@@ -104,3 +137,8 @@ Pure-JS so it runs in Node **and** inside the Wasm component. `generateKeypair`,
 6. Judge model default is `claude-opus-5-5` with `effort: low`; swap via `JUDGE_MODEL` if cost/latency matters.
 7. `CLAIMED` state exists in the enum but is never used (claim goes straight to `PAYLOAD_READY`); harmless, could be removed in a contract revision.
 8. The seller's `register_seller` runner key becomes advisory once per-claim keys land (issue 1); the dashboard should show the per-claim key id instead.
+9. **[C] Node runtime seller uses the judge keypair as its runner key.** `apps/agent-daemon/src/main.ts` constructs `NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64)` for both roles, and `pnpm daemon` loads the root `.env`, so on any machine holding the shared `.env` the seller registers `runner-0d5c3e52…` = the judge key id. Fix: pass the judge key only when `role === "judge"`. Related operational rule: only the judge machine should hold `JUDGE_PRIVATE_KEY_B64` and `ANTHROPIC_API_KEY`. Once C's fix is on `main`, A will make the server refuse a runner key equal to the judge key.
+10. **[D] `payments.ts`** has two `PAYMENT_FAILED` errors without `next_action` (Stripe refused the hold; unexpected PaymentIntent status).
+11. **[A] Spend-cap check is not atomic.** `post_task` checks `reserved + spent + max ≤ cap` on the row read at auth time and `adjustBuyerBalance` is read-modify-write, so two concurrent posts from one buyer could both pass. Low risk for the demo (one buyer agent, sequential posts); fix with a conditional update if time allows.
+12. **[A] Live verification pending.** This session's container cannot reach Insforge/Stripe/Inkbox/Manufact; v0.2 is verified against the memory DB and mock payments only. Needs one run of `node scripts/buyer.mjs post … --expect Lima` + both daemons against Insforge + Stripe test mode on a LAN machine.
+13. **[A] Manufact deploy** still needs the human's browser login (`npx -y mcp-use@latest login`); `pnpm build` and `mcp-use start` from the build are verified.
