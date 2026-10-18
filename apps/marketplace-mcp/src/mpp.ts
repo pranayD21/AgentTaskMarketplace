@@ -22,7 +22,7 @@ import { generate as generateOpenApi } from "mppx/discovery";
 import { Mppx, stripe as mppStripe } from "mppx/server";
 import { sha256Hex, utf8 } from "@atm/crypto";
 import { MarketplaceError, isPast, nowIso } from "@atm/shared";
-import { db, logEvent, one, unwrap, type AgentRow, type TaskRow } from "./db.js";
+import { adjustBuyerBalance, db, logEvent, one, unwrap, type AgentRow, type TaskRow } from "./db.js";
 import { env } from "./env.js";
 import {
   createStripe,
@@ -218,8 +218,17 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
   } catch (err) {
     // Money moved but the task could not be opened: give it back rather than strand it.
     console.error(`[mpp] task ${t.id} paid (${receipt.reference}) but could not be opened: ${(err as Error).message}`);
-    await provider.stripe.refunds.create({ payment_intent: receipt.reference, metadata: { task_id: t.id, reason: "mark-paid failed" } }).catch(() => undefined);
-    return { response: json({ error: { code: "INTERNAL_ERROR", message: "Payment received but the task could not be opened; the payment was refunded. Retry.", retryable: true } }, 500) };
+    let refunded = false;
+    try {
+      await provider.stripe.refunds.create({ payment_intent: receipt.reference, metadata: { task_id: t.id, reason: "mark-paid failed" } }, { idempotencyKey: `atm:${t.id}:${receipt.reference}:refund-unopened` });
+      refunded = true;
+    } catch { /* report uncertainty; never claim a failed refund succeeded */ }
+    return { response: json({ error: {
+      code: "PAYMENT_FAILED",
+      message: refunded ? "Task could not be opened; the payment was refunded." : "Task could not be opened and the refund is unconfirmed.",
+      retryable: refunded,
+      next_action: refunded ? "Check your available budget before paying again." : "Ask the operator to reconcile the Stripe payment before paying again.",
+    } }, 500) };
   }
   return { response: receipted, paid: { task_id: t.id, payment_intent_id: receipt.reference } };
 }
@@ -231,20 +240,30 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
  * move this into service.ts as `markTaskPaid`.
  */
 export async function markTaskPaid(task: TaskRow, paymentIntentId: string): Promise<TaskRow> {
-  const rows = unwrap(
-    await db()
-      .from("tasks")
-      .update({ status: "OPEN", payment_state: MPP_PAID_STATE, stripe_payment_intent_id: paymentIntentId, updated_at: nowIso() })
-      .eq("id", task.id)
-      .eq("status", "AWAITING_PAYMENT")
-      .select(),
-  ) as TaskRow[];
-  if (!rows.length) {
-    throw new MarketplaceError("INVALID_STATE", `Task ${task.id} is no longer AWAITING_PAYMENT.`);
+  const reserved = await adjustBuyerBalance(task.buyer_id, { reserved: task.max_price_cents }, { enforceCap: true });
+  if (!reserved.buyer || reserved.refused) {
+    throw new MarketplaceError("SPEND_CAP_EXCEEDED", "The buyer has insufficient remaining budget for this payment.", {
+      next_action: "Check whoami and release unwanted holds before paying another task.",
+    });
   }
-  const buyer = await one<AgentRow>(await db().from("agents").select("*").eq("id", task.buyer_id).limit(1));
-  if (buyer) {
-    unwrap(await db().from("agents").update({ reserved_cents: buyer.reserved_cents + task.max_price_cents }).eq("id", buyer.id));
+  let rows: TaskRow[];
+  try {
+    rows = unwrap(
+      await db().from("tasks")
+        .update({ status: "OPEN", payment_state: MPP_PAID_STATE, stripe_payment_intent_id: paymentIntentId, updated_at: nowIso() })
+        .eq("id", task.id).eq("status", "AWAITING_PAYMENT").select(),
+    ) as TaskRow[];
+    if (!rows.length) {
+      throw new MarketplaceError("INVALID_STATE", `Task ${task.id} is no longer AWAITING_PAYMENT.`, {
+        next_action: "Read get_task to check its current state before retrying payment.",
+      });
+    }
+  } catch (err) {
+    await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents });
+    // An identical payment retried concurrently must not refund the winning payment.
+    const current = await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1));
+    if (current?.stripe_payment_intent_id === paymentIntentId) return current;
+    throw err;
   }
   await logEvent("task.paid", { task_id: task.id, agent_id: task.buyer_id, meta: { amount_cents: task.max_price_cents, rail: "stripe-mpp-test", payment_intent: paymentIntentId } });
   return rows[0]!;

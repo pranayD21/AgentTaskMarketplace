@@ -4,6 +4,7 @@ import { createRunner, type RunnerHost } from "@atm/runner-core";
 import { MAX_PRICE_CENTS, MarketplaceError, type ClaimPublicV02, type KeyDescriptor, type SellerPayload } from "@atm/shared";
 import { adjustBuyerBalance, db, unwrap, type AgentRow, type TaskRow } from "../src/db.ts";
 import { payments } from "../src/payments.ts";
+import { markTaskPaid } from "../src/mpp.ts";
 import * as svc from "../src/service.ts";
 
 // ---------------------------------------------------------------------------
@@ -345,6 +346,23 @@ describe("expiry and hardening", () => {
     const buyer = await agent("buyer");
     await Promise.all(Array.from({ length: 5 }, () => adjustBuyerBalance(buyer.id, { reserved: 10 })));
     expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(50);
+  });
+
+  it("concurrent MPP payments cannot jointly exceed the remaining cap", async () => {
+    const buyer = await agent("buyer");
+    const a = await post(buyer);
+    const b = await post(buyer);
+    unwrap(await db().from("tasks").update({ status: "AWAITING_PAYMENT", payment_state: "AWAITING_PAYMENT", payment_mode: "mpp" }).in("id", [a.task_id, b.task_id]));
+    unwrap(await db().from("agents").update({ reserved_cents: 0, spend_cap_cents: 150 }).eq("id", buyer.id));
+    const outcomes = await Promise.allSettled([
+      markTaskPaid(await taskRow(a.task_id), "pi_test_a"),
+      markTaskPaid(await taskRow(b.task_id), "pi_test_b"),
+    ]);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    expect((outcomes.find((o) => o.status === "rejected") as PromiseRejectedResult).reason.code).toBe("SPEND_CAP_EXCEEDED");
+    expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(100);
+    const rows = [await taskRow(a.task_id), await taskRow(b.task_id)];
+    expect(rows.map((r) => r.status).sort()).toEqual(["AWAITING_PAYMENT", "OPEN"]);
   });
 
   it("bounds max_price_cents", async () => {
