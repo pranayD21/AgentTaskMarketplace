@@ -25,13 +25,19 @@ import { MarketplaceError, isPast, nowIso } from "@atm/shared";
 import { adjustBuyerBalance, db, logEvent, one, unwrap, type AgentRow, type TaskRow } from "./db.js";
 import { env } from "./env.js";
 import {
+  compensateStripeHold,
   createStripe,
+  inspectStripeMoney,
   onboardSellerAccount,
+  reconcileSellerTransfer,
   transferToSeller,
   type CaptureResult,
   type HoldResult,
+  type MoneyState,
   type PaymentProvider,
   type ReleaseResult,
+  type SettlementView,
+  type TransferOutcome,
 } from "./payments.js";
 
 /** Task payment state once the MPP charge succeeded (money is captured, not merely authorised). */
@@ -77,7 +83,7 @@ export class StripeMppProvider implements PaymentProvider {
 
   async capture(task: TaskRow, seller: AgentRow | null, amountCents: number): Promise<CaptureResult> {
     if (!task.stripe_payment_intent_id) {
-      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, note: "no PaymentIntent on task (never paid); nothing captured" };
+      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, owed_cents: amountCents, transferred_cents: 0, transfer_state: "NOT_APPLICABLE", note: "no PaymentIntent on task (never paid); nothing captured" };
     }
     const pi = await this.stripe.paymentIntents.retrieve(task.stripe_payment_intent_id);
     const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id ?? null;
@@ -93,7 +99,29 @@ export class StripeMppProvider implements PaymentProvider {
     }
     const transfer = await transferToSeller(this.stripe, task, seller, amountCents, chargeId);
     note += `; ${transfer.note}`;
-    return { payment_state: "CAPTURED", stripe_capture_id: chargeId, stripe_transfer_id: transfer.transfer_id, note };
+    return {
+      payment_state: "CAPTURED",
+      stripe_capture_id: chargeId,
+      stripe_transfer_id: transfer.transfer_id,
+      owed_cents: amountCents,
+      transferred_cents: transfer.transfer_id ? amountCents : 0,
+      transfer_state: transfer.state,
+      note,
+    };
+  }
+
+  /** An AWAITING_PAYMENT task holds no money; a paid one is refunded in full. */
+  async compensateHold(task: { id: string; max_price_cents: number }, hold: HoldResult, reason: string): Promise<ReleaseResult> {
+    if (!hold.stripe_payment_intent_id) return { payment_state: "RELEASED", note: `nothing to undo: task was never paid (${reason})` };
+    return compensateStripeHold(this.stripe, task, hold, reason);
+  }
+
+  retryTransfer(task: TaskRow, seller: AgentRow | null, settlement: SettlementView, attempt: number): Promise<TransferOutcome> {
+    return reconcileSellerTransfer(this.stripe, task, seller, settlement.seller_payout_cents, settlement.stripe_capture_id, { attempt, known_transfer_id: settlement.stripe_transfer_id });
+  }
+
+  inspect(task: TaskRow): Promise<MoneyState> {
+    return inspectStripeMoney(this.stripe, task);
   }
 
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {
