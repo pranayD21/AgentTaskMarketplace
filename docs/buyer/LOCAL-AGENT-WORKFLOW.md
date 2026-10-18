@@ -33,3 +33,22 @@ Stop selling before changing the selected model, CPU thread count, context size 
 Run the existing installer again, then open Account & setup and prepare the model if the runner changed. This preserves the Google-linked identities and models. Complete setup before activating Seller mode. Old installed runners do not gain new agent tools merely because the server was deployed.
 
 Benchmarking remains deferred. Functional tests use isolated fixture tasks; no speedup or cost advantage is claimed.
+
+### Worker output and task failures
+
+Normal seller inference has no generated-token cap. The model's context window,
+claim deadline, and bounded tool loop still apply. The legacy `max_tokens` payload
+field is retained for compatibility and the small installation canary; normal
+seller runs ignore it. Reasoning stays separate from the final answer. If a model
+ends with reasoning only, the worker requests an answer once with thinking off;
+it never substitutes reasoning text for a deliverable.
+
+A completed HTTP/task error ends that task without closing the healthy Wassette
+process. A lost transport or stuck invocation still requires recovery. Per-task
+keys and scratchpads remain isolated even when the process is reused.
+
+Buyer task acceptance no longer opens a browser tab. All saved conversations,
+task states, prompts, returned answers, and local model/tool events appear on the
+dashboard. The conversation selector chooses where the next message goes.
+Remote seller token streams remain in that seller's local VM viewer; the buyer
+receives task status and submitted outputs through the marketplace.

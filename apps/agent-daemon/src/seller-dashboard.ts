@@ -77,13 +77,8 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
     journalDir: path.join(root, "buyer-drafts"), humanAccount: true, getSession: async () => {
       const saved = buyerIdentity(); return { owner: { user_id: saved.owner.user_id } };
     } });
-  const chat = createDashboardChat({ root, marketplaceUrl: options.marketplaceUrl,onAccepted(taskId){
-    if(!/^task_[A-Za-z0-9_-]+$/.test(taskId))return;
-    const token=randomBytes(32).toString("hex");
-    for(const [key,value] of viewerTokens)if(value.until<Date.now())viewerTokens.delete(key);
-    viewerTokens.set(token,{task:taskId,until:Date.now()+60000});
-    actions.openTaskViewer?.(`${origin()}/open?token=${encodeURIComponent(token)}&task=${encodeURIComponent(taskId)}`);
-  } });
+  // Keep task activity in the dashboard. Per-task viewers remain opt-in links.
+  const chat = createDashboardChat({ root, marketplaceUrl: options.marketplaceUrl });
   let buyerCache: { at: number; value: Record<string, unknown> } | undefined;
   const origin = () => `http://127.0.0.1:${(server.address() as any).port}`;
   const redirect = (res: http.ServerResponse, to: string) => { res.writeHead(303, { Location: to }); res.end(); };

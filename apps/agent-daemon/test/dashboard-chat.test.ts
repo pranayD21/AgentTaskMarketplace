@@ -17,7 +17,7 @@ it('uses model-designed subtasks, continues local work and resumes with both ver
  const seen=model([{tool_calls:[tc('mcp_post_task',{prompt:'Check East ledger',allowed_models:['qwen3:8b']}),tc('mcp_post_task',{prompt:'Check West ledger',allowed_models:['qwen3:8b']})]},{content:'While the workers reconcile each ledger, I will define the combined report.'},{content:'Combined report from both checked ledgers.'}]);
  await request('POST',{prompt:'Reconcile both branches and explain the combined findings.',model:'qwen3:8b'});
  await vi.waitFor(async()=>expect((await request('GET')).body.runs[0].status).toBe('finished'));
- expect(posts).toHaveLength(2);expect(posts.map(p=>p.prompt)).toEqual(['Check East ledger','Check West ledger']);expect(posts.every(p=>p.marketplace_only&&p.price_cents===50)).toBe(true);expect(JSON.stringify(seen[2].messages)).toContain('Checked task_2');expect((await request('GET')).body.runs[0].events.filter((e:any)=>e.type==='remote_answer')).toHaveLength(2);
+ expect((await request('GET')).body.runs[0].task_prompts).toEqual({task_1:'Check East ledger',task_2:'Check West ledger'});expect(posts).toHaveLength(2);expect(posts.map(p=>p.prompt)).toEqual(['Check East ledger','Check West ledger']);expect(posts.every(p=>p.marketplace_only&&p.price_cents===50)).toBe(true);expect(JSON.stringify(seen[2].messages)).toContain('Checked task_2');expect((await request('GET')).body.runs[0].events.filter((e:any)=>e.type==='remote_answer')).toHaveLength(2);
 });
 it('enforces task count, per-request spend, ownership and strips supplied credentials',async()=>{
  setup();call.mockImplementation(async(name:string)=>name==='whoami'?account:{task:{task_id:'task_cap',status:'EXPIRED'}});

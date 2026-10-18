@@ -66,17 +66,18 @@ const originalRefresh=refresh;
 refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
 async function chatPost(route,body){const r=await fetch(route,{method:'POST',headers:{'X-ATM-Request':'1','Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(typeof j.error==='string'?j.error:j.error?.message||'The request could not finish.');return j;}
 function bubble(section,label,value,kind){const item=document.createElement('div');item.className=`chat-bubble ${kind}`;const heading=document.createElement('strong');heading.textContent=label;const body=document.createElement('pre');body.textContent=value;item.append(heading,body);section.append(item);}
-function eventDetails(section,label,value){if(value==null)return;const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('pre');summary.textContent=label;if(label==='Thinking…')details.open=true;body.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);details.append(summary,body);section.append(details);}
+function eventDetails(section,label,value){if(value==null)return;const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('pre');summary.textContent=label;details.open=true;body.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);details.append(summary,body);section.append(details);}
 function toolLabel(name){return ({mcp_marketplace_info:'Checking marketplace options',mcp_whoami:'Checking account limits',mcp_list_sellers:'Looking for available workers',mcp_create_job:'Creating a shared job',mcp_post_task:'Posting a task for the network',mcp_get_task:'Checking task progress',mcp_get_result:'Reading task results',mcp_get_job:'Checking the shared job',wait:'Waiting for workers'})[name]??String(name??'Agent action').replaceAll('_',' ');}
 async function refreshChats(){
  if(chatRefreshing||!data?.buyer_id)return;chatRefreshing=true;
  try{const r=await fetch('/api/chat');if(!r.ok)return;const j=await r.json();const ids=[...new Set([conversationId,...(j.runs??[]).map(r=>r.conversation_id||r.id)])]; $('conversation').replaceChildren(...ids.map(id=>{const first=(j.runs??[]).find(r=>(r.conversation_id||r.id)===id);return new Option(first?.prompt?.slice(0,60)||'New conversation',id);}));$('conversation').value=conversationId; const snapshot=conversationId+JSON.stringify(j.runs);if(snapshot===chatSnapshot)return;chatSnapshot=snapshot;
  const openDetails=new Set([...$('chat-runs').querySelectorAll('details[open]')].map(d=>d.dataset.detailKey));const fragment=document.createDocumentFragment();
- for(const run of [...(j.runs??[])].filter(r=>(r.conversation_id||r.id)===conversationId).reverse()){
+ for(const run of [...(j.runs??[])].reverse()){
   const section=document.createElement('section');section.className='chat-run';
-  const title=document.createElement('h3');title.textContent=`${run.status==='finished'?'✓ Completed':run.status==='failed'?'Needs attention':'In progress'} · ${run.task_ids?.length??0} task(s)`;section.append(title);
+  const title=document.createElement('h3');title.textContent=`${run.status==='finished'?'✓ Completed':run.status==='failed'?'Needs attention':['stopped','interrupted'].includes(run.status)?'Stopped':'In progress'} · ${run.task_ids?.length??0} task(s)`;section.append(title);
   if(['running','waiting'].includes(run.status)){const stop=document.createElement('button');stop.textContent='Stop waiting';stop.className='secondary';stop.onclick=async()=>{try{stop.disabled=true;await chatPost('/api/chat/stop',{id:run.id});await refreshChats();}catch(e){error(e.message);stop.disabled=false;}};title.append(stop);}
   if(typeof renderTaskCards==='function')renderTaskCards(section,run);
+  if((run.conversation_id||run.id)!==conversationId){const note=document.createElement('p');note.className='tool-action';note.textContent='Another conversation · '+run.status;section.append(note);}
   if(run.prompt) bubble(section,'You',run.prompt,'user');
   for(const event of run.events??[]){
    if(event.type==='model'||event.type==='model_delta'){

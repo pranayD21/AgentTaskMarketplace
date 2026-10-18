@@ -137,7 +137,7 @@ async function streamChat(view: LiveView, c: ChatCtx) {
   c.res.end(JSON.stringify(final));
   view.emit({
     t: "net", phase: "end", id: c.id, vm: c.vm, status: 200, ms: Date.now() - c.started, ok: true,
-    res: { content, tool_calls:toolCalls, eval_count: last.eval_count, prompt_eval_count: last.prompt_eval_count, eval_duration_ms: nsToMs(last.eval_duration), load_duration_ms: nsToMs(last.load_duration), first_token_ms: firstTokenMs, done_reason: last.done_reason },
+    res: { content, thinking, tool_calls:toolCalls, eval_count: last.eval_count, prompt_eval_count: last.prompt_eval_count, eval_duration_ms: nsToMs(last.eval_duration), load_duration_ms: nsToMs(last.load_duration), first_token_ms: firstTokenMs, done_reason: last.done_reason },
   });
 }
 

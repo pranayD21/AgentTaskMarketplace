@@ -431,7 +431,7 @@ ${vm.role === "judge" ? `  <div class="grid2">
         ${run?.inferRes?.prompt_eval_count != null ? `<span>prompt tokens ${run.inferRes.prompt_eval_count}</span>` : ""}
         ${run?.inferRes?.load_duration_ms != null ? `<span>model load ${fmtMs(run.inferRes.load_duration_ms)}</span>` : ""}
       </div>
-      <div class="out">${run?.thinking ? `<details class="reasoning" open><summary>Model reasoning · current turn</summary><pre>${esc(run.thinking)}</pre></details>` : ""}<pre>${esc(run?.output || run?.inferRes?.content || "")}${run?.stages.infer?.state === "active" ? '<span class="cursor"></span>' : ""}</pre>${!run?.output && run?.stages.infer?.state !== "active" ? `<div class="empty">${run?.inferRes?.content ? "" : "No output yet."}</div>` : ""}</div>
+      <div class="out">${run?.thinking ? `<details class="reasoning" open><summary>Model reasoning · current turn</summary><pre>${esc(run.thinking)}</pre></details>` : ""}<pre>${esc(run?.output || run?.inferRes?.content || "")}${run?.stages.infer?.state === "active" ? '<span class="cursor"></span>' : ""}</pre>${!run?.output && run?.stages.infer?.state !== "active" ? `<div class="empty">${run?.inferRes?.content ? "" : "No final answer yet. Reasoning is shown separately above."}</div>` : ""}</div>
     </section>
   </div>
 

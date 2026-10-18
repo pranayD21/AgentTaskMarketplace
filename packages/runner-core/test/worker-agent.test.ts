@@ -20,3 +20,16 @@ it('does not send tool or thinking requests to a model that reports neither capa
  const service=fixture();const fetcher:typeof fetch=async(input,init)=>{if(String(input).endsWith('/api/show'))return Response.json({capabilities:['completion']});if(String(input).endsWith('/api/chat')){const body=JSON.parse(String(init?.body));expect(body.tools).toEqual([]);expect(body.think).toBe(false);}return service.fetch(input,init);};
  await runCycle({fetch:fetcher,now:Date.now,getSecret:async()=> 'fixture'},{marketplace_url:'http://marketplace/mcp',ollama_url:'http://ollama',task_id:'task_fixture',model_id:'qwen3:8b',max_runtime_s:180});expect(service.summary().outputVerified).toBe(true);
 });
+it('does not cap worker tokens and requests a distinct answer after reasoning-only completion',async()=>{
+ const service=fixture({max_tokens:1});let turns=0;
+ const fetcher:typeof fetch=async(input,init)=>{
+  if(String(input).endsWith('/api/chat')){
+   const body=JSON.parse(String(init?.body));expect(body.options.num_predict).toBe(-1);
+   if(turns++===0)return Response.json({message:{role:'assistant',thinking:'Reasoning only',content:''},eval_count:5000,done_reason:'stop'});
+   expect(body.think).toBe(false);expect(body.messages.at(-2).thinking).toBe('Reasoning only');
+   return Response.json({message:{role:'assistant',content:'Paris'},eval_count:2,done_reason:'stop'});
+  }return service.fetch(input,init);
+ };
+ const out=await runCycle({fetch:fetcher,now:Date.now,getSecret:async()=> 'fixture'},{marketplace_url:'http://marketplace/mcp',ollama_url:'http://ollama',task_id:'task_fixture',model_id:'qwen3:8b',max_runtime_s:180});
+ expect(out.tokens_out).toBe(5002);expect(turns).toBe(2);expect(service.summary().outputVerified).toBe(true);
+});

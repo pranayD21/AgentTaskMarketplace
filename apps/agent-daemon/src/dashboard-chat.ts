@@ -25,7 +25,7 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
 
  const persist=()=>save(file,runs);
  const identity=()=>{const buyer=read(path.join(options.root,'buyer.json'));const seller=read(path.join(options.root,'seller.json'));if(!buyer?.owner?.user_id||buyer.owner.user_id!==seller?.owner?.user_id||buyer.marketplace_url!==options.marketplaceUrl)throw Error('Sign in with Google to use chat.');return buyer;};
- const emit=(run:Run,event:AgentEvent)=>{run.events.push(event);if(run.events.length>400)run.events.splice(0,run.events.length-400);persist();};
+ const emit=(run:Run,event:AgentEvent)=>{run.events.push(event);persist();};
  const event=(run:Run,type:string,data:Record<string,unknown>)=>emit(run,{type,at:new Date().toISOString(),...data});
  async function execute(run:Run,buyer:any,controller:AbortController){
   const mp=new Marketplace(options.marketplaceUrl,buyer.api_key),deadline=Date.now()+10*60_000;
@@ -62,7 +62,7 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
       post=run.posts[key];
       if(!post){
        if(Object.keys(run.posts).length>=4||Object.values(run.posts).reduce((n,p)=>n+Number(p.args.price_cents),0)+price>200)throw Error('Conversation delegation limit reached: four tasks and 200 TEST cents.');
-       post={args:{...args,...payload,price_cents:price,max_price_cents:price,marketplace_only:true,client_request_id:run.id+'-'+key,max_runtime_s:180,expires_in_s:600,max_tokens:2048}};run.posts[key]=post;persist();
+       post={args:{...args,...payload,price_cents:price,max_price_cents:price,marketplace_only:true,client_request_id:run.id+'-'+key,max_runtime_s:180,expires_in_s:600}};run.posts[key]=post;persist();
       }
       if(post.task_id)return {task:{task_id:post.task_id},idempotent:true};
      }
@@ -158,7 +158,7 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
   try{
    const buyer=identity();
    if(req.method==='GET'&&route==='/api/chat'){
-    await refresh(buyer);json(200,{runs:runs.filter(r=>r.buyer_id===buyer.agent_id).map(({owner_id,buyer_id,posts,jobs,...publicRun})=>publicRun)});return true;
+    await refresh(buyer);json(200,{runs:runs.filter(r=>r.buyer_id===buyer.agent_id).map(({owner_id,buyer_id,posts,jobs,...publicRun})=>({...publicRun,task_prompts:Object.fromEntries(Object.values(posts??{}).filter(p=>p.task_id).map(p=>[p.task_id,String(p.args.prompt??'')]))}))});return true;
    }
    if(req.method!=='POST'){json(405,{error:'Method not allowed.'});return true;}
    let body='';for await(const part of req){body+=part;if(Buffer.byteLength(body)>20000)throw Error('Message is too long.');}const input=JSON.parse(body);

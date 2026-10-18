@@ -10,6 +10,8 @@ function renderTaskCards(parent,run,onlyId){
   const meta=document.createElement('p');meta.textContent=`${id}${task.seller_id?' · Worker '+task.seller_id:''}${task.model_id?' · '+task.model_id:''}`;
   const link=document.createElement('a');link.href='/task.html?task='+encodeURIComponent(id);link.target='_blank';link.rel='noopener';link.textContent='Open task viewer ↗';
   card.append(title,meta,link);
+  const prompt=run.task_prompts?.[id];
+  if(prompt){const details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');details.open=true;summary.textContent='Worker task prompt';text.textContent=prompt;details.append(summary,text);card.append(details);}
   const heading=document.createElement('h4');heading.textContent=task.status==='APPROVED'?'Final output':'Submitted output';card.append(heading);
   const output=document.createElement('pre');output.className='task-output';output.textContent=answer?.answer??(['SUBMITTED','JUDGING','APPROVED','REJECTED'].includes(task.status)?'Retrieving the worker’s output…':'No output yet. This updates automatically.');card.append(output);
   const note=document.createElement('p');note.className='task-review';note.textContent=task.status==='APPROVED'?'Completion-format check passed. This does not verify answer correctness.':task.status==='REJECTED'?'This output failed review; it is not an approved result.':answer?'Awaiting review. This is the worker’s submitted output, not an approved result.':'The worker will submit its output when inference finishes.';card.append(note);

@@ -110,6 +110,7 @@ export class WassetteRuntime implements Runtime {
   private version: string | null = null;
   private measured = false;
   private vmId = "";
+  private taskFailure = false;
 
   constructor(private readonly role: "seller" | "judge", private readonly judgePrivateKeyB64?: string, private readonly options: WassetteOptions = {}) {
     if (!fs.existsSync(WASM_SRC)) throw new Error(`runner.wasm not built; run: pnpm build:runner (expected ${WASM_SRC})`);
@@ -211,9 +212,11 @@ export class WassetteRuntime implements Runtime {
   }
 
   private async callTool(client: Client, name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    this.taskFailure=false;
     const res = await client.callTool({ name, arguments: args }, undefined, { timeout: ["run-cycle", "run-cycle-measured", "judge-cycle"].includes(name) ? 260_000 : 210_000 });
     const text = (res.content as { type: string; text?: string }[] | undefined)?.find((c) => c.type === "text")?.text ?? "";
     if (res.isError) {
+      this.taskFailure=true;
       const code = Object.keys(ERROR_CODES).find((c) => text.includes(c));
       if (code) throw new MarketplaceError(code as ErrorCode, code);
       const safe = /\b(?:TASK_TIMEOUT|MODEL_NOT_INSTALLED|RUNNER_FAILED|OLLAMA_HTTP_\d+|MARKETPLACE_HTTP_\d+|MARKETPLACE_TIMEOUT|JUDGE_[A-Z0-9_]+|MISSING_[A-Z_]+)\b/.exec(text)?.[0];
@@ -230,6 +233,7 @@ export class WassetteRuntime implements Runtime {
     if (value && typeof value === "object") {
       const v = value as Record<string, unknown>;
       if ("err" in v) {
+        this.taskFailure=true;
         const code = String(v.err);
         if (code in ERROR_CODES) throw new MarketplaceError(code as ErrorCode, code);
         throw new Error(/^[A-Z][A-Z0-9_]{2,80}$/.test(code) ? code : "SANDBOX_CALL_FAILED");
@@ -253,6 +257,7 @@ export class WassetteRuntime implements Runtime {
       if (!this.measured) return await this.callComponent("run-cycle", { opts: JSON.stringify(opts) }, CycleOutput);
       const out = await this.callComponent("run-cycle-measured", { opts: JSON.stringify(opts) }, MeasuredOutput);
       if (!out.ok) {
+        this.taskFailure=true;
         const code = safeFailureCode(new Error(out.error_code));
         const error = code in ERROR_CODES ? new MarketplaceError(code as ErrorCode, code) : new Error(code);
         throw Object.assign(error, { seller_usage: out.seller_usage });
@@ -260,8 +265,9 @@ export class WassetteRuntime implements Runtime {
       return { ...out.result, seller_usage: out.seller_usage ?? undefined };
     }
     catch (error) {
-      // Kill a stuck instance before the host recovers its lease; next call reconnects.
-      await this.close(`stopped after ${safeFailureCode(error)}`);
+      // A returned task error leaves the sandbox healthy. Only transport failures
+      // or an unresponsive invocation require teardown before lease recovery.
+      if(!this.taskFailure)await this.close(`stopped after ${safeFailureCode(error)}`);
       throw error;
     }
   }
