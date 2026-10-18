@@ -106,6 +106,14 @@ export async function runBuyerAgent(options: {
         malformedActions=0;
       }
     }
+    if(!options.structuredActions&&!(data.message.tool_calls?.length)&&!String(data.message.content??'').trim()){
+      if(options.hasPendingWork?.()){emit('idle_turn',{turn,reason:String(rawMessage.thinking??'').trim().slice(0,200)||'The model returned no action.'});}
+      else{
+        if(++malformedActions>=3)throw Error('Repeated tool errors: model could not produce a valid action.');
+        emit('action_error',{turn,error:'The model returned no action; asking it to act.',sample:String(rawMessage.thinking??'').trim().slice(0,200)});
+        messages.push(rawMessage,{role:'user',content:'You reasoned but returned no action. Call a tool now, or reply with your answer.'});continue;
+      }
+    }else if(!options.structuredActions)malformedActions=0;
     messages.push(rawMessage);
     emit("model", { turn, duration_ms: Date.now() - started, input_tokens: data.prompt_eval_count ?? null,
       output_tokens: data.eval_count ?? null, load_ms: data.load_duration === undefined ? null : data.load_duration / 1e6, message: data.message });

@@ -73,7 +73,14 @@ it('posts a repeated prompt to another worker but reuses the reservation after a
 });
 it('runs a model that only offers thinking levels with thinking off under the action schema',async()=>{
  setup();call.mockResolvedValue(account);const seen:any[]=[];
- vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{if(url.endsWith('/api/tags'))return Response.json({models:[{name:'gpt-oss:20b'}]});if(url.endsWith('/api/show'))return Response.json({capabilities:['completion','tools','thinking'],thinking:{values:['low','medium','high']}});seen.push(JSON.parse(init.body));return Response.json({message:{role:'assistant',content:JSON.stringify({action:'final',answer:'Hello'})}});}));
- expect((await request('POST',{prompt:'Hello',model:'gpt-oss:20b'})).status).toBe(202);await vi.waitFor(async()=>expect((await request('GET')).body.runs[0].status).toBe('finished'));
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{if(url.endsWith('/api/tags'))return Response.json({models:[{name:'levels-only:7b'}]});if(url.endsWith('/api/show'))return Response.json({capabilities:['completion','tools','thinking'],thinking:{values:['low','medium','high']},details:{family:'other'}});seen.push(JSON.parse(init.body));return Response.json({message:{role:'assistant',content:JSON.stringify({action:'final',answer:'Hello'})}});}));
+ expect((await request('POST',{prompt:'Hello',model:'levels-only:7b'})).status).toBe(202);await vi.waitFor(async()=>expect((await request('GET')).body.runs[0].status).toBe('finished'));
  expect(seen[0].think).toBe(false);expect(seen[0].format.oneOf).toBeDefined();
+});
+it('drives harmony models through native tool calling instead of the action schema',async()=>{
+ setup();call.mockResolvedValue(account);const seen:any[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{if(url.endsWith('/api/tags'))return Response.json({models:[{name:'gpt-oss:20b'}]});if(url.endsWith('/api/show'))return Response.json({capabilities:['completion','tools','thinking'],thinking:{values:['low','medium','high']},details:{family:'gptoss'}});seen.push(JSON.parse(init.body));return Response.json({message:{role:'assistant',content:'Hello'}});}));
+ expect((await request('POST',{prompt:'Hello',model:'gpt-oss:20b'})).status).toBe(202);await vi.waitFor(async()=>expect((await request('GET')).body.runs[0].status).toBe('finished'));
+ expect(seen[0].format).toBeUndefined();expect(seen[0].tools.map((t:any)=>t.function.name)).toContain('delegate_tasks');expect(seen[0].think).toBe('low');
+ expect((await request('GET')).body.runs[0].events.filter((e:any)=>e.type==='model').at(-1).message.content).toBe('Hello');
 });
