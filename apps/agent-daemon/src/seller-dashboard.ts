@@ -224,7 +224,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         else { await actions.stop(); phase = "Seller stopped. Your identity and models are saved."; }
         cache = undefined; return json(200, { ok: true });
       }
-      if (req.method === "GET" && ["/", "/seller.css", "/seller.js", "/task.html", "/task.js", "/task-cards.js"].includes(url.pathname)) {
+      if (req.method === "GET" && ["/", "/seller.css", "/seller.js", "/task.html"].includes(url.pathname)) {
         const name = url.pathname === "/" ? "seller.html" : url.pathname.slice(1);
         res.writeHead(200, { "Content-Type": name.endsWith(".html") ? "text/html; charset=utf-8" : name.endsWith(".css") ? "text/css" : "text/javascript" });
         return res.end(fs.readFileSync(path.join(options.assets, name)));

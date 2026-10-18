@@ -67,7 +67,7 @@ it('completes PKCE in Node, retries the same enrollment key after a lost respons
  expect(fs.statSync(path.join(f.root,'buyer.json')).mode&0o777).toBe(0o600);
  const status=await(await f.request('/api/status')).text();
  expect(status).not.toContain(keys[0]!);expect(status).not.toContain('private-human-session');expect(status).not.toContain('private-refresh');expect(status).not.toContain('b'.repeat(43));expect(JSON.parse(status).buyer_id).toBe('buyer_fixture');
- const page=await(await f.request('/')).text();expect(page).toContain('Continue with Google');expect(page).toContain('Set up Stripe');
+ const page=await(await f.request('/')).text();expect(page).toContain('<div id="root">');expect(page).toContain('/seller.js');expect(page).toContain('/seller.css');expect(page).not.toMatch(/<script(?![^>]*src=)/);
  expect(f.actions.prepare).not.toHaveBeenCalled();expect(f.actions.start).not.toHaveBeenCalled();
 });
 it('rejects wrong or replayed OAuth callbacks before exchanging tokens',async()=>{
@@ -103,7 +103,7 @@ it('serves task output pages only to authenticated local sessions',async()=>{
  const f=await fixture();
  expect((await realFetch(f.origin+'/task.html?task=task_example')).status).toBe(401);
  expect((await f.request('/task.html?task=task_example')).status).toBe(200);
- expect(await (await f.request('/')).text()).toContain('/task-cards.js');
+ expect(await (await f.request('/task.html')).text()).toContain('/seller.js');
  const token=JSON.parse(fs.readFileSync(path.join(f.root,'dashboard-open.json'),'utf8')).token;
  const redirected=await realFetch(f.origin+'/open?token='+token+'&task=task_example',{redirect:'manual'});
  expect(redirected.headers.get('location')).toBe('/task.html?task=task_example');

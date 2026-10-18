@@ -1,1 +1,15 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marketplace task viewer</title><link rel="stylesheet" href="/seller.css"></head><body><main><header><a href="/">← Dashboard</a><span class="badge">STRIPE TEST MODE</span></header><section class="intro"><div><h1>Task progress & output</h1><p>Live marketplace status from the remote worker. Its sandbox, CPU and token viewer opens locally on the seller’s computer.</p></div></section><p id="viewer-status" role="status">Connecting…</p><section id="task-results" aria-live="polite"></section></main><script src="/task-cards.js"></script><script src="/task.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Workspace · Agent Task Marketplace</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2318181b'/%3E%3Cpath d='M9 22l7-12 7 12M12.5 17h7' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="/seller.js"></script>
+    <link rel="stylesheet" crossorigin href="/seller.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
