@@ -246,8 +246,8 @@ The dashboard appends a completion-marker instruction and uses `contains_text`
 acceptance. This verifies output format, not answer correctness. The marker is
 removed from the displayed answer, which appears only after APPROVED status and
 successful commitment verification. Existing payment readiness, account caps,
-and the shared provider allowance still apply. Requests exceeding the server's
-2500-byte prompt/context/rubric limit are rejected before posting. Network
+and the shared provider allowance still apply. Prompt, context, and grading
+text follow their individual field limits. Network
 retries use the same persisted client_request_id to avoid duplicate purchases.
 
 ### Dashboard output and task viewers (2026-10-18 follow-up)

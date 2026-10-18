@@ -30,7 +30,7 @@ B disabled its old local posting policy and confirmed 2,390 microusd booked agai
 
 Each non-mock new task reserves 2,200,000 microusd conservatively for provider fallback. Deterministic approval releases that reservation; uncertain outcomes remain held for operator reconciliation. A failed task preparation can also leave a conservative hold. Do not reset the ledger to clear it. Inspect durable task/payment evidence before reconciling.
 
-Current non-mock posts require a saved request ID, contains-text grading, a combined JSON task/context/rubric payload of at most 2,500 UTF-8 bytes, and at most 4,096 output tokens. Contains-text acceptance does not prove general correctness. The agent must assess the answer for the user's actual task.
+Current non-mock posts require a saved request ID, contains-text grading, and at most 4,096 output tokens. The prompt, context, and grading text follow their individual field limits; there is no combined 2,500-byte limit. Contains-text acceptance does not prove general correctness. The agent must assess the answer for the user's actual task.
 
 ## Verification scope
 
