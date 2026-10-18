@@ -194,7 +194,7 @@ async function main() {
   if (command === "install") { await install(process.argv[3]!,process.argv[4]!,process.argv[5]!); return; }
   if (command === "serve") {
     const dashboard = createSellerDashboard({ root, marketplaceUrl:config().marketplace_url, assets:path.join(app,"ui"),
-      actions:{openTaskViewer:(url)=>{const child=spawn("/usr/bin/open",[url],{stdio:"ignore"});child.on("error",()=>{});child.unref();},status,prepare,start:startSeller,stop:async()=>{run("launchctl",["disable",`${domain}/${SERVICE_LABEL}`]);stopService();await waitForUnlock();},payout:()=>callMarketplace("get_seller_onboarding")} });
+      actions:{status,prepare,start:startSeller,stop:async()=>{run("launchctl",["disable",`${domain}/${SERVICE_LABEL}`]);stopService();await waitForUnlock();},payout:()=>callMarketplace("get_seller_onboarding")} });
     await dashboard.listen(); console.log(`Seller dashboard listening on 127.0.0.1:${DASHBOARD_PORT}`); return;
   }
   if (command === "dashboard") { await openDashboard(); return; }

@@ -1,4 +1,4 @@
-import { readCompute } from "./compute.js";
+import { autoCompute } from "./compute.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,8 @@ const { values: args } = parseArgs({
     once: { type: "boolean", default: false },
     viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" || process.env.ATM_HUMAN_SELLER_REQUIRED === "1" },
     "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "0" : "4700") },
-    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "claim" : "each") },
+    // The installed seller never opens browser windows: the local dashboard embeds the live view.
+    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "never" : "each") },
     "viewer-no-tap": { type: "boolean", default: false },
   },
 });
@@ -184,7 +185,7 @@ async function startViewer() {
   const { startLiveView } = await import("./viewer/server.js");
   const tap = !args["viewer-no-tap"];
   viewer = await startLiveView({ port: Number(args["viewer-port"]), open: args["viewer-open"] as OpenMode, role, runtime: args.runtime, marketplaceUrl: MARKETPLACE_URL, tap });
-  log(`live view: ${viewer.url} (a new window opens for each sandbox instance; --viewer-open each|first|never)`);
+  log(`live view: ${viewer.url} (--viewer-open ${args["viewer-open"]})`);
   if (!tap) return;
   const { startTap } = await import("./viewer/tap.js");
   const marketplaceTap = await startTap(viewer, "marketplace", MARKETPLACE_URL);
@@ -243,7 +244,7 @@ try {
     }
     if (role === "seller") await sellerLoop(mp, rt, {
       marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, pollMs,
-      compute: process.env.ATM_STATUS_FILE ? readCompute(path.join(path.dirname(process.env.ATM_STATUS_FILE), "compute.json")) : undefined,
+      compute: autoCompute(),
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       registerOnly: args["register-only"],
       beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {

@@ -14,7 +14,6 @@ export function mockDashboardApi(): Plugin {
     owner: null as null | { user_id: string; email: string },
     buyerLinked: false, buying: "SETUP_REQUIRED", prepared: false, payout: "UNAVAILABLE", service: "stopped",
     busy: false, phase: "Ready to set up your account", error: null as string | null,
-    compute: { cpu_threads: 4, context_tokens: 8192, max_model_gb: 16, model: "" },
     runs: [] as Run[],
   };
   const models = [
@@ -75,6 +74,81 @@ export function mockDashboardApi(): Plugin {
     } catch { run.status = "failed"; run.error = "Mock run failed."; }
   }
 
+  // ---- SIMULATED live view: the same event shapes the worker's viewer emits ----
+  const live = { history: [] as Record<string, unknown>[], clients: new Set<ServerResponse>(), seq: 0, running: false, net: 0 };
+  const emit = (e: Record<string, unknown>) => {
+    const frame = { ...e, seq: ++live.seq, at: Date.now() };
+    if (e.t !== "stats") live.history.push(frame);
+    const data = `data: ${JSON.stringify(frame)}\n\n`;
+    for (const client of live.clients) client.write(data);
+  };
+  const selling = () => state.service === "running";
+  async function call(vm: string, target: "marketplace" | "ollama", name: string, req: unknown, res: unknown, ms: number, ok = true) {
+    const id = `${target}-${++live.net}`;
+    emit({ t: "net", phase: "start", id, vm, target, method: name === "/api/tags" ? "GET" : "POST", path: target === "ollama" ? name : "/mcp", call: name, req });
+    await delay(ms);
+    emit({ t: "net", phase: "end", id, vm, status: ok ? 200 : 500, ms, ok, res: ok ? res : undefined, error: ok ? undefined : String(res) });
+  }
+  const ANSWER = "Here are the three instance families most recently launched in us-east-1:\n\n1. c8g.large — 2 vCPU, 4 GiB\n2. m8g.xlarge — 4 vCPU, 16 GiB\n3. r8g.2xlarge — 8 vCPU, 64 GiB\n\nAll three are Graviton4 based and generally available.";
+  async function simulateWorker() {
+    if (live.running) return;
+    live.running = true; live.history = []; live.net = 0;
+    emit({ t: "hello", role: "seller", runtime: "wassette", marketplace: "http://127.0.0.1:3000/mcp (simulated)", tap: true, simulated: true });
+    emit({ t: "log", line: "[seller] SIMULATED worker for the mock dashboard" });
+    await delay(800);
+    const vm = "vm-1";
+    emit({ t: "vm", vm, role: "seller", runtime: "wassette", wassette_version: "0.8.1", wasm_sha256: "9f2c41d07be35a8e6f4c0d1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e", network: ["http://127.0.0.1:41733", "http://127.0.0.1:41734"], env: ["AGENT_API_KEY"], state: "booting" });
+    await delay(400); emit({ t: "vm", vm, pid: 48123 });
+    for (const name of ["load-component", "grant-network-permission", "grant-environment-variable-permission"]) { emit({ t: "step", vm, name, phase: "start", args: {} }); await delay(250); emit({ t: "step", vm, name, phase: "end", ok: true, ms: 250 }); }
+    emit({ t: "vm", vm, state: "ready", component: "atm-seller-runner" });
+    const stats = setInterval(() => emit({ t: "stats", vm, cpu: 12 + Math.random() * 60, rss: (380 + Math.random() * 40) * 1048576 }), 1000);
+    try {
+      for (let n = 1; selling(); n++) {
+        await delay(4000);
+        if (!selling()) break;
+        const task = `task_sim${String(n).padStart(3, "0")}`, claim = `claim_${n}`;
+        const fails = n % 3 === 2; // every third task fails inside inference, then the next one must still show up
+        emit({ t: "log", line: `[seller] accepting ${task} offer=100c model=qwen3:8b runtime=wassette` });
+        emit({ t: "step", vm, name: "run-cycle-measured", phase: "start", args: { task_id: task, model_id: "qwen3:8b", max_runtime_s: 180, expected_price_cents: 100 } });
+        emit({ t: "vm", vm, state: "busy" });
+        const started = Date.now();
+        await call(vm, "marketplace", "claim_task", { task_id: task, model_id: "qwen3:8b" }, { claim: { claim_id: claim, task_id: task, price_cents: 100 } }, 300);
+        await call(vm, "marketplace", "start_task", { task_id: task, claim_id: claim }, { task: { status: "RUNNING" } }, 150);
+        await call(vm, "ollama", "/api/tags", undefined, { models: ["qwen3:8b"] }, 40);
+        const id = `ollama-${++live.net}`;
+        const messages = [
+          { role: "system", content: "You are a worker model executing a task for another agent. Use available tools when useful, then return the requested deliverable." },
+          { role: "user", content: `List the three most recent compute instance families launched in us-east-1 with their vCPU and memory, one per line. (${task})` },
+        ];
+        emit({ t: "net", phase: "start", id, vm, target: "ollama", method: "POST", path: "/api/chat", call: "/api/chat", req: { model: "qwen3:8b", messages, options: { num_thread: os.cpus().length, num_ctx: 16384 } } });
+        const inferStart = Date.now();
+        await delay(900);
+        for (const word of "The user wants three recent instance families. I know the Graviton4 generation launched recently, so I will list those with their shapes.".split(" ")) { emit({ t: "token", id, vm, text: "", thinking: `${word} ` }); await delay(40); }
+        if (fails) {
+          await delay(600);
+          emit({ t: "net", phase: "end", id, vm, status: 500, ms: Date.now() - inferStart, ok: false, error: "OLLAMA_HTTP_500" });
+          await call(vm, "marketplace", "release_task", { task_id: task, claim_id: claim, reason: "OLLAMA_HTTP_500" }, { ok: true }, 120);
+          emit({ t: "step", vm, name: "run-cycle-measured", phase: "end", ok: false, ms: Date.now() - started, error: "OLLAMA_HTTP_500" });
+          emit({ t: "vm", vm, state: "ready" });
+          emit({ t: "log", line: "seller: OLLAMA_HTTP_500" });
+          continue;
+        }
+        const tokens = ANSWER.match(/\s*\S+/g) ?? [];
+        for (const t of tokens) { if (!selling()) break; emit({ t: "token", id, vm, text: t }); await delay(45); }
+        emit({ t: "net", phase: "end", id, vm, status: 200, ms: Date.now() - inferStart, ok: true, res: { content: ANSWER, eval_count: tokens.length, prompt_eval_count: 64, eval_duration_ms: tokens.length * 45, load_duration_ms: 820 } });
+        const result = `res_${n}`;
+        await call(vm, "marketplace", "submit_result", { task_id: task, claim_id: claim, commitment_sha256: "3b1f…e9", tokens_out: tokens.length }, { result_id: result, task: { status: "JUDGING" } }, 260);
+        emit({ t: "step", vm, name: "run-cycle-measured", phase: "end", ok: true, ms: Date.now() - started, result: { ok: true, result: { task_id: task, claim_id: claim, result_id: result, runtime_ms: Date.now() - inferStart, tokens_out: tokens.length, price_cents: 100 } } });
+        emit({ t: "vm", vm, state: "ready" });
+      }
+    } finally {
+      clearInterval(stats);
+      emit({ t: "vm", vm, state: "closed", reason: "closed" });
+      for (const client of live.clients) client.end();
+      live.clients.clear(); live.running = false;
+    }
+  }
+
   return {
     name: "atm-mock-dashboard-api",
     configureServer(server) {
@@ -99,7 +173,7 @@ export function mockDashboardApi(): Plugin {
                 provider_budget: state.buyerLinked ? { remaining_microusd: 4997610, enforced: true, available: true } : null,
                 machine: { hostname: os.hostname(), chip: os.cpus()[0]?.model ?? "Apple M-series", cpu_cores: os.cpus().length, memory_bytes: os.totalmem(), free_memory_bytes: os.freemem(), load_average_1m: load, ollama_online: true,
                   models, loaded_models: state.service === "running" ? [{ name: "qwen3:8b", size: 5.2e9, size_vram: 5.6e9 }] : [] },
-                worker: { service: state.service, prepared: state.prepared, payout_status: state.payout, approvals: 7, server_reachable: true, viewer_url: null },
+                worker: { service: state.service, prepared: state.prepared, payout_status: state.payout, approvals: 7, server_reachable: true, viewer_url: state.service === "running" ? "http://127.0.0.1:0" : null, models: ["qwen3:8b"] },
                 owner: state.owner, seller_id: state.owner ? "seller_mock_identity" : null, allowed_models: ["qwen3:8b", "llama3.2:3b"],
                 phase: state.phase, error: state.error, busy: state.busy, payments_label: "MOCK · LOCAL PREVIEW",
               });
@@ -113,10 +187,16 @@ export function mockDashboardApi(): Plugin {
               void (async () => { await delay(1500); state.phase = "Running the liveness canary in the Wasm sandbox…"; await delay(2500); state.prepared = true; state.phase = "Local model ready. Complete Stripe setup, then start selling."; state.busy = false; })();
               return json(res, 202, { ok: true });
             }
-            case "POST /api/start": if (state.buying !== "READY") return json(res, 402, { error: "Complete Stripe buying setup before starting to sell." }); state.service = "running"; state.phase = "Seller started. Waiting for a matching task."; return json(res, 200, { ok: true });
+            case "POST /api/start": if (state.buying !== "READY") return json(res, 402, { error: "Complete Stripe buying setup before starting to sell." }); state.service = "running"; state.phase = "Seller started. Waiting for a matching task."; void simulateWorker(); return json(res, 200, { ok: true });
             case "POST /api/stop": state.service = "stopped"; state.phase = "Seller stopped. Your identity and models are saved."; return json(res, 200, { ok: true });
-            case "GET /api/compute": return json(res, 200, state.compute);
-            case "POST /api/compute": { if (state.service === "running") return json(res, 409, { error: "Stop selling before changing allocation." }); state.compute = { ...state.compute, ...(await body(req)) }; return json(res, 200, state.compute); }
+            case "GET /api/live": {
+              if (state.service !== "running") return json(res, 503, { error: "The worker is not running." });
+              res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive" });
+              for (const e of live.history) res.write(`data: ${JSON.stringify(e)}\n\n`);
+              live.clients.add(res);
+              req.on("close", () => live.clients.delete(res));
+              return;
+            }
             case "GET /api/chat": return state.buyerLinked ? json(res, 200, { runs: state.runs }) : json(res, 400, { error: "Sign in with Google to use chat." });
             case "POST /api/chat": {
               const input = await body(req);

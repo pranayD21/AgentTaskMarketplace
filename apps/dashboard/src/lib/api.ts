@@ -43,7 +43,6 @@ export interface Run {
   id: string; prompt: string; model: string; status: string; events: AgentEvent[]; task_ids: string[];
   error?: string; mode?: string; conversation_id?: string; task_prompts?: Record<string, string>;
 }
-export interface Compute { cpu_threads: number; context_tokens: number; max_model_gb: number; model: string }
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -78,8 +77,6 @@ export async function post<T = any>(route: string, body?: unknown): Promise<T> {
 export const api = {
   status: () => get<Status>("/api/status"),
   chat: () => get<{ runs: Run[] }>("/api/chat"),
-  compute: () => get<Compute>("/api/compute"),
-  saveCompute: (settings: Compute) => post<Compute>("/api/compute", settings),
   google: () => post<{ url: string }>("/api/auth/google"),
   buyerPayment: () => post<{ setup_url?: string | null; buyer_payment_status?: string }>("/api/buyer-payment"),
   prepare: () => post("/api/prepare"),

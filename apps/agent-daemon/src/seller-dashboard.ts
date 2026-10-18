@@ -10,7 +10,6 @@ import { createDashboardChat } from "./dashboard-chat.js";
 // @ts-ignore no declaration file for this workspace module
 import { createBuyerBridge } from "../../web/server/buyer.mjs";
 
-import { computeSettings, readCompute } from "./compute.js";
 
 export const DASHBOARD_PORT = 43118;
 export interface DashboardActions {
@@ -18,7 +17,6 @@ export interface DashboardActions {
   prepare(update: (message: string) => void): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
-  openTaskViewer?(url:string):void;
   payout(): Promise<Record<string, unknown>>;
 }
 const equal = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -49,7 +47,6 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   const tokenFile = path.join(root, "dashboard-open.json");
   writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
   const sessions = new Set<string>();
-  const viewerTokens = new Map<string,{task:string;until:number}>();
   const pending = new Map<string, { state: string; verifier: string; until: number; insforge: string }>();
   let phase = "Ready to set up your account", lastError: string | null = null, busy = false;
   let cache: { at: number; value: Record<string, unknown> } | undefined;
@@ -82,6 +79,26 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   let buyerCache: { at: number; value: Record<string, unknown> } | undefined;
   const origin = () => `http://127.0.0.1:${(server.address() as any).port}`;
   const redirect = (res: http.ServerResponse, to: string) => { res.writeHead(303, { Location: to }); res.end(); };
+  /**
+   * Same-origin relay of the worker's live view. The worker's viewer listens on
+   * a loopback port of its own; the browser never talks to it directly, so the
+   * dashboard's CSP stays `connect-src 'self'` and no second site is embedded.
+   */
+  async function liveEvents(res: http.ServerResponse) {
+    const saved = jsonFile(path.join(root, "status.json"));
+    const viewer = typeof saved?.viewer_url === "string" && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(saved.viewer_url) ? saved.viewer_url : null;
+    const fail = (status: number, message: string) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: message })); };
+    if (!viewer) return fail(503, "The worker is not running.");
+    const control = new AbortController();
+    let upstream: Response;
+    try { upstream = await fetch(`${viewer}/events`, { signal: control.signal, redirect: "error", headers: { Accept: "text/event-stream" } }); }
+    catch { return fail(503, "The worker is not running."); }
+    if (!upstream.ok || !upstream.body) return fail(503, "The worker is not running.");
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive" });
+    res.on("close", () => control.abort());
+    try { for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk); } catch { /* worker stopped or the page left */ }
+    res.end();
+  }
   const server = http.createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store"); res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("X-Content-Type-Options", "nosniff"); res.setHeader("X-Frame-Options", "DENY");
@@ -94,14 +111,12 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
     try {
       if (req.method === "GET" && url.pathname === "/open") {
         const token = jsonFile(tokenFile)?.token ?? "";
-        const supplied=url.searchParams.get("token")??"", viewer=viewerTokens.get(supplied);
-        const validViewer=viewer&&viewer.until>Date.now()&&viewer.task===url.searchParams.get("task");
-        if (!validViewer && (!token || !equal(supplied, token))) return json(403, { error: "Run atm-seller dashboard to open this page." });
+        if (!token || !equal(url.searchParams.get("token") ?? "", token)) return json(403, { error: "Run atm-seller dashboard to open this page." });
         const session = randomBytes(32).toString("hex"); sessions.add(session);
-        if(validViewer)viewerTokens.delete(supplied);else writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
+        writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
         res.setHeader("Set-Cookie", `atm_local=${session}; HttpOnly; SameSite=Lax; Path=/`);
-        const task=url.searchParams.get("task");
-        return redirect(res, task&&/^task_[A-Za-z0-9_-]+$/.test(task)?`/task.html?task=${encodeURIComponent(task)}`:"/");
+        const task = url.searchParams.get("task");
+        return redirect(res, task && /^task_[A-Za-z0-9_-]+$/.test(task) ? `/task.html?task=${encodeURIComponent(task)}` : "/");
       }
       if (!authorized) return json(401, { error: "Run atm-seller dashboard to open this page." });
       if (req.method === "POST" && (req.headers.origin !== origin() || (url.pathname !== "/api/buyer" && req.headers["x-atm-request"] !== "1"))) return json(403, { error: "Invalid local request" });
@@ -176,14 +191,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         return json(200, { ...buyerCache.value, machine, worker: cache.value, owner: saved?.owner ?? null, seller_id: saved?.agent_id ?? null,
           allowed_models: release?.allowed_models ?? [], phase, error: lastError, busy, payments_label: "Stripe TEST MODE" });
       }
-      if(url.pathname==='/api/compute'&&req.method==='GET')return json(200,readCompute(path.join(root,'compute.json')));
-      if(url.pathname==='/api/compute'&&req.method==='POST'){
-        if((await actions.status()).service==='running')return json(409,{error:'Stop selling before changing allocation.'});
-        let body='';for await(const chunk of req){body+=chunk;if(body.length>4096)throw Error('Allocation is too large.');}
-        const settings=computeSettings(JSON.parse(body));
-        const machine=await machineSnapshot();const release=jsonFile(path.join(root,'app/release.json'));if(!machine.models.some((m:any)=>(!settings.model||m.name===settings.model)&&release?.allowed_models?.includes(m.name)&&m.size/1e9<=settings.max_model_gb))throw Error('Choose an installed supported model that fits the model size limit.');
-        writePrivate(path.join(root,'compute.json'),settings);return json(200,settings);
-      }
+      if (req.method === "GET" && url.pathname === "/api/live") return liveEvents(res);
       if (req.method === "POST" && url.pathname === "/api/auth/google") {
         const configResponse = await fetch(new URL("/api/seller-auth-config", options.marketplaceUrl), { signal: AbortSignal.timeout(15000), redirect: "error" });
         if (!configResponse.ok) throw Error("Marketplace sign-in is unavailable. Please try again.");
