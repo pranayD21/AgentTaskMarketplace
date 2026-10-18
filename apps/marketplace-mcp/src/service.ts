@@ -218,6 +218,12 @@ function runnerKey(pubB64: string, keyId?: string): KeyDescriptor {
       next_action: "Send the base64 of the 32-byte public key generated inside the runner sandbox (the runner's get-public-key output).",
     });
   }
+  // A runner sealed to the judge's key would let that seller host read judge copies.
+  if (toB64(pub) === env().JUDGE_PUBLIC_KEY_B64) {
+    throw new MarketplaceError("VALIDATION_ERROR", "runner_pubkey_b64 is the judge's public key; a seller runner must use its own key.", {
+      next_action: "Generate a fresh key inside the runner sandbox. Do not give a seller daemon JUDGE_PRIVATE_KEY_B64.",
+    });
+  }
   return { key_id: keyId?.trim() || `runner-${keyIdFor(pub)}`, public_key_b64: toB64(pub) };
 }
 
@@ -320,7 +326,7 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
     throw new MarketplaceError(
       "SPEND_CAP_EXCEEDED",
       `This would bring reserved+spent to ${projected}c, above your cap of ${buyer.spend_cap_cents}c (reserved ${buyer.reserved_cents}c, spent ${buyer.spent_cents}c).`,
-      { next_action: "Lower max_price_cents, wait for open tasks to settle, or ask your human to register a buyer with a higher spend_cap_cents." },
+      { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
 

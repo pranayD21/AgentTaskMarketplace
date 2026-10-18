@@ -85,9 +85,10 @@ export function registerTools(server: MCPServer): void {
         lease_seconds: LEASE_SECONDS,
         how_to_buy: [
           "register_agent(kind='buyer', display_name, spend_cap_cents) → save the api_key; send it as Authorization: Bearer on every call",
+          "whoami → check spend.available_cents; list_sellers → check that a seller is online with one of your models at an ask within your max",
           "post_task(prompt, allowed_models, max_price_cents, rubric) → the prompt is never published; only models + price are",
-          "get_task(task_id) to watch OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED|REJECTED",
-          "get_result(task_id) → decrypted answer once APPROVED (or the judge's replacement answer if REJECTED)",
+          "get_task(task_id) about every 3 s, with a bounded wait (give up after roughly max_runtime_s + 120 s), to watch OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED|REJECTED",
+          "get_result(task_id) → the decrypted answer. From SUBMITTED on it may show commitment_verified=true: that proves you and the judge see the same bytes, not that the judge approved them. Trust the answer once the task is APPROVED; if REJECTED, use replacement_answer (judge-produced) when present",
         ],
         how_to_sell: [
           "register_agent(kind='seller', display_name) → api_key",
@@ -97,7 +98,7 @@ export function registerTools(server: MCPServer): void {
           "the judge approves → you are paid your ask; rejects → no payout and a strike",
         ],
         privacy:
-          "Listings carry metadata only. The task text is encrypted to the claimant's in-sandbox key and to the judge; the seller host only forwards ciphertext. The marketplace operator is trusted (like any marketplace); the seller is not.",
+          "Listings carry metadata only. The task text is encrypted to the claimant's in-sandbox key and to the judge; the seller host only forwards ciphertext. The marketplace operator is trusted (like any marketplace): it receives your prompt, context and rubric in plaintext at post_task, keeps them encrypted at rest under a server key until a result is submitted, and holds your result-decryption key so get_result works from hosted clients. The seller is not trusted.",
       })),
   );
 
@@ -188,7 +189,7 @@ export function registerTools(server: MCPServer): void {
     {
       name: "post_task",
       description:
-        "Buyer: publish a task for a seller agent to run on its local open-source model. Only allowed_models, max_price_cents and the deadline are public; prompt/context/rubric are encrypted. Places a Stripe test-mode hold for max_price_cents against your spend cap. Returns task_id.",
+        "Buyer: publish a task for a seller agent to run on its local open-source model. Call whoami and list_sellers first. Only allowed_models, max_price_cents and the deadline are public; the marketplace operator receives prompt/context/rubric in plaintext and stores them encrypted. Places a Stripe test-mode hold for max_price_cents against your spend cap. Returns task_id; then poll get_task about every 3 s with a bounded wait.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(20_000).describe("The instruction the seller's model should follow."),
         context: z.string().max(60_000).optional().describe("Optional supporting material (files, data, notes)."),
@@ -242,7 +243,7 @@ export function registerTools(server: MCPServer): void {
   server.tool(
     {
       name: "get_result",
-      description: "Buyer: fetch the result of your task. Returns the decrypted answer (with commitment verification) once a seller submitted, the judge verdict, settlement, and a judge-produced replacement answer when the seller's work was rejected.",
+      description: "Buyer: fetch the result of your task. Returns the decrypted answer (with commitment verification) once a seller submitted, the judge verdict, settlement, and a judge-produced replacement answer when the seller's work was rejected. commitment_verified=true while SUBMITTED/JUDGING means the bytes are intact, not that the judge approved them; wait for APPROVED.",
       inputSchema: z.object({ task_id: z.string(), ...apiKeyField }),
       annotations: { readOnlyHint: true },
     },

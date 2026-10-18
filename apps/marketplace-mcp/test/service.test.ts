@@ -165,6 +165,15 @@ describe("claim_task with a per-claim runner key (contract v0.2)", () => {
     expect(openJson<SellerPayload>(kp, claim.seller_envelope).claim_id).toBe(claim.claim_id);
   });
 
+  it("refuses the judge's public key as a runner key", async () => {
+    const buyer = await agent("buyer");
+    const s = await seller();
+    const task = await post(buyer);
+    const judgeKey = { runner_pubkey_b64: process.env.JUDGE_PUBLIC_KEY_B64! };
+    await expectError(svc.claimTask(s, task.task_id, "qwen3:8b", judgeKey), "VALIDATION_ERROR");
+    await expectError(svc.registerSeller(s, { models: [{ model_id: "qwen3:8b", ask_cents: 60 }], ...judgeKey, runtime: "node-unsandboxed" }), "VALIDATION_ERROR");
+  });
+
   it("register_seller validates an optional key and accepts none", async () => {
     const s = await agent("seller");
     await expectError(svc.registerSeller(s, { models: [{ model_id: "qwen3:8b", ask_cents: 60 }], runner_pubkey_b64: toB64(new Uint8Array(16)), runtime: "wassette" }), "VALIDATION_ERROR");
