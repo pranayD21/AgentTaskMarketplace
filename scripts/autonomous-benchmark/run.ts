@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Marketplace } from "../../apps/agent-daemon/src/marketplace.ts";
 import { runBuyerAgent, type AgentTool, type AgentEvent } from "../../apps/agent-daemon/src/buyer-agent.ts";
 import { BenchmarkPolicy } from "./policy.ts";
+import { submissionTools, type Submission } from "./submission.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -49,7 +50,7 @@ async function arm(kind: "local" | "network", schemas: Awaited<ReturnType<Market
   const dir = path.join(output, kind);
   fs.mkdirSync(dir, { recursive: false, mode: 0o700 }); // refuse to overwrite a measured run
   const traceFile = path.join(dir, "trace.jsonl");
-  const submitted = new Map<string, { file: string; source_task_id: string | null; at: string }>();
+  const submitted = new Map<string, Submission>();
   const cached = new Map<string, any>();
   const policy = new BenchmarkPolicy(runId);
   const jobs = new Set<string>();
@@ -64,25 +65,7 @@ async function arm(kind: "local" | "network", schemas: Awaited<ReturnType<Market
     if (event.type === "tool_call") console.log(JSON.stringify({ arm: kind, elapsed_s: Math.round((Date.now() - started) / 1000), tool: event.name }));
   };
   const tools: AgentTool[] = [
-    { name: "submit_solution", description: "Save final Python source for one or more task_ids. No hidden-test feedback is returned. Supply code directly, or source_task_id to save an APPROVED commitment-verified result already retrieved through mcp_get_result. A later submission replaces the earlier one before the deadline.",
-      parameters: { type: "object", properties: { task_ids: { type: "array", items: { type: "string" } }, code: { type: "string" }, source_task_id: { type: "string" } }, required: ["task_ids"] },
-      async invoke(args) {
-        const ids = args.task_ids;
-        if (!Array.isArray(ids) || !ids.length || ids.some(id => !problems.some((p: any) => p.task_id === id))) throw new Error("Unknown task_ids");
-        let code = args.code;
-        if (args.source_task_id) {
-          const r = cached.get(String(args.source_task_id));
-          if (r?.task?.status !== "APPROVED" || r?.result?.commitment_verified !== true) throw new Error("First retrieve an APPROVED commitment-verified result");
-          code = r.result.answer;
-        }
-        if (typeof code !== "string" || !code.trim() || code.length > 100000) throw new Error("Complete Python source required");
-        for (const id of ids) {
-          const file = path.join(dir, `${id.replace("/", "-")}.py`);
-          fs.writeFileSync(file, code, { mode: 0o600 });
-          submitted.set(id, { file, source_task_id: args.source_task_id ? String(args.source_task_id) : null, at: new Date().toISOString() });
-        }
-        return { saved: ids, missing: problems.filter((p: any) => !submitted.has(p.task_id)).map((p: any) => p.task_id) };
-      } },
+    ...submissionTools({ network: kind === "network", dir, taskIds: problems.map((p: any) => p.task_id), submitted, cached }),
     { name: "wait", description: "Wait briefly when asynchronous work is pending. Does not perform work or spend money.",
       parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, maximum: 15 } }, required: ["seconds"] },
       async invoke(args, signal) { await delay(Math.max(1, Math.min(15, Number(args.seconds) || 1)) * 1000, undefined, { signal }); return { waited: true }; } },

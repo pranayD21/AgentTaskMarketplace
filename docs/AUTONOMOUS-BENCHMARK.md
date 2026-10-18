@@ -8,7 +8,9 @@ D remains a general seller, polling for eligible tasks. C's existing general sel
 
 This replaces the interpretation of the earlier 160-line C/D rehearsal as an autonomy benchmark. That rehearsal established transport, concurrent workers and payment settlement; its parts were prepared by a human-directed agent.
 
-## Fixed protocol: autonomous-v1
+## Fixed protocol: autonomous-v2
+
+The initial `autonomous-v1` pilot was stopped before the network arm. Its combined submission tool exposed a remote-result field even in the local-only arm; Qwen filled that field with a benchmark ID, so the host rejected otherwise supplied code repeatedly. That run is invalid and its trace is preserved. Version 2 separates local code submission from remote-result submission and exposes the latter only in the network arm. No hidden tests or candidate scores were inspected to choose this fix.
 
 - Dataset: [OpenAI HumanEval](https://github.com/openai/human-eval), revision `b9453e8f1865df0a0057a1383767caa400acfbcf`.
 - Task IDs: 0, 12, 20, 32, 40, 53, 57 and 63, fixed before candidate generation. The fixture manifest records hashes and the MIT license. This is an eight-function subset, not a full HumanEval score.
@@ -45,7 +47,7 @@ pnpm --filter @atm/agent-daemon typecheck
 pnpm --filter @atm/agent-daemon exec vitest run test/buyer-agent.test.ts
 node --test scripts/autonomous-benchmark/grade.test.mjs
 pnpm exec tsx scripts/autonomous-benchmark/run.ts preflight
-pnpm exec tsx scripts/autonomous-benchmark/run.ts run autonomous-v1
+pnpm exec tsx scripts/autonomous-benchmark/run.ts run autonomous-v2
 ```
 
 On this Mac the grader uses `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`; `BENCHMARK_PYTHON` can select another working Python framework. macOS sandbox initialization requires running outside Codex's outer process sandbox, while generated code still runs inside the grader's restrictive sandbox. The launcher refuses to overwrite an existing protocol. Preserve failed runs and explain any later protocol revision.
