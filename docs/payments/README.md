@@ -55,7 +55,7 @@ Accounts created before this landed are repaired lazily: `ensureTransfersActive`
 ### Test it without a phone (simulated Shared Payment Token)
 
 ```sh
-PAYMENT_MODE=mpp pnpm dev:server -- --no-open                    # or PORT=3001 BASE_URL=http://localhost:3001 … to run beside a card-mode server
+PAYMENT_MODE=mpp pnpm dev:server --no-open                    # or PORT=3001 BASE_URL=http://localhost:3001 … to run beside a card-mode server
 node docs/payments/simulate-spt.mjs --max 100                    # MARKETPLACE_URL=http://localhost:3001/mcp if you changed the port
 ```
 
@@ -161,7 +161,7 @@ $ link-cli mpp pay http://localhost:3001/api/pay/task_7e3eb7acecd29bda --method 
 ## Card mode — exact commands and what they printed
 
 ```sh
-pnpm dev:server -- --no-open
+pnpm dev:server --no-open
 node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max 100
 pnpm daemon --role seller --runtime node --once
 pnpm daemon --role judge  --runtime node --once
@@ -178,6 +178,19 @@ node scripts/buyer.mjs task <task_id>        # settlement.stripe_transfer_id is 
 | Accounts v2 (`/v2/core/accounts`, account links v2) | GA (Stripe SDK v23, API `2026-…`) |
 | Shared Payment Tokens, `test_helpers/shared_payment/granted_tokens`, Machine Payments Protocol, mppx `stripe/charge` | **preview** — needs machine payments enabled on the Stripe account; the test helper works in test mode without the Link app |
 | Link CLI / Link agent wallet | preview; requires a US Link account on a phone |
+
+## Failure recovery — what the provider guarantees (P1/P2)
+
+The service (A) orchestrates; the provider layer promises these, each covered by `src/payments.test.ts`:
+
+| failure | provider behaviour | service hook |
+|---|---|---|
+| task insert fails after a successful hold | `compensateHold(task, hold, reason)` cancels the card hold with the same idempotency key as `release()`, verifies on Stripe when the cancel errors, and throws a retryable `PAYMENT_FAILED` only if the undo is unconfirmed. MPP tasks hold no money before payment. | `postTask`: on insert error → `await payments().compensateHold(…)` + un-reserve |
+| crash between `transfers.create` and recording its id | `reconcileSellerTransfer` looks up Stripe transfers by `transfer_group = task_id` **before** creating and adopts one only if destination, amount, currency and group all match (`recovered: true`); anything that exists but does not match is `PENDING` / `MISMATCH` for an operator, never claimed as paid, and no second transfer is created | re-run `submit_verdict` / retry sweep |
+| transfer fails after capture (onboarding, provider error) | `capture()` returns `transfer_state = PENDING` with `pending_reason ∈ {PENDING_ONBOARDING, PROVIDER_ERROR}`, `owed_cents = price` (→ `payout_owed_cents`), `transferred_cents = 0` (→ `payout_transferred_cents`), `stripe_transfer_id = null`; the task still settles | A persists `transfer_state`/`transfer_attempts` and schedules `retryTransfer` |
+| retrying that transfer | `retryTransfer(task, seller, amountCents, { attempt: transfer_attempts, known_transfer_id })` verifies a recorded id field by field, else adopts a matching existing transfer, else creates one with `atm:<task>:transfer:r<attempt>` — a **new** key per attempt, because Stripe replays the stored error of a reused key. `transferred_cents` is the amount the transfer actually moved. At most one transfer per task from one process; **concurrent** sweeps need A's per-settlement lease/CAS before calling (the lookup cannot see an in-flight create) | `sweep()` or an operator tool; B shows *owed* vs *transferred* |
+| asserting the money | `inspect(task)` → `{authorized, captured, refunded, transferred, transfer_ids}` from Stripe (or the mock ledger) | fault tests assert no orphaned hold, ≤1 capture, exactly 1 transfer |
+| offline fault injection | `PAYMENT_MODE=mock` + `MOCK_PAYMENT_FAULTS="hold:1,capture,transfer:2,release,compensate"` — bare step fails always, `step:N` fails the first N calls | `DB_MODE=memory` tests in A's suite |
 
 ## Never real money — where the hard stops are
 
