@@ -30,6 +30,85 @@ Nothing else. No display name, no prices (task-offer pricing), no model list. Fo
 
 A Mac with nothing installed runs the one command and, with no other typing, appears in `list_sellers` with its hash and detected models, passes the canary, claims and completes a task posted by someone else, prints the payout link, survives a reboot (launchd), and `atm-seller status` shows it. Record the exact transcript (redacted) in `apps/agent-daemon/README.md`.
 
+## Implementation steps for C (do them in this order; time boxes from 05:10 UTC, demo at 17:00 UTC)
+
+You act for A as well, so the server pieces below are yours too. Commit on `feat/c-seller-install`, typecheck + tests green, push after each step, and post a HANDOFF to D and A after steps 3, 5 and 7. D answers within minutes.
+
+### Step 1 (by 06:00 UTC) — `scripts/install-seller.sh`, runnable from a local tarball
+
+Create `scripts/install-seller.sh` (A's path; you hold A's delegation). Skeleton to fill in, keep it POSIX-ish bash with `set -euo pipefail`:
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+ATM_URL="${ATM_MARKETPLACE_URL:-https://warm-cloud-4hh5i.run.mcp-use.com}"
+ATM_HOME="${ATM_HOME:-$HOME/.atm}"
+log() { printf '\033[1;34m[atm]\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m[atm] %s\033[0m\n' "$*" >&2; exit 1; }
+
+# 1 preflight
+[ "$(uname -s)" = Darwin ] || die "macOS only for now"
+[ "$(uname -m)" = arm64 ] || die "Apple silicon only for now"
+command -v brew >/dev/null || { log "installing Homebrew"; /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
+brew list node >/dev/null 2>&1 || brew install node
+brew list pnpm >/dev/null 2>&1 || brew install pnpm
+brew list ollama >/dev/null 2>&1 || brew install ollama
+brew list wassette >/dev/null 2>&1 || brew install wassette
+brew services list | grep -q 'ollama.*started' || brew services start ollama
+node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=22)?0:1)' || die "Node >= 22.22 required"
+
+# 2 model (auto-detected later; only pull when nothing allowlisted is installed)
+until curl -fsS http://localhost:11434/api/tags >/dev/null; do sleep 1; done
+curl -fsS http://localhost:11434/api/tags | grep -Eq '"name":"(qwen3:8b|qwen3:4b|qwen2\.5:7b|llama3\.1:8b|gemma3:4b|mistral:7b)' || ollama pull qwen3:8b
+
+# 3 code + prebuilt runner (hash-checked)
+mkdir -p "$ATM_HOME/app" "$ATM_HOME/logs" "$ATM_HOME/measurements"
+curl -fsSL "$ATM_URL/seller-bundle.tgz" | tar -xz -C "$ATM_HOME/app" --strip-components=1
+curl -fsSL "$ATM_URL/runner.wasm" -o "$ATM_HOME/app/packages/runner-wasm/dist/runner.wasm"
+curl -fsSL "$ATM_URL/runner.wasm.sha256" -o "$ATM_HOME/app/packages/runner-wasm/dist/runner.wasm.sha256"
+( cd "$ATM_HOME/app/packages/runner-wasm/dist" && shasum -a 256 -c <(printf '%s  runner.wasm\n' "$(cat runner.wasm.sha256)") ) || die "runner.wasm hash mismatch"
+( cd "$ATM_HOME/app" && pnpm install --frozen-lockfile --prod --silent )
+printf 'MARKETPLACE_URL=%s/mcp\nOLLAMA_URL=http://localhost:11434\nATM_RUNTIME=wassette\n' "$ATM_URL" > "$ATM_HOME/app/.env"
+
+# 4 canary
+( cd "$ATM_HOME/app" && pnpm daemon --role seller --runtime wassette --canary-only --model qwen3:8b --computer-id "$(hostname -s)" --measurement-file "$ATM_HOME/measurements/canary.jsonl" ) || die "canary failed; see above"
+
+# 5 identity + 6 payout link: first daemon start registers; it prints payout_onboarding_url when the server returns one
+# 7 persistence: launchd agent + atm-seller CLI (see step 3 below)
+# 8 summary: atm-seller status
+```
+
+Until step 2 exists, test it against a tarball you build locally: `git archive --format=tgz -o /tmp/seller-bundle.tgz HEAD` served by `python3 -m http.server`, with `ATM_MARKETPLACE_URL=http://localhost:8000` for the downloads only. Daemon changes you need in this step: `--state-dir` (default `~/.atm`, identity file `seller.json` mode 600, superseding `.atm-state`), display name defaulting to the hostname, and reading `MARKETPLACE_URL` from `$ATM_HOME/app/.env`.
+
+### Step 2 (by 06:45 UTC) — hosted static endpoints (A's server, in `apps/marketplace-mcp/src/routes.ts`)
+
+- `GET /install.sh` → the script above, `content-type: text/x-shellscript`.
+- `GET /seller-bundle.tgz` → a tarball built at deploy by a new `scripts/build-seller-bundle.sh`: root `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `apps/agent-daemon`, `packages/shared`, `packages/crypto`, `packages/runner-core`, `packages/runner-wasm/{package.json,policies,wit}`; never `.env`, `docs/`, `coordination/`, `apps/marketplace-mcp`. Commit the bundle under `apps/marketplace-mcp/public/` or serve from a build step — your call, say which.
+- `GET /runner.wasm` and `GET /runner.wasm.sha256` → the component the deployment was built with (same bytes C and D run).
+- `GET /version` → `{ contract: "0.3", component_sha256, min_daemon_version }`; the daemon fetches it at start and refuses to claim when its component hash differs.
+Redeploy to Manufact and confirm `curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | head -3`.
+
+### Step 3 (by 07:30 UTC) — launchd service + `atm-seller` CLI
+
+- `scripts/atm-seller` (installed to `/usr/local/bin/atm-seller` or `$ATM_HOME/bin`, on PATH via the shell rc): `start` (launchctl bootstrap), `stop`, `status` (pid, seller id and display name from the state file, last 3 log lines, `whoami` payout status via the MCP), `logs` (tail -f), `uninstall` (bootout + remove `$ATM_HOME`; keep `seller.json` unless `--purge`).
+- Plist `~/Library/LaunchAgents/dev.atm.seller.plist`: Label `dev.atm.seller`, ProgramArguments `[pnpm, daemon, --role, seller, --runtime, wassette, --poll-ms, 5000, --state-dir, ~/.atm, --computer-id, <hostname>, --measurement-file, ~/.atm/measurements/seller.jsonl]`, WorkingDirectory `~/.atm/app`, EnvironmentVariables PATH with Homebrew, KeepAlive true, RunAtLoad true, StandardOutPath/StandardErrorPath `~/.atm/logs/seller.log`. The installer writes it and bootstraps it; stop any foreground daemon first so one identity has one process.
+
+### Step 4 (by 08:00 UTC) — payout onboarding link (D + you)
+
+D adds to `payments.ts`: `sellerPayoutOnboarding(stripe, agent, baseUrl) → { payout_status: "active" | "pending" | "none", onboarding_url: string | null }` (Account Link v2, uses the existing `onboardingLink()`). You expose it in `register_seller`'s response and in `whoami.seller` as `payout_status` and `payout_onboarding_url` (service.ts, A's file, yours by delegation). The installer prints the URL as `Open this to set up payouts: <url>` and runs `open <url>`; the daemon keeps working and `atm-seller status` shows `payouts: pending` until active. Test mode keeps using the synthetic identity, so the link is informational there; live mode is where it matters.
+
+### Step 5 (by 08:45 UTC) — fresh-machine test
+
+Run the one command on a Mac that has never had the repo (the human's friend's laptop, or a new macOS user account on yours). Required evidence: the full terminal transcript (redacted), `list_sellers` showing the new seller with component hash and detected models, one task it claimed and completed against a buyer's posted offer, `atm-seller status` output, and a reboot (or `launchctl bootout` + `bootstrap`) showing it comes back. Put the transcript in `apps/agent-daemon/README.md` under "One-command install".
+
+### Step 6 (by 09:15 UTC) — honesty and docs
+
+In the summary line and README: models are self-reported from the seller's Ollama plus a liveness canary, not attested; the runner is a Wasm sandbox, not a TEE; payments are Stripe test mode. Keep `--runtime node` labelled UNSANDBOXED and never selected by the installer.
+
+### Step 7 — HANDOFF
+
+Branch, SHA, the exact one-liner, what it printed on the fresh machine, the new seller id, and what is still missing (Linux, Homebrew/npm publishing).
+
 ## Until the installer exists: the manual path for a friend's Mac (works now)
 
 ```sh
