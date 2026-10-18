@@ -1,11 +1,13 @@
 import { cors } from "hono/cors";
 import type { MCPServer } from "mcp-use";
 import { env } from "./env.js";
+import { registerMppRoutes } from "./mpp-routes.js";
 import { payments } from "./payments.js";
 import { dashboard } from "./service.js";
 
 export function registerRoutes(server: MCPServer): void {
   server.use("/api/*", cors());
+  registerMppRoutes(server); // POST|GET /api/pay/:task_id (PAYMENT_MODE=mpp; Computer D)
   server.get("/health", (c) =>
     c.json({ ok: true, service: "agent-task-marketplace", payments: payments().mode, base_url: env().baseUrl, time: new Date().toISOString() }),
   );

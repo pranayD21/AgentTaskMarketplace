@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { MarketplaceError, type TaskStatus } from "@atm/shared";
 import type { AgentRow, TaskRow } from "./db.js";
 import { env } from "./env.js";
+import { StripeMppProvider } from "./mpp.js";
 
 export type PaymentMode = "card" | "mpp" | "mock";
 
@@ -347,21 +348,70 @@ class StripeCardProvider implements PaymentProvider {
   }
 }
 
-let provider: PaymentProvider | undefined;
+// ---------------------------------------------------------------------------
+// Routing: settlement follows the task's own payment_mode. Tasks posted while
+// the server ran in one mode must still capture/release correctly when a
+// different server (or the same one restarted in another mode) judges them —
+// the Insforge DB is shared by every computer during the hackathon.
+// ---------------------------------------------------------------------------
+
+class RoutingProvider implements PaymentProvider {
+  private readonly byMode = new Map<PaymentMode, PaymentProvider>();
+
+  constructor(private readonly configured: PaymentProvider, private readonly e: { STRIPE_SECRET_KEY?: string | undefined; STRIPE_PROFILE_ID?: string | undefined; baseUrl: string }) {
+    this.byMode.set(configured.mode, configured);
+  }
+  get mode() { return this.configured.mode; }
+  get label() { return this.configured.label; }
+  get min_cents() { return this.configured.min_cents; }
+  onboardBuyer(agent: { id: string; display_name: string }) { return this.configured.onboardBuyer(agent); }
+  onboardSeller(agent: { id: string; display_name: string }) { return this.configured.onboardSeller(agent); }
+  hold(task: { id: string; max_price_cents: number }, buyer: AgentRow) { return this.configured.hold(task, buyer); }
+  capture(task: TaskRow, seller: AgentRow | null, amountCents: number) { return this.for(task.payment_mode).capture(task, seller, amountCents); }
+  release(task: TaskRow, reason: string) { return this.for(task.payment_mode).release(task, reason); }
+
+  /** Provider for a mode; built lazily, falls back to the configured one when the other rail cannot be configured. */
+  for(mode: PaymentMode): PaymentProvider {
+    const cached = this.byMode.get(mode);
+    if (cached) return cached;
+    let p: PaymentProvider;
+    try {
+      p = buildProvider(mode, this.e);
+    } catch (err) {
+      console.warn(`[payments] cannot settle ${mode} tasks on this server (${(err as Error).message}); using ${this.configured.mode}`);
+      p = this.configured;
+    }
+    this.byMode.set(mode, p);
+    return p;
+  }
+}
+
+function buildProvider(mode: PaymentMode, e: { STRIPE_SECRET_KEY?: string | undefined; STRIPE_PROFILE_ID?: string | undefined; baseUrl: string }): PaymentProvider {
+  switch (mode) {
+    case "mock":
+      return new MockProvider();
+    case "card":
+      return new StripeCardProvider(e.STRIPE_SECRET_KEY);
+    case "mpp":
+      // Defined in mpp.ts (Computer D). payments.ts ↔ mpp.ts import each other;
+      // that is safe because neither touches the other's exports at module top level.
+      return new StripeMppProvider(e.STRIPE_SECRET_KEY, e.STRIPE_PROFILE_ID, e.baseUrl);
+  }
+}
+
+let provider: RoutingProvider | undefined;
 
 export function payments(): PaymentProvider {
   if (provider) return provider;
   const e = env();
-  switch (e.PAYMENT_MODE) {
-    case "mock":
-      provider = new MockProvider();
-      break;
-    case "card":
-      provider = new StripeCardProvider(e.STRIPE_SECRET_KEY);
-      break;
-    case "mpp":
-      throw new Error("PAYMENT_MODE=mpp is not wired yet; use card or mock");
-  }
+  provider = new RoutingProvider(buildProvider(e.PAYMENT_MODE, e), e);
   console.log(`[payments] mode=${provider.mode}: ${provider.label}`);
   return provider;
+}
+
+/** The MPP provider when this server can run one (needs STRIPE_PROFILE_ID), whatever PAYMENT_MODE is. */
+export function mppProvider(): StripeMppProvider | null {
+  payments();
+  const p = provider!.for("mpp");
+  return p instanceof StripeMppProvider ? p : null;
 }
