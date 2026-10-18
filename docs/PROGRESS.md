@@ -21,6 +21,8 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 | 18:55 | Found `pnpm daemon --role …` broken under pnpm 10.33: the root script's trailing `--` reached `parseArgs` as a positional. Fixed in root `package.json`; `pnpm dev:server --no-open` (no `--`) is the working form. |
 | 19:03 | **Contract v0.2 server side** + server hardening + memory DB + 18 server tests, `pnpm smoke` green (real server, both daemons, per-claim claim). Commit `e7ae1b3` on `claude/zen-mccarthy-0xradq`. |
 | 19:06 | `mcp-use build` → `.mcp-use/build/index.js`; `mcp-use start` from the build serves 21 tools (memory mode). Manufact login/deploy not attempted: device flow needs the human's browser and Manufact is not reachable from this container. |
+| 19:10 | Merged E's `feat/e-judge-inkbox` (contains C's `feat/c-seller`) onto v0.2: no conflicts; C's `sellerKeyMode()` reads this server as `per-claim`. |
+| 19:15 | GitHub refused pushes (Claude GitHub App not installed on the repo); the human installed it. Branch and `main` pushed. **C is acting integrator** (A-C-20261018T021200Z-02): live Insforge/Stripe check, Manufact deploy, Armature for B, merging D (`f30e441`) and B (`da25251`), rehearsal. |
 
 ## 2. Commits on `main`
 
@@ -32,7 +34,12 @@ Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 
 | `021eb1e` | feat(sandbox): Wasm runner component, Wassette runtime, buyer CLI |
 | `c212dee` | docs: document progress, plan and five-computer split |
 | `19f7431` | coord: C requests per-claim runner key support |
-| `e7ae1b3` | feat(contract): v0.2 per-claim runner keys (+ hardening, memory DB, tests, `pnpm smoke`) — on `claude/zen-mccarthy-0xradq`, pending merge to `main` |
+| `a74aebc` | feat(contract): v0.2 per-claim runner keys (+ hardening, memory DB, tests, `pnpm smoke`) |
+| `7cd723d` | fix(shared): keep v0.2 ClaimPublic fields optional for mixed-version clients |
+| `23e7883` | merge feat/e-judge-inkbox (C run-cycle `4cc4fb7`, E judge-cycle `b2f550e`/`5a56963`, Inkbox `8843287`, demo `d1e7054`) |
+| `2bdb477` | test(marketplace-mcp): fake Ollama lists models; judge checks submitted commitment |
+| `69b8e88` | feat(marketplace-mcp): buyer guidance wording (B) and judge-key guard |
+| `bc05530` | merge origin/main (coordination) — `pnpm install --frozen-lockfile`, typecheck, 51 tests (+1 Wassette skipped), `pnpm smoke` green |
 
 ## 3. What exists, file by file
 
@@ -137,7 +144,7 @@ Updates 19:06 (A): item 1 server half **done** (contract v0.2, `e7ae1b3`); item 
 6. Judge model default is `claude-opus-5-5` with `effort: low`; swap via `JUDGE_MODEL` if cost/latency matters.
 7. `CLAIMED` state exists in the enum but is never used (claim goes straight to `PAYLOAD_READY`); harmless, could be removed in a contract revision.
 8. The seller's `register_seller` runner key becomes advisory once per-claim keys land (issue 1); the dashboard should show the per-claim key id instead.
-9. **[C] Node runtime seller uses the judge keypair as its runner key.** `apps/agent-daemon/src/main.ts` constructs `NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64)` for both roles, and `pnpm daemon` loads the root `.env`, so on any machine holding the shared `.env` the seller registers `runner-0d5c3e52…` = the judge key id. Fix: pass the judge key only when `role === "judge"`. Related operational rule: only the judge machine should hold `JUDGE_PRIVATE_KEY_B64` and `ANTHROPIC_API_KEY`. Once C's fix is on `main`, A will make the server refuse a runner key equal to the judge key.
+9. **[C — FIXED in `4cc4fb7`; server guard in `69b8e88`] Node runtime seller used the judge keypair as its runner key.** `apps/agent-daemon/src/main.ts` constructs `NodeRuntime(process.env.JUDGE_PRIVATE_KEY_B64)` for both roles, and `pnpm daemon` loads the root `.env`, so on any machine holding the shared `.env` the seller registers `runner-0d5c3e52…` = the judge key id. Fix: pass the judge key only when `role === "judge"`. Related operational rule: only the judge machine should hold `JUDGE_PRIVATE_KEY_B64` and `ANTHROPIC_API_KEY`. Once C's fix is on `main`, A will make the server refuse a runner key equal to the judge key.
 10. **[D] `payments.ts`** has two `PAYMENT_FAILED` errors without `next_action` (Stripe refused the hold; unexpected PaymentIntent status).
 11. **[A] Spend-cap check is not atomic.** `post_task` checks `reserved + spent + max ≤ cap` on the row read at auth time and `adjustBuyerBalance` is read-modify-write, so two concurrent posts from one buyer could both pass. Low risk for the demo (one buyer agent, sequential posts); fix with a conditional update if time allows.
 12. **[A] Live verification pending.** This session's container cannot reach Insforge/Stripe/Inkbox/Manufact; v0.2 is verified against the memory DB and mock payments only. Needs one run of `node scripts/buyer.mjs post … --expect Lima` + both daemons against Insforge + Stripe test mode on a LAN machine.
