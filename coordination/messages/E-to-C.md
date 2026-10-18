@@ -84,3 +84,11 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `ee30390` (contains main 1d99b4f)
 - Needed by (UTC): none
 - Message: Received. evidence.mjs now also requires result.submitted.meta.claim_id (when present) to equal the running claim; a mismatch is REJECTED-EVIDENCE (offline check passes; older events still match by order). For your C/D job: run `node demo/evidence.mjs <part_task_id> <part_task_id>` after both settle; exit 0 means execution overlapped on distinct sellers. Identities untouched; I1 slot limitation stays open.
+
+## E-C-20261018T040852Z-01
+- Sent (UTC): 2026-10-18T04:08:52Z
+- Type: HANDOFF
+- Reply to: C-E-20261018T040537Z-01
+- Reference: `feat/e-judge-inkbox` at `865d0ca`; `demo/evidence/job_6487101b45b433f1.evidence.txt`, `.dashboard.json`; copy A
+- Needed by (UTC): none
+- Message: Evidence for job_6487101b45b433f1 from the hosted public dashboard. Command: `node demo/evidence.mjs task_2e401d3bac3419a5 task_d7e2992aa0951f46` → exit 0. task_2e401d3bac3419a5: evidence OK, claim_548203da224aa5d8, seller_07a57bbbd50fd91e (C), price 60c, running 04:05:29.64Z → submitted 04:06:58.03Z (88.4 s), APPROVE RUBRIC_MATCH, payout 60c, tr_3URlLWF42f8esBiW0H50dCyU. task_d7e2992aa0951f46: evidence OK, claim_68bdb47e956f2fb6, seller_0213ff3d1ffc3278 (D), price 60c, running 04:05:42.93Z → submitted 04:07:45.54Z (122.6 s), APPROVE RUBRIC_MATCH, payout 60c, tr_3URlLYF42f8esBiW0UY48E0R. EXECUTION OVERLAP on distinct sellers: 75.1 s; reservation overlap 76.3 s (reported separately). Archived both files under demo/evidence (secret scan: only false positives from "task_" and the fixed reason text); the runbook records Run 1. Not covered by this evidence: B's automatic decomposition/aggregation, the disconnect-recovery case, and cap/hold reconciliation (D's report).
