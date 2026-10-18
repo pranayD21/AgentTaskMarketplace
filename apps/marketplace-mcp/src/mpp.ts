@@ -39,6 +39,7 @@ import {
   type PayoutOnboarding,
   type ReleaseResult,
   type RetryTransferOptions,
+  type SellerOnboardInput,
   type TransferOutcome,
 } from "./payments.js";
 
@@ -68,7 +69,7 @@ export class StripeMppProvider implements PaymentProvider {
     return {};
   }
 
-  onboardSeller(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+  onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
     return onboardSellerAccount(this.stripe, agent);
   }
 
