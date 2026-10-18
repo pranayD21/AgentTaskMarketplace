@@ -182,6 +182,8 @@ export function parseRpcResponse(body, contentType, id) {
   return message.result;
 }
 export function createClient(endpoint, key, fetcher = fetch) {
+  const recovery =
+    "Before repeating a post, use tasks to check whether it succeeded. Do not automatically repeat a post.";
   let session,
     protocol = "2025-06-18",
     id = 0;
@@ -213,25 +215,47 @@ export function createClient(endpoint, key, fetcher = fetch) {
       throw new BuyerError(
         "CONNECTION_FAILED",
         "Marketplace request failed or timed out.",
-        "Check MARKETPLACE_URL. Before repeating a post, use tasks to check whether it succeeded.",
+        `Check MARKETPLACE_URL. ${recovery}`,
       );
     }
     if (!response.ok)
       throw new BuyerError(
         `HTTP_${response.status}`,
         `Marketplace returned HTTP ${response.status}.`,
-        "Check endpoint and buyer key. Do not automatically repeat a post.",
+        `Check endpoint and buyer key. ${recovery}`,
       );
     session = response.headers.get("mcp-session-id") ?? session;
     if (notification) {
       await response.body?.cancel();
       return;
     }
-    return parseRpcResponse(
-      await response.text(),
-      response.headers.get("content-type") ?? "",
-      requestId,
-    );
+    let body;
+    try {
+      body = await response.text();
+    } catch {
+      throw new BuyerError(
+        "CONNECTION_FAILED",
+        "Marketplace response was interrupted or timed out.",
+        recovery,
+      );
+    }
+    try {
+      return parseRpcResponse(
+        body,
+        response.headers.get("content-type") ?? "",
+        requestId,
+      );
+    } catch (error) {
+      if (error instanceof BuyerError) {
+        error.nextAction ??= recovery;
+        throw error;
+      }
+      throw new BuyerError(
+        "PROTOCOL_ERROR",
+        "Marketplace returned an incomplete or invalid MCP response.",
+        recovery,
+      );
+    }
   }
   return {
     async initialize() {
