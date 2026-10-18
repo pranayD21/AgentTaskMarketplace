@@ -6,13 +6,21 @@ import { reserveProviderBudget, providerBudgetStatus } from './provider-budget.j
 const baseline={buyer_id:'legacy',request_id:'import',booked_microusd:2390,state:'settled'};
 let oldMode:string;
 beforeEach(async()=>{
+ process.env.ATM_PROVIDER_ALLOWANCE='enforce';
  oldMode=payments().mode;Object.defineProperty(payments(),'mode',{value:'card',configurable:true});
  const existing=memoryDb().rows('provider_budget').find(x=>x.id==='shared-judge');
  const row={id:'shared-judge',revision:0,cap_microusd:5_000_000,entries:{legacy:baseline}};
  if(existing)unwrap(await db().from('provider_budget').update(row).eq('id','shared-judge'));
  else unwrap(await db().from('provider_budget').insert(row));
 });
-afterEach(()=>Object.defineProperty(payments(),'mode',{value:oldMode,configurable:true}));
+afterEach(()=>{delete process.env.ATM_PROVIDER_ALLOWANCE;Object.defineProperty(payments(),'mode',{value:oldMode,configurable:true});});
+it('does not enforce the allowance unless the operator opts in',async()=>{
+ delete process.env.ATM_PROVIDER_ALLOWANCE;
+ unwrap(await db().from('provider_budget').update({cap_microusd:0}).eq('id','shared-judge'));
+ await expect(reserveProviderBudget('b','r1')).resolves.toBeUndefined();
+ await expect(reserveProviderBudget('b','r2')).resolves.toBeUndefined();
+ expect(await providerBudgetStatus()).toMatchObject({enforced:false,available:true});
+});
 it('admits only two concurrent reservations within the shared cap and retains imported spend',async()=>{
  const results=await Promise.allSettled(Array.from({length:6},(_,n)=>reserveProviderBudget('buyer-'+n,'request-'+n)));
  expect(results.filter(x=>x.status==='fulfilled')).toHaveLength(2);
