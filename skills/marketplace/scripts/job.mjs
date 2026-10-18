@@ -45,12 +45,18 @@ export function planJob(input, { endpoint, parts = 2, budget, id = randomUUID() 
   const plan = { endpoint, client_job_key: `job-${id}`, budget_cents: budget, model, record_ids: ids, parts: planned };
   return { version: 'atm-buyer-job/v1', plan, plan_sha256: digest(plan), job_id: null, buyer_id: null, tasks: {} };
 }
-export function saveJob(file, state) {
+export function saveJob(file, state, { createOnly = false } = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${randomUUID()}.tmp`;
   const fd = fs.openSync(temporary, 'wx', 0o600);
   try { fs.writeFileSync(fd, `${JSON.stringify(state, null, 2)}\n`); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(temporary, file);
+  if (createOnly) {
+    try { fs.linkSync(temporary, file); }
+    catch (error) {
+      if (error.code === 'EEXIST') throw new JobError('JOB_EXISTS', 'A saved plan already uses this name.', 'Resume that plan; do not replace its request keys.');
+      throw error;
+    } finally { fs.unlinkSync(temporary); }
+  } else fs.renameSync(temporary, file);
   const dir = fs.openSync(path.dirname(file), 'r'); try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
 }
 export function loadJob(file) {

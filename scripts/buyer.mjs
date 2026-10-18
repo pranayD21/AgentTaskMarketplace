@@ -374,7 +374,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (parsed.command === "job-plan") {
     if (fs.existsSync(jobFile)) invalid("Job name already exists; resume it instead of overwriting its request keys.");
     const state = planJob(JSON.parse(fs.readFileSync(parsed.input, "utf8")), { endpoint, parts: parsed.parts, budget: parsed.budget });
-    saveJob(jobFile, state);
+    saveJob(jobFile, state, { createOnly: true });
     console.log(JSON.stringify({ status: "PLANNED", name: parsed.name, parts: state.plan.parts.length, budget_cents: state.plan.budget_cents, offers_cents: state.plan.parts.map(part => part.offer_cents) }));
     return;
   }

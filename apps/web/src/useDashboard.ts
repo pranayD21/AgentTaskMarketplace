@@ -43,6 +43,7 @@ export function useDashboard(base: string) {
             "Cannot refresh the marketplace. Check the API URL and server connection.",
           );
       } finally {
+        controller?.abort();
         clearTimeout(timeout);
         if (!stopped) timer = setTimeout(poll, 3000);
       }

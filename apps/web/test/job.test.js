@@ -41,7 +41,9 @@ describe('bounded buyer jobs', () => {
   it('resumes after acceptance before local task ID save without a second purchase', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(),'atm-job-'));
     try {
-      const file = path.join(directory,'job.json'); saveJob(file,plan()); const api = server(); api.loseResponse = true;
+      const file = path.join(directory,'job.json'); saveJob(file,plan(),{createOnly:true});
+      expect(()=>saveJob(file,plan(),{createOnly:true})).toThrow(/already uses/);
+      const api = server(); api.loseResponse = true;
       await expect(runJob(file,api,endpoint,{postFields:taskOfferFields})).rejects.toThrow('accepted response lost');
       expect(loadJob(file).tasks).toEqual({}); expect(api.tasks).toHaveLength(1);
       const result = await runJob(file,api,endpoint,{postFields:taskOfferFields});
