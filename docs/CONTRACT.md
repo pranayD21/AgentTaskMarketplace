@@ -26,7 +26,7 @@ AWAITING_PAYMENT ─(mpp paid)─▶ OPEN ─(claim_task)─▶ PAYLOAD_READY �
 - Active-claim states: `PAYLOAD_READY`, `RUNNING`. Lease 300 s; `renew_lease` extends by 300 s from now. A lapsed lease reopens the task (before the listing deadline) or expires it; the old seller envelope is deleted and a fresh claim gets a fresh envelope.
 - `SUBMITTED` deletes the server's encrypted plaintext copy and the seller envelope. `JUDGING` stuck > 10 min goes back to `SUBMITTED`.
 - Terminal: `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELLED`. Exactly one settlement per task (unique `task_id`); `submit_verdict` is idempotent.
-- Payment states on a task: `NONE`, `HELD`, `CAPTURED`, `RELEASED`, `AWAITING_PAYMENT`, `MOCK`.
+- Payment states on a task: `NONE`, `HELD`, `PAID` (MPP charge received), `CAPTURED`, `RELEASED`, `AWAITING_PAYMENT`, `MOCK`.
 
 ## 3. Tools
 
@@ -74,7 +74,9 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 
 ## 5. Payments (card mode)
 
-`post_task` → spend-cap check (`reserved + spent + max_price ≤ cap`) → Stripe manual-capture hold for `max_price_cents` → `payment.state = HELD`, buyer `reserved += max`. APPROVE → capture `price_cents` (remainder auto-released), transfer to the seller's connected account when possible, settlement `{seller_payout_cents: price, buyer_refund_cents: max − price}`, buyer `reserved −= max`, `spent += price`. REJECT / EXPIRED / CANCELLED → cancel the hold, settlement `{0, max}`, `reserved −= max`. Settlement `kind`: `STRIPE_TEST` or `MOCK`. Seller payout not yet possible → `note` contains `PENDING_ONBOARDING`.
+`post_task` → spend-cap check (`reserved + spent + max_price ≤ cap`) → Stripe manual-capture hold for `max_price_cents` → `payment.state = HELD`, buyer `reserved += max`. APPROVE → capture `price_cents` (remainder auto-released), transfer to the seller's connected account when possible, settlement `{seller_payout_cents: price, buyer_refund_cents: max − price}`, buyer `reserved −= max`, `spent += price`. REJECT / EXPIRED / CANCELLED → cancel the hold, settlement `{0, max}`, `reserved −= max`. Settlement `kind`: `STRIPE_TEST`, `MPP`, or `MOCK`, selected from the task’s payment mode. Seller payout not yet possible → `note` contains `PENDING_ONBOARDING`.
+
+In MPP mode (Stripe test preview), posting creates `AWAITING_PAYMENT` and returns `/api/pay/<task_id>`. A POST without payment credentials returns HTTP 402. A successful Shared Payment Token charge opens the task with payment state `PAID`; approval refunds the unused budget and transfers the seller’s price, while rejection, cancellation and expiry refund the payment. See [payments setup](payments/README.md). Settlement always follows the task’s stored rail even when another server uses a different default. A failed payment operation leaves the task pending review and returns a retryable error; it does not publish a new verdict.
 
 ## 6. Runner component interface (`packages/runner-wasm/wit/world.wit`)
 

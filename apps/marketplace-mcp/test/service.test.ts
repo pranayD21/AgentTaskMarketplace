@@ -215,6 +215,29 @@ describe("full cycle", () => {
     expect((await taskRow(task.task_id)).status).toBe("APPROVED");
   });
 
+  it("a failed capture publishes no verdict or settlement, and the same verdict can be retried", async () => {
+    const buyer = await agent("buyer");
+    const judge = await agent("judge");
+    const s = await seller();
+    const task = await post(buyer);
+    const { submitted } = await runCycle(s, task.task_id);
+    const input = { task_id: task.task_id, result_id: submitted.result_id, verdict: "APPROVE" as const, reason_code: "RUBRIC_MATCH" as const, reason_public: "Match" };
+    const capture = vi.spyOn(payments(), "capture").mockRejectedValueOnce(new Error("temporary provider failure"));
+    try {
+      const err = await expectError(svc.submitVerdict(judge, input), "PAYMENT_FAILED");
+      expect(err.retryable).toBe(true);
+      expect(err.next_action).toBeTruthy();
+      const pending = await svc.getTaskForActor(buyer, task.task_id);
+      expect(pending).toMatchObject({ task: { status: "SUBMITTED" }, verdict: null, settlement: null });
+      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 100, spent_cents: 0 });
+      const retry = await svc.submitVerdict(judge, input);
+      expect(retry.task.status).toBe("APPROVED");
+      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 60 });
+      await svc.submitVerdict(judge, input);
+      expect(capture).toHaveBeenCalledTimes(2);
+    } finally { capture.mockRestore(); }
+  });
+
   it("REJECT: hold released, seller struck and suspended, next claim refused", async () => {
     const buyer = await agent("buyer");
     const judge = await agent("judge");
@@ -276,6 +299,25 @@ describe("expiry and hardening", () => {
     // the next sweep retries and succeeds
     await svc.expireStale();
     expect((await taskRow(task.task_id)).status).toBe("EXPIRED");
+  });
+
+  it("expiry refunds PAID MPP tasks and records their own rail", async () => {
+    const buyer = await agent("buyer");
+    const task = await post(buyer);
+    unwrap(await db().from("tasks").update({ payment_mode: "mpp", payment_state: "PAID", expires_at: new Date(Date.now() - 1000).toISOString() }).eq("id", task.task_id));
+    const release = vi.spyOn(payments(), "release").mockResolvedValueOnce({ payment_state: "RELEASED", note: "test refund" });
+    try {
+      await svc.expireStale();
+      expect(release).toHaveBeenCalledWith(expect.objectContaining({ id: task.task_id, payment_mode: "mpp", payment_state: "PAID" }), "listing deadline passed");
+      expect(await svc.getTaskForActor(buyer, task.task_id)).toMatchObject({ task: { status: "EXPIRED", payment: { state: "RELEASED" } }, settlement: { kind: "MPP", buyer_refund_cents: 100 } });
+    } finally { release.mockRestore(); }
+  });
+
+  it("never falls back to mock settlement for a card task when Stripe is unavailable", async () => {
+    const buyer = await agent("buyer");
+    const task = await post(buyer);
+    const row = { ...await taskRow(task.task_id), payment_mode: "card" as const };
+    expect(() => payments().capture(row, null, 60)).toThrow(/cannot settle card/);
   });
 
   it("bounds max_price_cents", async () => {

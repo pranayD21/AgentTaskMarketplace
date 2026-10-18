@@ -8,6 +8,7 @@ const AppEnvSchema = z.object({
   INSFORGE_API_KEY: z.string().min(10).optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PROFILE_ID: z.string().optional(),
+  MPP_SECRET_KEY: z.preprocess((v) => v === "" ? undefined : v, z.string().min(32).optional()),
   PAYMENT_MODE: z.enum(["card", "mpp", "mock"]).default("card"),
   INKBOX_API_KEY: z.string().optional(),
   SERVER_KEK_B64: z.string().min(40),
@@ -37,6 +38,9 @@ export function env(): AppEnv {
   }
   if (e.PAYMENT_MODE !== "mock" && !e.STRIPE_SECRET_KEY) {
     throw new Error("STRIPE_SECRET_KEY is required unless PAYMENT_MODE=mock");
+  }
+  if (e.PAYMENT_MODE === "mpp" && !e.STRIPE_PROFILE_ID) {
+    throw new Error("STRIPE_PROFILE_ID is required for PAYMENT_MODE=mpp");
   }
   // Manufact injects MCP_URL (…/mcp); derive the public base URL from it.
   const baseUrl = e.BASE_URL ?? (e.MCP_URL ? e.MCP_URL.replace(/\/mcp\/?$/, "") : "http://localhost:3000");
