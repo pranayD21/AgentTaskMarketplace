@@ -1,5 +1,7 @@
 # Plan — Agent Task Marketplace
 
+> Status note, October 17, 20:05 PDT: this plan contains historical implementation status. Use [COMPLETION-AUDIT.md](COMPLETION-AUDIT.md) and the latest section of your computer brief for current work. In particular, the old key-loss, dashboard, deployment and basic payment blockers are resolved. The original host-confidentiality goal is not delivered by the current Wasm/Ollama implementation.
+
 This is the full plan the team approved at ~17:15 PDT on Oct 17 and is executing. Current status of each item is in [`PROGRESS.md`](PROGRESS.md); the exact API is in [`CONTRACT.md`](CONTRACT.md); the trust model is in [`SECURITY.md`](SECURITY.md). Who does what next is in [`../tasks/`](../tasks/).
 
 ## 1. Context

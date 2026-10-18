@@ -1,6 +1,27 @@
 # Computer A — marketplace server, contract, integration, Manufact deployment
 
-## Current handoff (2026-10-17, 19:58 PDT)
+## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
+
+The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.
+
+Start by fetching the latest `origin/main` and bringing it into your existing feature branch without discarding local work. Read your four inbound files in `coordination/messages/`, then acknowledge this assignment to C in `<YOUR LETTER>-to-C.md` (C records its own progress in its outbound handoffs). C remains acting integrator under A's delegation. Send contract/schema requests to A; C coordinates merges. Do not edit another computer's implementation files without a recorded ownership decision.
+
+Use `MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp` in your private environment. Application health is `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`; dashboard is `http://192.168.4.163:5173/` on C's LAN. Workers use `--poll-ms 5000`. Preserve the running service and existing identities. Do not reset shared Inkbox identities. The Armature buyer has 25 cents available, below the 50-cent new-task minimum; a new buyer or higher cap must not be used to bypass that limit. All current payment evidence is Stripe TEST mode.
+
+### Your work, in order
+
+1. **J1/J2/J3, with E:** publish the judge retry/replacement contract. Enforce safe public explanations on the server, including historical verdict rows; keep infrastructure errors from causing seller strikes or final quality settlement. Preserve recoverable review/replacement status. E owns the judge runner. Acceptance: fake private text stays out of public APIs/notices, and a judge outage recovers without punishing the seller or duplicating settlement.
+2. **P1, lead; P2, support D:** compensate a task-insert failure after a hold, and make settlement finalization resumable after each database write. Persist transfer retry status for D. Acceptance: fault-injection tests show no orphaned hold, incorrect reserved balance, double capture/refund, or lost/duplicate reputation update. Source risks are documented in the audit; they were not injected into the live service.
+3. **F1, contract first:** define parent job/part identifiers, private payload boundaries, safe progress, budget rules and recovery from ambiguous posts. Publish `docs/CONTRACT.md`, shared types and migration before B/C/D/E depend on them. B leads decomposition and aggregation. Acceptance: one buyer job can have two separately assigned parts without leaking their prompts or exceeding the job cap.
+4. **B1/I1:** provide a shared usage/result schema for complete cost measurement; help E persist Inkbox recipients/context through restarts. B owns `scripts/benchmarks/**` for this follow-up, while you retain root scripts, shared types and schema.
+5. **L1/D1:** support the hosted server during the physical-computer rehearsal. C integrates under your existing delegation. Refresh stale PLAN/SECURITY/PROGRESS claims with C, especially confidentiality, liveness canaries and blanket replacement delivery. Verify the deployed revision and application health.
+6. **X1, later scope:** own the confidential-compute/attestation design with C and production enrollment/payment controls with D. Current Wasm execution does not hide prompts from the machine owner; do not mark this original requirement done.
+
+### Finish and hand off
+
+Work within A's ownership from `AGENTS.md`, coordinate main-branch edits with C, and use `feat/a-*` for changes that need integration. Send C the assignment IDs, branch/SHA, exact test commands/results and remaining gaps. Shared contracts need a DECISION to every affected computer before implementation. Passing existing tests alone does not close the new failure cases.
+
+## Historical handoff (2026-10-17, 19:58 PDT)
 
 C is acting integrator under A-C-20261018T021200Z-02. The v0.2 server, D payments and B buyer kit are merged. Manufact is deployed and the accepted-task Armature run passed. Keep the tested server running; remaining team work is E’s final demo/Inkbox handoff and rehearsal. Coordinate further main-branch edits with C.
 

@@ -1,6 +1,27 @@
 # Computer C — seller runtime and the Wasm sandbox
 
-## Current handoff (2026-10-17, 19:58 PDT)
+## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
+
+The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.
+
+Start by fetching the latest `origin/main` and bringing it into your existing feature branch without discarding local work. Read your four inbound files in `coordination/messages/`, then acknowledge this assignment to C in `<YOUR LETTER>-to-C.md` (C records its own progress in its outbound handoffs). C remains acting integrator under A's delegation. Send contract/schema requests to A; C coordinates merges. Do not edit another computer's implementation files without a recorded ownership decision.
+
+Use `MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp` in your private environment. Application health is `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`; dashboard is `http://192.168.4.163:5173/` on C's LAN. Workers use `--poll-ms 5000`. Preserve the running service and existing identities. Do not reset shared Inkbox identities. The Armature buyer has 25 cents available, below the 50-cent new-task minimum; a new buyer or higher cap must not be used to bypass that limit. All current payment evidence is Stripe TEST mode.
+
+### Your work, in order
+
+1. **L1, lead:** coordinate a live run with B as buyer, C as first physical seller, D as second physical seller, E as judge and A supporting the hosted service. Help D install/pull the local model and build Wassette. If D lacks suitable hardware, record a reassignment to a capable A/E machine. Require two distinct physical seller computers; the previous two-process race does not satisfy this request.
+2. **F1, seller support:** wait for A's parent/part/progress contract, then make seller execution report safe identifiers and state for B's grouped dashboard. Keep task contents private in all metadata/logs. Acceptance: the two physical sellers complete different parts of one job with overlapping execution, verified results and a truthful per-machine trace.
+3. **B1, runtime measurements:** capture seller input/output tokens, inference/load time, hardware details and measured energy or a clearly labelled estimate. Include failed attempts and retries. Coordinate shared metric fields with A and output format with B/D. Existing output-token counts and one warm latency measurement are insufficient for cost claims.
+4. **Integration for A:** first review and verify B's ready PR #3 at `39eaa4e` (buyer recovery guidance plus current evaluation docs; B reports 82 branch tests). Then collect A/E fixes for J1/J2/J3, A/D fixes for P1/P2, and E's I1/D1 handoff. Merge tested slices without modifying owner code silently. Run workspace typecheck/tests/smoke, rebuild Wasm after runtime changes and rerun actual Wassette cases. Record the deployed revision and health before rehearsal. Keep existing workers available; do not restart shared services just to audit them.
+5. **X1, model/confidentiality scope:** implement the optional liveness canary or explicitly agree its deferral with A. Keep the installed-model check and report limitations. Help A plan attested confidential inference later; Wasm, a canary or a reported hash cannot establish privacy against the machine owner.
+6. **D1, evidence:** record commit/component hash, machine-to-seller mapping, job/part IDs, overlapping timestamps, outcomes and balances. Give E redacted evidence for the final runbook/recording. Update the audit status only after checking those artifacts.
+
+### Finish and hand off
+
+Own seller paths in runner-core, runner-wasm and agent-daemon; E owns judge logic. Integration/docs work remains authorized by A's delegation. Send each affected computer a C-to-letter HANDOFF with assignment IDs, branch/SHA, tests and limits. For this audit, assignments are published but the physical machines have not been remotely started.
+
+## Historical handoff (2026-10-17, 19:58 PDT)
 
 The per-call key blocker is fixed. Both seller and judge ran in Wassette against the hosted server, with APPROVED, commitment_verified=true and per-claim keys. C is also acting integrator for A. Keep the seller and judge alive at 5000 ms polling, integrate tested handoffs, and use the current status in docs/PROGRESS.md instead of rebuilding the original fix.
 

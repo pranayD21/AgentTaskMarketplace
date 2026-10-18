@@ -1,6 +1,27 @@
 # Computer D — payments: seller payouts and the Stripe agent-wallet showcase
 
-## Current handoff (2026-10-17, 19:58 PDT)
+## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
+
+The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.
+
+Start by fetching the latest `origin/main` and bringing it into your existing feature branch without discarding local work. Read your four inbound files in `coordination/messages/`, then acknowledge this assignment to C in `<YOUR LETTER>-to-C.md` (C records its own progress in its outbound handoffs). C remains acting integrator under A's delegation. Send contract/schema requests to A; C coordinates merges. Do not edit another computer's implementation files without a recorded ownership decision.
+
+Use `MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp` in your private environment. Application health is `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`; dashboard is `http://192.168.4.163:5173/` on C's LAN. Workers use `--poll-ms 5000`. Preserve the running service and existing identities. Do not reset shared Inkbox identities. The Armature buyer has 25 cents available, below the 50-cent new-task minimum; a new buyer or higher cap must not be used to bypass that limit. All current payment evidence is Stripe TEST mode.
+
+### Your work, in order
+
+1. **P1, with A:** provide payment-provider compensation and money assertions for task-insert failure after a successful hold and crashes during settlement finalization. A owns service/database orchestration. Acceptance: isolated fault injection at each step produces no orphaned hold, duplicate capture/refund or stranded reserved balance when retried.
+2. **P2, lead:** implement idempotent retry/reconciliation for a captured payment whose seller transfer failed. Ask A for persistent retry status; tell B how to distinguish amount owed from amount transferred. Acceptance: a provider failure followed by recovery yields exactly one transfer and records its ID. Preserve the explicit pending fallback.
+3. **F1, budget support:** review A/B's parent-job budget and per-part accounting, including failed parts and retries. Sum reservations and spend across the job. Recovery must not create another purchase for an accepted part.
+4. **B1, cost lead:** define and reconcile buyer cost separately from system resource cost. Include controller/baseline tokens, seller energy and stated hardware amortization, hosting, judge/replacement calls, retries and relevant payment fees. Publish total cost per successful task with the workload quality threshold, assumptions and current official rate sources. Do not count a marketplace transfer twice or treat the 75-cent test price as measured inference cost. Coordinate usage fields with A/B/C/E.
+5. **L1, second physical seller:** with C's setup help, run local Ollama and a Wassette seller on D's machine using an authorized seller identity and the hosted endpoint. Use `--poll-ms 5000`; seller operation needs no judge private key. Complete a different child task from C and record timestamps/IDs. If this machine cannot run the model, tell C immediately so a capable A/E machine can take the role.
+6. **D1/X1:** keep the verified human-approved MPP/Link evidence available for E's rehearsal. Real seller onboarding, live-money operation and operator-approved enrollment are later production work with A; current evidence is Stripe TEST mode.
+
+### Finish and hand off
+
+Own `payments.ts`, `mpp*.ts` and `docs/payments/**` on your existing D feature branch. A owns service/schema tests and changes outside those paths unless explicitly delegated. Send C assignment IDs, branch/SHA, exact verification results, transaction IDs without credentials, and any unpaid/pending amounts. Existing successful transfer evidence does not close failed-transfer recovery.
+
+## Historical handoff (2026-10-17, 19:58 PDT)
 
 The payment integration and Link wallet follow-up at 0cb3ff2 are merged (5f2b6b3). Atomic caps, truthful refund errors and PAID expiry handling are preserved. Stripe TEST card transfers and MPP flows have live evidence. Keep the recorded human-approved Link flow available for rehearsal.
 

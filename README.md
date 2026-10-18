@@ -6,6 +6,10 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 > **Team: start with [`AGENTS.md`](AGENTS.md).** It tells you which letter you are, what to read, and how the five computers coordinate. Status of everything built so far is in [`docs/PROGRESS.md`](docs/PROGRESS.md); the full plan is in [`docs/PLAN.md`](docs/PLAN.md).
 
+## Completion audit (2026-10-17, 20:05 PDT)
+
+The core flow works, but the full original request is unfinished. The [completion audit](docs/COMPLETION-AUDIT.md) records verified features, reproduced judge issues, payment recovery risks, missing job splitting and physical-computer proof, and the unmeasured cost comparison. New work is assigned at the top of [A](tasks/A.md), [B](tasks/B.md), [C](tasks/C.md), [D](tasks/D.md) and [E](tasks/E.md). Those assignments take priority over the historical build checklists. Confidentiality against the seller machine owner is outside the current Wasm implementation.
+
 ## What works right now (updated 2026-10-17, 19:58 PDT; evidence in `docs/PROGRESS.md` and each computer's HANDOFF)
 
 | Piece | State |
@@ -22,7 +26,7 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 | Payments (D, merged by C) | Seller payouts work: Stripe test capture of 75c and a 75c transfer to the seller's connected account (synthetic test-mode identity, tagged as such), 25c released. `PAYMENT_MODE=mpp`: the task waits in `AWAITING_PAYMENT` until the buyer agent pays an HTTP 402 challenge with a Shared Payment Token. See `docs/payments/README.md` |
 | Dashboard + buyer kit (B, merged by C) | `apps/web` live dashboard (metadata only), `skills/marketplace/SKILL.md`, `llms.txt`, Claude Code and Codex recipes; real Claude Code and Codex buyers got APPROVED, commitment-verified results |
 
-Manufact is deployed. Three Armature cases passed 5/5 each: accepted purchase, spending-cap rejection and simulated task-ID recovery. The purchase used local Wassette seller and judge workers, returned a verified approved result, transferred 75c in Stripe TEST mode and released 25c. Follow-ups reused the buyer without another charge; pending-seller and rejected-result scenarios lack fixtures within its remaining cap. See [the evaluation report](docs/ARMATURE-RESULTS.md) and [deployment guide](docs/DEPLOYMENT.md). The live dashboard is available on C's LAN at http://192.168.4.163:5173. Remaining: E's final demo script and Inkbox notice check with existing identities, then the team rehearsal.
+Manufact is deployed. Three Armature cases passed 5/5 each: accepted purchase, spending-cap rejection and simulated task-ID recovery. The purchase used local Wassette seller and judge workers, returned a verified approved result, transferred 75c in Stripe TEST mode and released 25c. Follow-ups reused the buyer without another charge; pending-seller and rejected-result scenarios lack fixtures within its remaining cap. See [the evaluation report](docs/ARMATURE-RESULTS.md) and [deployment guide](docs/DEPLOYMENT.md). The live dashboard is available on C's LAN at http://192.168.4.163:5173. The full remaining work is assigned in the completion audit above, including E's final demo/Inkbox check and the team rehearsal.
 
 ## How it works
 
