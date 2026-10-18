@@ -10,7 +10,7 @@ import { safeFailureCode } from "@atm/runner-core";
 import { parseArgs } from "node:util";
 import { Marketplace } from "./marketplace.js";
 import { NodeRuntime } from "./runtime/node.js";
-import { lockIdentity, registerSavedAgent } from "./identity.js";
+import { lockIdentity, readAgentState, registerSavedAgent } from "./identity.js";
 import { requireCompatibleRelease } from "./release.js";
 import type { Runtime } from "./runtime/types.js";
 
@@ -64,6 +64,15 @@ function loadState(): State | null {
 }
 
 async function ensureAgent(mp: Marketplace): Promise<State> {
+  if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1") {
+    const saved = readAgentState(STATE_FILE);
+    if (!saved) throw new Error("GOOGLE_SIGN_IN_REQUIRED");
+    const detail = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    mp.setApiKey(saved.api_key);
+    const remote = await mp.call<any>("whoami");
+    if (!detail.owner?.user_id || detail.owner.user_id !== remote.owner?.user_id) throw new Error("GOOGLE_SIGN_IN_REQUIRED");
+    return saved;
+  }
   const existing = loadState();
   if (existing) { mp.setApiKey(existing.api_key); return existing; }
   const display_name = args["display-name"] ?? (role === "seller" ? `seller-${process.env.USER ?? "mac"}` : "atm-judge");
@@ -179,20 +188,29 @@ try {
     const state = await ensureAgent(mp);
     log(`agent ${state.agent_id} (${state.display_name})`);
     rt = await makeRuntime(state.api_key);
+    if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" && !args["register-only"]) {
+      const preparedFile = process.env.ATM_PREPARED_FILE;
+      if (!preparedFile || !fs.existsSync(preparedFile)) throw new Error("MODEL_SETUP_REQUIRED");
+      const prepared = JSON.parse(fs.readFileSync(preparedFile, "utf8"));
+      if (prepared.seller_id !== state.agent_id || prepared.runner_sha256 !== rt.info().wasm_sha256) throw new Error("MODEL_SETUP_REQUIRED");
+    }
     if (role === "seller") await sellerLoop(mp, rt, {
       marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs,
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       registerOnly: args["register-only"],
-      beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? () => requireCompatibleRelease(MARKETPLACE_URL) : undefined,
+      beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {
+        await requireCompatibleRelease(MARKETPLACE_URL);
+        if (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" && (await mp.call<any>("whoami")).payout?.payout_status !== "ACTIVE") throw new Error("PAYOUT_ONBOARDING_REQUIRED");
+      } : undefined,
       onRegistered: async (models) => {
         if (!process.env.ATM_STATUS_FILE) return;
         let payout: Record<string, unknown> = { payout_status: "UNAVAILABLE", payout_onboarding_url: null };
         try { payout = args["register-only"] ? await mp.call("get_seller_onboarding") : ((await mp.call<any>("whoami")).payout ?? payout); }
         catch { log("Payout status unavailable; existing identity is retained. Use atm-seller status to check again."); }
-        const status = { seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
+        const status = { worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
         fs.writeFileSync(process.env.ATM_STATUS_FILE, JSON.stringify(status, null, 2), { mode: 0o600 });
         log(`payout status=${payout.payout_status}; ${payout.payout_label ?? "Stripe TEST mode"}`);
-        if (args["register-only"] && typeof payout.payout_onboarding_url === "string") console.log(`Open this to set up payouts: ${payout.payout_onboarding_url}`);
+
       },
       onPayoutPoll: process.env.ATM_STATUS_FILE ? async () => {
         const file = process.env.ATM_STATUS_FILE!;

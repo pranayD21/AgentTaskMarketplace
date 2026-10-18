@@ -1,5 +1,14 @@
 # Completion audit and remaining assignments
 
+## 2026-10-18 seller onboarding follow-up
+
+C is implementing the human's revised installer: a local dashboard, Google OAuth through InsForge, a linked seller identity, Ollama/resource monitoring and Stripe Connect setup. D supplied human account creation, onboarding links and idempotent retry support through `f4c5d76`. Existing C/D workers stay running; benchmarks stay deferred.
+
+Verified locally so far: workspace typecheck/tests, Google ownership and retry tests, localhost access protection, rendered dashboard with real hardware/Ollama metadata, and a packaged Wassette canary (`qwen3:8b`, passed, 3.83 seconds, no marketplace task). Agent-table RLS was enabled on live InsForge: admin read retained access; anonymous read returned zero rows.
+
+Still required for acceptance: deployed downloads, a real human Google sign-in, human completion of Stripe TEST onboarding, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. C must update this status with evidence and must not label these pending checks complete based on mocks.
+
+
 ## A/C delivery status, October 17, 21:08 PDT
 
 A and C's code is merged and deployed. Health at 04:04:05 UTC verified contract `0.3`, pricing `task_offer` and source `920c0525fb7f688b2c0699db83fac853d779e32b`. Workspace typecheck and all 201 tests passed, including actual Wassette. The Insforge posting/budget transaction and the task-offer smoke check passed.

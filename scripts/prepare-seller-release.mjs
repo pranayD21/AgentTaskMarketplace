@@ -37,12 +37,13 @@ for(const meta of metafiles)for(const input of Object.keys(meta.inputs)){
   dir=path.dirname(dir);
  }
 }
+fs.cpSync(path.join(root,'apps/agent-daemon/ui'),path.join(staging,'ui'),{recursive:true});
 fs.writeFileSync(path.join(staging,'THIRD_PARTY_NOTICES.txt'),[...packages].sort().map(([name,license])=>`${name}\n${license}`).join('\n\n'));
-execFileSync('tar',['-czf',path.join(output,'seller-bundle.tgz'),'-C',staging,'daemon.mjs','control.mjs','package.json','pnpm-lock.yaml','THIRD_PARTY_NOTICES.txt'],{env:{...process.env,COPYFILE_DISABLE:'1'}});
+execFileSync('tar',['-czf',path.join(output,'seller-bundle.tgz'),'-C',staging,'daemon.mjs','control.mjs','package.json','pnpm-lock.yaml','THIRD_PARTY_NOTICES.txt','ui'],{env:{...process.env,COPYFILE_DISABLE:'1'}});
 fs.copyFileSync(path.join(root,'packages/runner-wasm/dist/runner.wasm'),path.join(output,'runner.wasm'));
 fs.copyFileSync(path.join(root,'apps/agent-daemon/install.sh'),path.join(output,'install.sh'));
 const artifacts={};
-for(const name of ['seller-bundle.tgz','runner.wasm','install.sh']){const bytes=fs.readFileSync(path.join(output,name));artifacts[name]={sha256:createHash('sha256').update(bytes).digest('hex'),size_bytes:bytes.length};}
+for(const name of ['seller-bundle.tgz','runner.wasm']){const bytes=fs.readFileSync(path.join(output,name));artifacts[name]={sha256:createHash('sha256').update(bytes).digest('hex'),size_bytes:bytes.length};}
 const shared=fs.readFileSync(path.join(root,'packages/shared/src/index.ts'),'utf8');
 const contract=shared.match(/CONTRACT_VERSION = "([^"]+)"/)?.[1];
 const allowed=[...shared.slice(shared.indexOf('export const MODEL_ALLOWLIST'),shared.indexOf('export function isAllowlistedModel')).matchAll(/^  "([^"]+)":/gm)].map(m=>m[1]);

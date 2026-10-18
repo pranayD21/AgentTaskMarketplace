@@ -8,7 +8,7 @@ export function readAgentState(file: string): AgentState | null {
   let state: AgentState;
   try { state = JSON.parse(fs.readFileSync(file, "utf8")) as AgentState; }
   catch { throw new Error("INVALID_IDENTITY_FILE"); }
-  if (![state.agent_id, state.api_key, state.display_name].every(v => typeof v === "string" && v.length)) throw new Error("INVALID_IDENTITY_FILE");
+  if (!state || ![state.agent_id, state.api_key, state.display_name].every(v => typeof v === "string" && v.length)) throw new Error("INVALID_IDENTITY_FILE");
   fs.chmodSync(file, 0o600);
   return state;
 }
@@ -26,7 +26,18 @@ export function lockIdentity(file: string): () => void {
       const pid = Number(fs.readFileSync(lock, "utf8"));
       if (!Number.isSafeInteger(pid) || pid < 1) throw new Error("INVALID_IDENTITY_LOCK");
       try { process.kill(pid, 0); }
-      catch (e) { if ((e as NodeJS.ErrnoException).code === "ESRCH") { fs.unlinkSync(lock); continue; } }
+      catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ESRCH") {
+          // Serialize stale-lock recovery: two starters must not unlink a lock
+          // that the other has just acquired. An interrupted recovery fails closed.
+          const recovery = `${lock}.recovery`;
+          try { fs.writeFileSync(recovery, String(process.pid), { flag: "wx", mode: 0o600 }); }
+          catch { throw new Error("IDENTITY_LOCK_RECOVERY_IN_PROGRESS"); }
+          try { if (fs.existsSync(lock) && Number(fs.readFileSync(lock, "utf8")) === pid) fs.unlinkSync(lock); }
+          finally { fs.unlinkSync(recovery); }
+          continue;
+        }
+      }
       throw new Error("SELLER_ALREADY_RUNNING");
     }
   }

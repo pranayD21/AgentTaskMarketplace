@@ -30,6 +30,44 @@ Registration saves the API key in an owner-only file under `.atm-state/`. Each d
 
 Startup prints the Wasm SHA-256, Wassette version, network policy, model names, task-pricing mode and seller status. `accepting <task_id> offer=<cents>` announces a cycle; `claimed ... submitted ... runtime=wassette` confirms completion. The existing marketplace dashboard receives the task's `RUNNING` and `SUBMITTED` states. Output omits prompts, result text and secrets.
 
+## Install the seller dashboard
+
+On an Apple silicon Mac:
+
+```sh
+curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash
+```
+
+The installer prepares Homebrew, Node, pnpm, Ollama and Wassette, downloads a checksummed bundle and prebuilt Wasm runner, and opens a local dashboard. A fresh Mac may ask for its administrator password or developer-tool approval during Homebrew setup. The private GitHub repository is not needed.
+
+In the dashboard:
+
+1. Sign in with Google. InsForge creates or reuses your human identity; the marketplace links this computer's seller to that identity.
+2. Prepare the model. The app detects supported Ollama models, downloads Qwen3 8B if needed, and checks model liveness through Wassette.
+3. Set up Stripe payouts. Complete Stripe Connect's hosted form for this seller. All payments currently use **Stripe TEST MODE**. The installer supplies no fake personal details. An active transfer capability does not prove a real bank payout.
+4. Click **Start selling**. The worker watches for matching tasks. It restarts after login; clicking Stop selling keeps it stopped across logins until you start it again.
+
+The dashboard runs at `http://127.0.0.1:43118`. Use `atm-seller dashboard` to open an authenticated local session. It shows CPU cores, system load, total/free physical memory, installed models, models loaded in Ollama, seller status and approved task count. Hardware measurements stay local; model capability metadata goes to the marketplace. Model detection and the liveness check are not attestation.
+
+```sh
+atm-seller dashboard
+atm-seller status
+atm-seller logs
+atm-seller stop
+atm-seller start
+atm-seller uninstall
+```
+
+State is stored in `~/.atm` with private permissions. The seller key is in `seller.json`; the browser never receives it. OAuth uses PKCE, and Google access/refresh tokens are not saved to disk. Repeating installation or sign-in reuses the saved seller. Uninstall removes software and login services while preserving identity, logs and Ollama models.
+
+The server checks Google ownership and requires Stripe readiness for new human-owned sellers to claim work. Existing C/D workers retain their identities and keep running. Old anonymous registration instructions below apply to isolated memory/mock development or existing saved identities; new hosted sellers must use this dashboard.
+
+### Recovery
+
+If sign-in is cancelled, retry Continue with Google. If model setup fails, inspect `atm-seller logs`, resolve the issue and retry Prepare model. If Stripe's link expires, return to the dashboard and click Set up Stripe again. A payout-account request uses one stable idempotency key and at most three attempts, with five-second backoff, within 20 hours. An unresolved request after that requires operator reconciliation; creating another seller is not the recovery path.
+
+The release contains no repository access token, server/database/Stripe credential or judge key. The installed worker checks the public contract and runner checksum before claiming. Update with the same installer command when prompted.
+
 ## Task prices
 
 The buyer posts an offer on each task. This seller advertises installed models and accepts a task offer by claiming it. When several eligible tasks are open, it prefers the highest offer and retains server order for ties. `--task-id` restricts it to the assigned task. It checks the agreed price before inference and releases a claim if the server returns a different amount.

@@ -8,7 +8,7 @@ fail() { printf '\nSeller setup stopped: %s\n' "$*" >&2; exit 1; }
 [[ "$(id -u)" != 0 ]] || fail 'Run as your normal macOS user, not with sudo.'
 [[ "$ATM_ORIGIN" == https://* ]] || fail 'Download the installer from the hosted HTTPS marketplace.'
 [[ ! -L "$ATM_ROOT" ]] || fail '~/.atm must not be a symbolic link.'
-printf 'Installing the marketplace seller. Your local model will run after login. Payments are Stripe TEST mode.\n'
+printf 'Installing the marketplace seller. Setup opens in your browser. Google sign-in and Stripe payout setup are required. Payments are Stripe TEST mode.\n'
 if ! command -v brew >/dev/null 2>&1 && [[ ! -x /opt/homebrew/bin/brew ]]; then
   printf 'Installing Homebrew. macOS may request your administrator password or developer-tool approval.\n'
   ATM_BREW_SCRIPT="$(mktemp -t atm-homebrew)"
@@ -53,7 +53,8 @@ for(const name of ['seller-bundle.tgz','runner.wasm']){
 }
 if(fs.readFileSync(path.join(dir,'runner.wasm.sha256'),'utf8').trim().split(/\s+/)[0]!==manifest.artifacts['runner.wasm'].sha256)throw Error('Runner checksum files disagree');
 NODE
-if tar -tzf "$ATM_STAGE/seller-bundle.tgz" | /usr/bin/grep -Eq '(^/|(^|/)\.\.(/|$))'; then fail 'Unsafe archive path'; fi
+tar -tzf "$ATM_STAGE/seller-bundle.tgz" > "$ATM_STAGE/archive-members.txt"
+if /usr/bin/grep -Eq '(^/|(^|/)\.\.(/|$))' "$ATM_STAGE/archive-members.txt"; then fail 'Unsafe archive path'; fi
 tar -xzf "$ATM_STAGE/seller-bundle.tgz" -C "$ATM_STAGE"
 mkdir -p "$ATM_STAGE/packages/runner-wasm/dist"
 mv "$ATM_STAGE/runner.wasm" "$ATM_STAGE/packages/runner-wasm/dist/runner.wasm"

@@ -57,7 +57,8 @@ import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
 import { kekOpen, kekSeal } from "./kek.js";
 import { notifyTask } from "./notices.js";
-import { payments } from "./payments.js";
+import { payments, sellerPayoutInfo } from "./payments.js";
+import { ensureHumanPayoutAccount } from "./seller-identity.js";
 import { cancelPosting, finishPost, resumePosts } from "./posting.js";
 import { deferReview, reviewDue, reviewOf } from "./review.js";
 import { RESUME_AFTER_S, finalizeSettlement, outcomeForStatus, recordIntent, retryPendingTransfers, settlementOf } from "./settlement.js";
@@ -193,6 +194,7 @@ export interface RegisterAgentInput {
 }
 
 export async function registerAgent(input: RegisterAgentInput): Promise<{ agent: AgentRow; api_key: string; notes: string[] }> {
+  if (input.kind === "seller" && env().DB_MODE === "insforge") throw new MarketplaceError("FORBIDDEN", "New sellers require human Google sign-in.", { next_action: `Install the seller dashboard from ${env().baseUrl}/install.sh and sign in with Google.` });
   if (input.kind === "judge" && input.judge_secret !== env().JUDGE_REGISTRATION_SECRET) {
     throw new MarketplaceError("FORBIDDEN", "Judge registration requires the operator's JUDGE_REGISTRATION_SECRET.", {
       next_action: "Pass judge_secret from the operator, or register as kind='buyer' or kind='seller'.",
@@ -273,13 +275,7 @@ export interface RegisterSellerInput {
 }
 
 export async function registerSeller(agent: AgentRow, input: RegisterSellerInput): Promise<SellerPublic> {
-  if (!agent.stripe_account_id && payments().mode === "card") {
-    const onboarded = await payments().onboardSeller({ id: agent.id, display_name: agent.display_name });
-    if (onboarded.stripe_account_id) {
-      unwrap(await db().from("agents").update({ stripe_account_id: onboarded.stripe_account_id }).eq("id", agent.id));
-      agent = { ...agent, stripe_account_id: onboarded.stripe_account_id };
-    }
-  }
+  if (agent.owner_user_id) agent = await ensureHumanPayoutAccount(agent);
   const unknown = input.models.filter((m) => !isAllowlistedModel(m.model_id)).map((m) => m.model_id);
   if (unknown.length) {
     throw new MarketplaceError("MODEL_NOT_ALLOWED", `Models not on the allowlist: ${unknown.join(", ")}.`, {
@@ -676,6 +672,9 @@ export interface ClaimKeyInput {
 }
 
 export async function claimTask(agent: AgentRow, taskId: string, modelId: string, perClaim: ClaimKeyInput = {}): Promise<ClaimPublicV02> {
+  if (agent.owner_user_id && payments().mode !== "mock" && (await sellerPayoutInfo(agent)).payout_status !== "ACTIVE") {
+    throw new MarketplaceError("FORBIDDEN", "Complete Stripe payout onboarding before accepting tasks.", { next_action: "Open the local seller dashboard and finish Stripe setup." });
+  }
   if (perClaim.runner_key_id && !perClaim.runner_pubkey_b64) {
     throw new MarketplaceError("VALIDATION_ERROR", "runner_key_id was sent without runner_pubkey_b64.", {
       next_action: "Send runner_pubkey_b64 (and optionally runner_key_id) together, or neither to use your registered key.",

@@ -7,6 +7,11 @@ create table if not exists agents (
   kind text not null check (kind in ('buyer','seller','judge')),
   display_name text not null,
   api_key_hash text not null unique,
+  owner_user_id uuid references auth.users(id),
+  owner_email text,
+  stripe_onboarding_started_at timestamptz,
+  stripe_onboarding_attempts integer not null default 0,
+  stripe_onboarding_retry_at timestamptz,
   inkbox_handle text,
   inkbox_identity_id text,
   buyer_pubkey_b64 text,
@@ -20,6 +25,9 @@ create table if not exists agents (
   spent_cents integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Agent credentials and Google ownership are available only to the server admin client.
+alter table agents enable row level security;
 
 create table if not exists sellers (
   agent_id text primary key references agents(id),

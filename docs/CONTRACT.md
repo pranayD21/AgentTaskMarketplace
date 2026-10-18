@@ -213,3 +213,18 @@ The human assigned A and C work to C on October 17. This decision replaces selle
 - Market observations group comparable model sets and runtime limits and include bounded sample counts, recent accepted prices, fill times and claim/expiry rates. Small samples are labelled insufficient. They are descriptive, do not establish an equilibrium and do not raise an offer or spending cap automatically.
 
 Retry-key retention follows [Stripe idempotent requests](https://docs.stripe.com/api/idempotent_requests), checked October 17: v1 keys may be pruned after 24 hours; concurrent request conflicts and parameter mismatches cannot establish that an earlier operation failed. The service keeps the same key for those outcomes.
+
+
+## 13. Human seller onboarding (2026-10-18)
+
+New hosted sellers use the local installer. Existing saved C/D identities remain usable. `register_agent(kind=seller)` refuses new anonymous hosted registrations; memory/mock development keeps its fixture path.
+
+- `GET /api/seller-auth-config` returns the public InsForge URL, Google provider and localhost callback address. No admin or anonymous key is included.
+- The local Node server starts InsForge Google OAuth with PKCE, binds the callback to its browser session and a ten-minute state nonce, and exchanges the code in Node. Tokens never enter browser JavaScript or a saved file.
+- `POST /api/seller/identity` takes a verified InsForge user bearer token and `{agent_key, display_name}`. The server verifies a real, email-verified Google user using InsForge `/api/auth/sessions/current`. The install generates and saves its random agent key before this request. Retrying the same key reuses the agent; another owner cannot take it over. The database stores only the key hash. The response includes agent ID, display name and verified owner metadata, never an agent key.
+- `agents.owner_user_id` references `auth.users(id)`; `owner_email` is private. Row-level security denies direct browser access to the agents table. MCP/HTTP public projections omit ownership fields. Authenticated `whoami` includes the caller's owner and payout status.
+- Human Stripe accounts are created without synthetic identity details. Their stable account request is persisted with first-attempt time, attempt count and retry time. D's policy allows three attempts, five-second backoff and a 20-hour window; unresolved outcomes then require reconciliation. No replacement identity is created to recover an unknown outcome.
+- `get_seller_onboarding` requires a seller key and verified human link, and returns `payout_status`, `payout_onboarding_url`, `payout_label` and `blocking`. Connect links are single-use. `/seller/setup-return` and `/seller/setup-refresh` send the person back to their local dashboard; returning from Stripe is not proof of completion.
+- Claims from human-owned sellers require an active Stripe transfer capability. Existing legacy workers keep their prior behavior. TEST MODE and MOCK remain explicit.
+- `/api/seller-release` publishes contract 0.3, seller protocol 1, revision, supported models and SHA-256 checksums. Fixed artifact routes are `/install.sh`, `/seller-bundle.tgz`, `/runner.wasm`, `/runner.wasm.sha256`. Installers reject unavailable, dirty, incompatible or mismatched releases.
+- The dashboard listens only on `127.0.0.1:43118`, requires a private launch token to establish an HttpOnly browser session, checks Host/Origin and rejects cross-origin actions. Hardware/Ollama stats are read locally. The worker service is disabled until Start selling; Stop selling disables automatic restart. Model preparation and identity checks run again at worker startup.

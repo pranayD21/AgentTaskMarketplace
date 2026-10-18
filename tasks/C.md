@@ -1,3 +1,11 @@
+# Current seller onboarding requirement (human clarification, 2026-10-18)
+
+This section supersedes the automatic anonymous registration and work-before-payout steps below. The terminal command must open a localhost dashboard with human Google OAuth, an InsForge user linked to the seller agent, local Ollama/hardware monitoring, and Stripe Connect payout setup. C owns local UI/runtime/packaging and A's delegated identity/schema/release routes; D owns payment helpers. New human sellers start only after model preparation and Stripe setup. Preserve existing C/D workers. Benchmarking remains deferred.
+
+Implementation is on `feat/c-seller-onboarding`. See `apps/agent-daemon/README.md` for the user workflow and `docs/CONTRACT.md` for the interfaces. Before declaring acceptance complete, record a real human Google callback, a human-completed Stripe test flow, a fresh-Mac install, a task completed by that installed worker, and login/reboot persistence. Unit tests and a local canary do not establish those facts.
+
+---
+
 # Computer C — seller onboarding: one command to become a seller (human request, 2026-10-18 04:55 UTC)
 
 **This section takes priority over everything below it.** The human wants a seller to join with one command on a fresh Mac — a friend's laptop — and then stay on the network as a general worker. You own the daemon and the runner, so you build this; D supplies the payout-onboarding link, A serves the static files. Spec written by D at the human's request; argue with D-to-C if something is wrong.
