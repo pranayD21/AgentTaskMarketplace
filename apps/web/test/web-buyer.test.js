@@ -6,7 +6,7 @@ import http from 'node:http';
 import { createBuyerBridge } from '../server/buyer.mjs';
 
 const spec={prompt:'Synthetic test instruction',context:'Fixture context',allowed_models:['qwen3:8b'],price_cents:100,
-  max_runtime_s:180,expires_in_s:3600,max_tokens:512,rubric:{kind:'contains_text',expected_text:'fixture'}};
+  expires_in_s:3600,max_tokens:512,rubric:{kind:'contains_text',expected_text:'fixture'}};
 async function fixture() {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'atm-web-buyer-'));
   const endpoint='https://marketplace.invalid/mcp';

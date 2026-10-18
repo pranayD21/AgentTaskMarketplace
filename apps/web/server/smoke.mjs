@@ -43,7 +43,7 @@ try {
   const {token}=await fetch(`${local}/api/buyer`,{headers:{origin:local}}).then(r=>r.json());
   async function call(action,args={}) {const r=await fetch(`${local}/api/buyer`,{method:'POST',headers:{origin:local,'content-type':'application/json','x-atm-csrf':token},body:JSON.stringify({action,...args})});assert.equal(r.status,200,`bridge ${action} failed`);return r.json();}
   phase='draft and submission';
-  const input={prompt:'Return the fixture success marker.',context:'Synthetic local bridge verification.',allowed_models:['qwen3:8b'],price_cents:100,max_runtime_s:180,expires_in_s:3600,max_tokens:64,rubric:{kind:'contains_text',expected_text:'READY'}};
+  const input={prompt:'Return the fixture success marker.',context:'Synthetic local bridge verification.',allowed_models:['qwen3:8b'],price_cents:100,expires_in_s:3600,max_tokens:64,rubric:{kind:'contains_text',expected_text:'READY'}};
   const prepared=await call('prepare',{input});const submitted=await call('submit',{id:prepared.draft.id});
   const taskId=submitted.draft.task_id;assert.ok(taskId);
   assert.equal((await call('submit',{id:prepared.draft.id})).draft.task_id,taskId);

@@ -1,5 +1,9 @@
 # Computer B verification — 2026-10-18 UTC
 
+## Buyer form simplification — 05:16 UTC
+
+At the human's request, the seller runtime selector and review text were removed. New form submissions omit `max_runtime_s`, so the marketplace applies its existing default. The bridge accepts the omitted field and still preserves previously saved drafts for exact-request recovery. Browser inspection confirmed the runtime field is absent while output tokens and listing expiry remain. `pnpm -r typecheck`, `pnpm test` (210 passed, two optional Wassette skips), `pnpm --filter @atm/web build` and `git diff --check` passed. The existing buyer-bridge tests now exercise specifications without a runtime field. No hosted task was posted for this edit.
+
 ## Human buyer form and demo reset — 04:44 UTC
 
 The new local `#buyer` workspace connects the existing buyer, previews model-compatible seller registrations, accepts task/context/model/offer/output/runtime/deadline/contains-text specifications, saves a private review draft, posts with a durable request ID, and tracks private results separately from the public board. The local bridge retains the key server-side, checks loopback/origin/session boundaries, preserves the shared $5 API ledger, and reserves $2.20 before a first post. Unknown outcomes retain both the request and allowance. Submitted requests cannot be discarded as drafts; a deterministic approved result is shown only after commitment verification.

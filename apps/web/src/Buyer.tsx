@@ -3,7 +3,7 @@ import { money, time } from './data';
 
 type Task = {task_id:string;status:string;price_cents:number;seller_id:string|null;model_id:string|null;created_at:string;
   payment_state:string;review?:{status:string;attempts:number};replacement_status?:string};
-type Spec = {prompt:string;context:string;allowed_models:string[];price_cents:number;max_runtime_s:number;expires_in_s:number;
+type Spec = {prompt:string;context:string;allowed_models:string[];price_cents:number;expires_in_s:number;
   max_tokens:number;rubric:{kind:'contains_text';expected_text:string}};
 type Draft = {id:string;state:string;task_id:string|null;price_cents:number;created_at:string;input?:Spec};
 type Account = {endpoint:string;submissions_enabled:boolean;
@@ -58,7 +58,7 @@ export function Buyer() {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     const input:Spec = {prompt:String(fields.get('prompt')),context:String(fields.get('context')),
-      allowed_models:models,price_cents:Number(fields.get('price')),max_runtime_s:Number(fields.get('runtime')),
+      allowed_models:models,price_cents:Number(fields.get('price')),
       expires_in_s:Number(fields.get('expires')),max_tokens:Number(fields.get('tokens')),
       rubric:{kind:'contains_text',expected_text:String(fields.get('expected'))}};
     void run(async()=>{const result=await call<{draft:Draft}>('prepare',{input});setDraft(result.draft);await refresh();});
@@ -112,7 +112,6 @@ export function Buyer() {
             <fieldset><legend>Allowed models · choose at least one</legend><div className="model-options">{account.models.map(m=><label key={m.model_id}><input type="checkbox" checked={models.includes(m.model_id)} onChange={e=>setModels(old=>e.target.checked?[...old,m.model_id]:old.filter(v=>v!==m.model_id))}/>{m.model_id}</label>)}</div></fieldset>
             <div className="buyer-fields"><label>Posted offer (test cents)<input type="number" name="price" min={account.payments.min_cents} max={Math.min(account.payments.max_cents,account.buyer.spend.available_cents)} defaultValue={100} required /></label>
               <label>Maximum output tokens<input type="number" name="tokens" min={1} max={4096} defaultValue={512} required /></label>
-              <label>Seller runtime limit<select name="runtime" defaultValue="180"><option value="60">1 minute</option><option value="180">3 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option></select></label>
               <label>Listing expires after<select name="expires" defaultValue="3600"><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="21600">6 hours</option><option value="86400">24 hours</option></select></label></div>
             <label>Expected text in the result<input name="expected" required maxLength={1000} placeholder="A phrase or value the answer must contain" /></label>
             <small>The judge checks this text case-insensitively. Put format and quality requirements in your task instructions too. This check alone does not establish factual accuracy.</small>
@@ -128,7 +127,7 @@ export function Buyer() {
         {draft && <article className="buyer-review" aria-label="Review task"><div className="buyer-step"><span>03</span><h3>{draft.state==='DRAFT'?'Review before submitting':'Saved submission'}</h3></div>
           <p><strong>{money(draft.price_cents)} {account.payments.mode==='mock'?'MOCK':'Stripe TEST'} offer</strong> · {draft.input?.allowed_models.join(', ')}</p>
           {draft.input && <><pre className="private-text">{draft.input.prompt}</pre>{draft.input.context && <details><summary>Supporting context</summary><pre className="private-text">{draft.input.context}</pre></details>}
-            <p>Expected text: <strong>{draft.input.rubric.expected_text}</strong> · output ≤ {draft.input.max_tokens} tokens · runtime ≤ {draft.input.max_runtime_s}s · listing {draft.input.expires_in_s/60} min</p></>}
+            <p>Expected text: <strong>{draft.input.rubric.expected_text}</strong> · output ≤ {draft.input.max_tokens} tokens · listing {draft.input.expires_in_s/60} min</p></>}
           <small>Submitting reserves the posted offer against your existing cap. Possible judge replacement calls reserve $2.20 of the shared $5 API budget; that is a spending allowance, not a charge. Deterministic approval releases it.</small>
           <div className="buyer-actions"><button className="primary-button" disabled={!canSubmit || !!draft.task_id} onClick={()=>void run(async()=>{
             const result=await call<{draft:Draft}>('submit',{id:draft.id});setDraft({...draft,...result.draft});

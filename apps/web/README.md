@@ -2,7 +2,7 @@
 
 ## Human buyer testing
 
-Open `http://127.0.0.1:5173/#buyer` and choose **Use local buyer account**. Describe the task and context, select allowed models, set the posted TEST offer, output limit, runtime and listing deadline, and enter the case-insensitive text the result must contain. The compatible-seller list uses ACTIVE registrations and advertised model tags; it does not assert that a worker is currently available or promise semantic matching. The first eligible claimant takes the task.
+Open `http://127.0.0.1:5173/#buyer` and choose **Use local buyer account**. Describe the task and context, select allowed models, set the posted TEST offer, output limit and listing deadline, and enter the case-insensitive text the result must contain. The form uses the marketplace's default seller runtime. The compatible-seller list uses ACTIVE registrations and advertised model tags; it does not assert that a worker is currently available or promise semantic matching. The first eligible claimant takes the task.
 
 **Review task** saves an owner-only local draft without making a purchase. **Submit** uses the saved request ID; after a lost response or restart, open the unresolved submission and recover that same request. The buyer workspace can track tasks, cancel an unclaimed task, and reveal the private answer only after approval and commitment verification. Judge replacements have a separate label. Private text is never inserted into the public board.
 

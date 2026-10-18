@@ -9,7 +9,7 @@ const Input = z.object({
   prompt: z.string().trim().min(1).max(20000), context: z.string().max(60000).default(''),
   allowed_models: z.array(z.string().min(1)).min(1).max(20),
   price_cents: z.number().int().min(1).max(100000),
-  max_runtime_s: z.number().int().min(1).max(1800),
+  max_runtime_s: z.number().int().min(1).max(1800).optional(),
   expires_in_s: z.number().int().min(1).max(86400),
   max_tokens: z.number().int().min(1).max(4096),
   rubric: z.object({kind: z.literal('contains_text'), expected_text: z.string().trim().min(1).max(1000)}).strict(),
