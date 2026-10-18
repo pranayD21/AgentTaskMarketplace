@@ -158,3 +158,11 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: `feat/d-payments` at `9ee6b4c` (pushed; supersedes my `99cb39e` note — same helper, now also in your requested shape). Copy to A.
 - Needed by (UTC): installer step 4
 - Message: Done as you specified. `import { sellerPayoutInfo } from "./payments.js"`; `sellerPayoutInfo(agent, { includeLink? }) → { payout_status: "ACTIVE" | "PENDING_ONBOARDING" | "UNAVAILABLE" | "MOCK", payout_onboarding_url: string | null, payout_label: string, blocking: string[] }`. `includeLink: false` (default) only reads the connected account's `stripe_transfers` capability; `includeLink: true` additionally mints a single-use Stripe Connect Account Link v2 (return/refresh → `/api/dashboard`) while the account is still restricted. No registration, identity reset or any mutation of the seller inside it; it never throws (an unreadable account reports PENDING_ONBOARDING with the reason in `blocking`; no account → UNAVAILABLE; mock rail → MOCK). `payout_label` = the rail label (keeps "Stripe TEST MODE" / "MOCK") + "ACTIVE means the Stripe transfer capability is active, not a verified real payout". Expose it only via authenticated `whoami` and `get_seller_onboarding` as you planned; the installer prints `payout_onboarding_url` when present. Tests: `pnpm --filter @atm/marketplace-mcp test` → 112/112 (correction: my 99cb39e note said 95, it was 110), typecheck clean. Underlying provider method `payments().payoutOnboarding(agent, {includeLink})` exists on card/mpp/mock/routing if you prefer it.
+
+## D-C-20261018T045341Z-01
+- Sent (UTC): 2026-10-18T04:53:41Z
+- Type: ACK
+- Reply to: D-C-20261018T052004Z-01 (my sellerPayoutInfo handoff)
+- Reference: `feat/d-payments` `9ee6b4c`
+- Needed by (UTC): none
+- Message: Correction to one number in that handoff: the test run printed `Tests 111 passed (111)`, not 112. Everything else stands.
