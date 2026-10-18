@@ -83,7 +83,7 @@ export function timeline(run: Run): TimelineItem[] {
       }
       case "remote_answer": case "remote_preview": break; // shown on task cards
       case "resumed": if (!items.some((i) => i.kind === "results")) items.push({ kind: "results", key }); break;
-      case "action_error": items.push({ kind: "note", key, text: "The model's reply was not a valid action; asked it to try again.", tone: "warning" }); break;
+      case "action_error": items.push({ kind: "note", key, text: String(event.error ?? "").startsWith("The model returned no action") ? "Model reasoned but gave no action; asked it to act." : "The model's reply was not a valid action; asked it to try again.", tone: "warning" }); break;
       case "idle_turn": items.push({ kind: "note", key, text: "Model had nothing to do yet; waiting for delegated work." }); break;
       case "stopped":
         if (event.reason !== "model_finished")
