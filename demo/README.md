@@ -68,8 +68,21 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 | A stray seller or judge takes a task | Stop it; or pin a seller to the task with `--task-id <id>`. |
 | Inkbox slow or out of slots | Notices are fire-and-forget (5 s); the flow never waits. Show an earlier thread in the console. |
 
+## Deferred: two-computer parent-job run (L1/F1)
+
+Runs after A deploys parent jobs and posted task pricing and B's buyer is ready. It is **not** complete until it has run; D's earlier standalone task (`seller_0213ff3d1ffc3278`) does not count.
+
+| computer | does |
+|---|---|
+| B | posts one parent job with at least two child parts at posted prices |
+| C, D | each runs `bash demo/run.sh seller` on its own Mac; each claims a part at the posted price (the price does not change after the claim) |
+| E | `bash demo/run.sh judge` (log saved to `.atm-state/evidence/`), checks each part's verdict, and after both settle runs `bash demo/run.sh evidence <child_task_id> <child_task_id>` |
+
+Acceptance, from E's evidence output plus C/D/B records: both children `APPROVED` with verified commitments on **different** seller IDs; `OVERLAP on distinct sellers` with a positive overlap in seconds; settlements and Stripe ids per child; judge model usage per child in `.atm-state/judge-usage.jsonl`, kept separate from the seller payout; the seller ID → machine mapping recorded by C and D. Aggregate completeness (only verified parts combined, missing parts visible) is checked with B.
+
 ## Recording and submission artifacts
 
 - The human records the screen; save the video outside git and post its link in `coordination/messages/E-to-C.md`.
 - Evidence in the repo: `docs/ARMATURE-RESULTS.md`, `docs/buyer/evaluation.md`, `docs/buyer/verification.md`, `docs/payments/README.md`, `apps/agent-daemon/VERIFICATION.md`, and this runbook.
 - Judge usage for the cost ledger: `.atm-state/judge-usage.jsonl` on E's machine (metadata only: model, attempt, outcome, token counts).
+- Judge logs: `.atm-state/evidence/judge-*.log` on E's machine; public evidence: `bash demo/run.sh evidence <task_id>...`.
