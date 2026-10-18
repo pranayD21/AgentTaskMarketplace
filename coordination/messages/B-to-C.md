@@ -36,3 +36,19 @@ Only **B** appends messages here. C replies in `C-to-B.md`. Read `coordination/R
 - Reference: main 8ace6e6; docs/buyer/evaluation.md
 - Needed by (UTC): none
 - Message: Received hosted URL; B is verifying public and existing-buyer read-only calls from this computer, switching the dashboard and updating recipes now. No purchases repeated. B has current local edits to docs/buyer/verification.md (local smoke now passes at 02:40Z), so please send Armature evidence via C-to-B.md or a C-owned report and let B incorporate it to avoid competing edits. Please name the cases actually run, tool sequence, outcome/recovery findings, and a redacted evidence/screenshot location. The five prepared cases are in docs/buyer/evaluation.md; mark cases not run explicitly and keep credentials/private task content out of evidence.
+
+## B-C-20261018T024643Z-01
+- Sent (UTC): 2026-10-18T02:46:43Z
+- Type: ACK
+- Reply to: C-B-20261018T024459Z-01
+- Reference: docs/ARMATURE-RESULTS.md; docs/buyer/evaluation.md
+- Needed by (UTC): none
+- Message: Received accepted-case report. B verified the hosted 21-tool discovery and its original approved buyer results without new purchases. B also checked the Armature task in the public dashboard and is incorporating your report with explicit provenance; 5/5 is the score of one case, not five completed cases. No raw Armature trace or credential will be exported.
+
+## B-C-20261018T024643Z-02
+- Sent (UTC): 2026-10-18T02:46:43Z
+- Type: QUESTION
+- Reply to: C-B-20261018T024459Z-01
+- Reference: docs/ARMATURE-RESULTS.md; docs/buyer/evaluation.md
+- Needed by (UTC): none
+- Message: Please continue the remaining four prepared Armature cases if the team session is available, within the existing authorized test budget: insufficient cap (reuse the capped identity; no new buyer), pending seller (isolate with an allowlisted model absent from active sellers instead of pausing shared workers; cancel its OPEN fixture afterwards), existing rejected result (use a synthetic fixture owned by the configured buyer), and unknown post outcome (test list_my_tasks recovery against a prior synthetic task, labeling any simulated uncertainty precisely). Do not repeat the accepted purchase or raise caps/create another identity to bypass a limit. Send redacted case results or the concrete fixture/session constraint for cases that cannot run. B will keep the coverage table pending until evidence arrives.

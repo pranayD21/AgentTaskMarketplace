@@ -6,11 +6,11 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 > **Team: start with [`AGENTS.md`](AGENTS.md).** It tells you which letter you are, what to read, and how the five computers coordinate. Status of everything built so far is in [`docs/PROGRESS.md`](docs/PROGRESS.md); the full plan is in [`docs/PLAN.md`](docs/PLAN.md).
 
-## What works right now (updated 2026-10-17, 19:30 PDT; evidence in `docs/PROGRESS.md` and each computer's HANDOFF)
+## What works right now (updated 2026-10-17, 19:46 PDT; evidence in `docs/PROGRESS.md` and each computer's HANDOFF)
 
 | Piece | State |
 |---|---|
-| MCP server (`apps/marketplace-mcp`, mcp-use v2, 21 tools) | Running locally at `http://localhost:3000/mcp`; Insforge Postgres schema applied |
+| MCP server (`apps/marketplace-mcp`, mcp-use v2, 21 tools) | Live at [the hosted MCP endpoint](https://warm-cloud-4hh5i.run.mcp-use.com/mcp); contract v0.2, Insforge Postgres, Stripe TEST card mode |
 | Buyer flow | `register_agent` creates a Stripe test customer + saved test card; `post_task` places a manual-capture **hold** for the max price against the buyer's spend cap |
 | Seller flow (Node runtime) | Daemon lists local Ollama models, registers, atomically claims, runs **qwen3:8b locally** (5 s), seals the result to buyer + judge, submits |
 | Judge flow (Node runtime) | Daemon takes the review package, decrypts, verifies the sha256 commitment, applies the rubric, **APPROVE** → Stripe **captures** the claim price (75c of a 100c hold), remainder released |
@@ -18,13 +18,11 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 | Judge in the sandbox (`judge-cycle`, E) | fetch → decrypt → commitment check → grade (`contains_text` or Claude via `llm_rubric`) → `submit_verdict`, in one instance. E verified APPROVE and REJECT (replacement answer, seller SUSPENDED, hold cancelled) |
 | Inkbox (E) | Buyer and seller identities with A2A; per-task notice threads from `atm-marketplace` (free tier: 3 identities, so judges get none) |
 | Contract v0.2 (A) | Per-claim runner keys, keys in the claim response, atomic spend-cap reservation, `next_action` on every A-owned 4xx |
-| Tests | `pnpm test`: crypto 7, runner-core 19, agent-daemon 6 (+1 needing Wassette, `ATM_TEST_WASSETTE=1`), marketplace server 22. `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
-
+| Tests | `pnpm test`: crypto 7, runner-core 19, agent-daemon 6 (+1 needing Wassette, `ATM_TEST_WASSETTE=1`), marketplace server 33, web 14 (79 total). The real Wassette daemon suite also passed 7/7. `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
 | Payments (D, merged by C) | Seller payouts work: Stripe test capture of 75c and a 75c transfer to the seller's connected account (synthetic test-mode identity, tagged as such), 25c released. `PAYMENT_MODE=mpp`: the task waits in `AWAITING_PAYMENT` until the buyer agent pays an HTTP 402 challenge with a Shared Payment Token. See `docs/payments/README.md` |
-
 | Dashboard + buyer kit (B, merged by C) | `apps/web` live dashboard (metadata only), `skills/marketplace/SKILL.md`, `llms.txt`, Claude Code and Codex recipes; real Claude Code and Codex buyers got APPROVED, commitment-verified results |
 
-Pending: Manufact deployment and Armature evaluation (waiting on the human's sign-ins). LAN endpoints meanwhile (C): MCP `http://192.168.4.163:3000/mcp`, dashboard `http://192.168.4.163:5173`. Demo script: `demo/README.md` (E).
+Manufact is deployed. Armature's hosted buyer evaluation passed 5/5: one capped purchase, local Wassette seller and judge, verified approved result, 75c Stripe TEST transfer and 25c released. See [the evaluation report](docs/ARMATURE-RESULTS.md) and [deployment guide](docs/DEPLOYMENT.md). The live dashboard is available on C's LAN at http://192.168.4.163:5173. Remaining: E's final demo script and Inkbox notice check with existing identities, then the team rehearsal.
 
 ## How it works
 
@@ -86,8 +84,9 @@ pnpm dev:server --no-open      # http://localhost:3000/mcp  (inspector at /mcp/i
 In two more terminals:
 
 ```sh
-pnpm daemon --role seller --runtime node     # node = labelled UNSANDBOXED fallback; --runtime wassette is the sandbox (blocked, see PROGRESS)
-pnpm daemon --role judge  --runtime node
+pnpm build:runner
+pnpm daemon --role seller --runtime wassette --poll-ms 5000
+pnpm daemon --role judge --runtime wassette --poll-ms 5000
 ```
 
 Post a task and read the result:
