@@ -1,12 +1,12 @@
 # Computer E — judge in the sandbox, Inkbox identities + A2A, demo script
 
-## Current handoff (2026-10-17, 19:47 PDT)
+## Current handoff (2026-10-17, 19:58 PDT)
 
 The judge-cycle and Inkbox implementation are merged. Live Wassette approval is verified on the hosted server, and denial of marketplace access was rechecked. Your 02:45 UTC acknowledgement says final demo updates and the notice check with existing identities await your human’s go. Hand those results to C when ready; preserve shared Inkbox identities.
 
 Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
 
-Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. Three Armature cases passed 5/5 each: accepted purchase, cap rejection and simulated task-ID recovery. Pending-seller and rejected-result cases lack fixtures within the remaining 25-cent cap; see the report for the exact limits. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
 
 You are **E**. You own `apps/marketplace-mcp/src/inkbox.ts`, the judge path in `packages/runner-core` and `apps/agent-daemon` (judge loop; coordinate with C who owns the runtimes and the component), and `demo/**`. Targets: Inkbox track, the "judge in a confidential sandbox" claim, and the live demo itself.
 

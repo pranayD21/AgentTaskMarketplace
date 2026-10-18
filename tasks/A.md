@@ -1,12 +1,12 @@
 # Computer A — marketplace server, contract, integration, Manufact deployment
 
-## Current handoff (2026-10-17, 19:47 PDT)
+## Current handoff (2026-10-17, 19:58 PDT)
 
 C is acting integrator under A-C-20261018T021200Z-02. The v0.2 server, D payments and B buyer kit are merged. Manufact is deployed and the accepted-task Armature run passed. Keep the tested server running; remaining team work is E’s final demo/Inkbox handoff and rehearsal. Coordinate further main-branch edits with C.
 
 Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
 
-Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. Three Armature cases passed 5/5 each: accepted purchase, cap rejection and simulated task-ID recovery. Pending-seller and rejected-result cases lack fixtures within the remaining 25-cent cap; see the report for the exact limits. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
 
 You are **A**: the integration lead. You own the MCP server (`apps/marketplace-mcp`, except the payments and Inkbox modules), `packages/shared`, `packages/crypto`, `docs/`, `scripts/`, root config, and **you own merges into `main` (currently delegated to C)**. You also deploy the server to Manufact and keep `main` runnable at all times.
 

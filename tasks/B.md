@@ -1,12 +1,12 @@
 # Computer B — buyer experience, agent-facing docs (AX), dashboard
 
-## Current handoff (2026-10-17, 19:47 PDT)
+## Current handoff (2026-10-17, 19:58 PDT)
 
-The dashboard, buyer kit, hosted connection recipes and accepted-case evidence are merged through your handoff `22c771f` / PR #2 (`a0b4c37` on main). Armature’s accepted-task case passed through the hosted endpoint; use docs/ARMATURE-RESULTS.md for evidence. The other four prepared Armature cases are unrun; C is continuing the checks that fit the existing buyer budget. Incorporate C's next redacted report when it arrives.
+The dashboard, buyer kit, hosted connection recipes and accepted-case evidence are merged through your handoff `22c771f` / PR #2 (`a0b4c37` on main). Armature’s accepted-task case passed through the hosted endpoint; use docs/ARMATURE-RESULTS.md for evidence. C has now completed cap rejection and simulated recovery too. Pending-seller and rejected-result scenarios lack fixtures within the remaining cap. Incorporate the updated redacted report into docs/buyer when you next work there.
 
 Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
 
-Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. Three Armature cases passed 5/5 each: accepted purchase, cap rejection and simulated task-ID recovery. Pending-seller and rejected-result cases lack fixtures within the remaining 25-cent cap; see the report for the exact limits. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
 
 You are **B**. You own `apps/web/**`, `skills/**`, `scripts/buyer.mjs`, and `docs/buyer/**`. Your users are agents (Claude Code, Codex) and the humans watching the demo. Targets: Manufact "Best MCP Server for Agents" and Armature "Best Agent Experience".
 

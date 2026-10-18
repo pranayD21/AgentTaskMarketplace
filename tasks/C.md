@@ -1,12 +1,12 @@
 # Computer C — seller runtime and the Wasm sandbox
 
-## Current handoff (2026-10-17, 19:47 PDT)
+## Current handoff (2026-10-17, 19:58 PDT)
 
 The per-call key blocker is fixed. Both seller and judge ran in Wassette against the hosted server, with APPROVED, commitment_verified=true and per-claim keys. C is also acting integrator for A. Keep the seller and judge alive at 5000 ms polling, integrate tested handoffs, and use the current status in docs/PROGRESS.md instead of rebuilding the original fix.
 
 Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
 
-Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. The accepted Armature run passed 5/5. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
+Latest completed checks: 79 tests, workspace typecheck and smoke passed; the real-Wassette daemon suite passed 7/7. Three Armature cases passed 5/5 each: accepted purchase, cap rejection and simulated task-ID recovery. Pending-seller and rejected-result cases lack fixtures within the remaining 25-cent cap; see the report for the exact limits. Read your four incoming coordination files before starting; the original implementation checklist below records the build assignment and may describe work that is already complete. Deployment details are in `docs/DEPLOYMENT.md`; evidence is in `docs/PROGRESS.md` and `docs/ARMATURE-RESULTS.md`.
 
 You are **C**. You own `packages/runner-wasm/**`, `packages/runner-core/**` (seller path; coordinate judge-path edits with E), and `apps/agent-daemon/**` (seller loop and both runtimes). The sandbox implementation is complete and verified; maintain the seller runtime and support the shared live demo.
 
@@ -37,7 +37,7 @@ Wassette creates a fresh component instance per tool call, so a keypair made in 
    - Call the marketplace **from inside the sandbox** with `fetch` to `<marketplace_url>` using the MCP streamable-HTTP JSON-RPC shape (see `scripts/buyer.mjs` for a 20-line client: `initialize`, then `tools/call`, headers `accept: application/json, text/event-stream`, `authorization: Bearer …`, keep `mcp-session-id`). Call `claim_task` with `task_id`, `model_id`, `runner_pubkey_b64`, `runner_key_id` (contract v0.2 from A).
    - Decrypt `claim.seller_envelope`, run Ollama (`runTask` logic), seal to `buyer_public_key` and `judge_public_key` from the claim response, call `submit_result`.
    - Return `{ task_id, claim_id, result_id, runtime_ms, tokens_out, key_id }`. On any error after the claim, call `release_task` with a short reason and throw.
-3. Policies / grants: seller network allow-list = Ollama + the marketplace host:port (parse from `MARKETPLACE_URL`); env grant `AGENT_API_KEY`. Update `policies/seller.policy.yaml` and `GRANTS` in `apps/agent-daemon/src/runtime/wassette.ts` (pass `--env AGENT_API_KEY=…` to `wassette run`).
+3. Policies / grants: seller network allow-list = Ollama + the marketplace. Pass full origins parsed from `MARKETPLACE_URL`; Wassette 0.8 enforces hostname grants and does not restrict ports. Grant `AGENT_API_KEY` through the private environment file used by `apps/agent-daemon/src/runtime/wassette.ts`.
 4. Daemon seller loop: with `--runtime wassette`, the host does `list_open_tasks` (host-side, metadata only) and then calls `run-cycle` for the chosen task; it no longer calls `claim_task`/`submit_result` itself. Lease renewal: a 300 s lease covers a 180 s task; skip host renewal in cycle mode (document it).
 5. `register_seller` in cycle mode: send models, `runtime: "wassette"`, `runner_wasm_sha256`, and **no** registered key (v0.2 makes it optional) or a placeholder; the per-claim key is what matters.
 
@@ -47,7 +47,7 @@ Until A ships v0.2 (`claim_task` accepting the per-claim key), develop against t
 
 ## 2. Sandbox demo material — target 23:00
 
-- Denied-host demo: run the seller once with the Ollama grant removed (`wassette permission revoke network atm-seller-runner localhost:11434` in `.atm-state/wassette-seller`, or a flag `--no-grants`) and capture Wassette's log line showing the refusal; then grant and show success. Script it as `apps/agent-daemon` flag or a `demo/` snippet for E.
+- Denied-host demo: use the implemented `--deny-ollama --once` seller flag and capture the policy refusal. Use different hostnames for Ollama and the marketplace when testing locally, because Wassette 0.8 grants access by hostname. See `apps/agent-daemon/VERIFICATION.md` for the verified sequence.
 - Print at startup: component sha256, Wassette version, the exact allow-list, and "the host never sees the task key".
 - Model canary: after `register_seller`, run a tiny prompt through the sandbox and log tok/s (optional; `ModelInfo.tok_per_s`).
 

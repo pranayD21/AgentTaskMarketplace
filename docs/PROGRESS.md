@@ -176,3 +176,12 @@ Earlier issues above are historical. The per-call key blocker (#1), D payout int
 - D's follow-up `0cb3ff2` is merged at `5f2b6b3`, preserving C's payment retry/cap/expiry fixes. `pnpm -r typecheck`, `pnpm test` (79 passed, one optional Wassette case skipped), and `pnpm smoke` passed. The separate real-Wassette suite passed 7/7 earlier.
 - Live challenge check after D's merge: `task_8cd7ec26e3507379` returned HTTP 402 twice with identical challenge headers, then was cancelled before payment. The hosted judge started with `--deny-marketplace --once` logged `HTTP request blocked by network policy` and exited 1, as expected.
 - E acknowledged the handoff and is waiting on its human before updating the demo and checking notices with existing Inkbox identities. No shared Inkbox reset was run. The earlier deployment/sign-in blockers (#5 and #13) are resolved. The scheduled team rehearsal and E's final notice check remain.
+
+
+### Final hosted checks from C (19:58 PDT)
+
+- B handoff `22c771f` / PR #2 merged at `a0b4c37`: hosted recipes and accepted-case evidence. Workspace typecheck, 79 tests (one optional Wassette skip), and smoke passed on the combined tree. The subsequent incoming merge changed only coordination messages.
+- Current Manufact deployment `eaba52dd-79b3-4853-8988-2ba57132b53d` is running. `/api/health` passed at 02:51 UTC; B independently verified discovery and health. Existing local Wassette seller and judge remain connected to the hosted server.
+- Armature now has three passing scenarios: accepted purchase, cap rejection and simulated task-ID recovery, each 5/5 across three criteria. Recovery was rerun after correcting its fixture description; this is four runs across three scenarios. See [the detailed report](ARMATURE-RESULTS.md).
+- Follow-ups added no marketplace charges. Original buyer: 75c spent, 0 reserved, 25 available; one approved task, no OPEN or REJECTED fixture. Pending-seller and rejected-result cases remain unrun because the available cap is below the 50c minimum for a new fixture. No identity or cap bypass was used.
+- E’s final demo and Inkbox notice handoff is still awaiting its human. The team rehearsal and recording remain outstanding.
