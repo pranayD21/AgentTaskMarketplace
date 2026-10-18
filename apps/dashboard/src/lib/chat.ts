@@ -42,7 +42,13 @@ export function timeline(run: Run): TimelineItem[] {
     switch (event.type) {
       case "model": {
         const message = event.message ?? {};
-        if (message.thinking || message.content)
+        const content = (message.content ?? "").trim();
+        // Small models often repeat their last answer verbatim after results arrive; keep only the latest copy.
+        if (content) {
+          const dup = items.findIndex((i) => i.kind === "assistant" && !i.streaming && i.content.trim() === content);
+          if (dup >= 0) items.splice(dup, 1);
+        }
+        if (message.thinking || content)
           items.push({ kind: "assistant", key, content: message.content ?? "", thinking: message.thinking || undefined, streaming: false });
         break;
       }

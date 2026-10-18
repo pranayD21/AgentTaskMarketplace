@@ -51,6 +51,15 @@ describe("chat timeline", () => {
     expect(approved.approved).toBe(true);
     expect(renderToStaticMarkup(createElement(TaskCard, { task: approved, defaultOpen: true }))).toContain("does not verify answer correctness");
   });
+  it("keeps only the latest copy of an answer the model repeated after results arrived", () => {
+    const repeated: Run = { ...run, status: "finished", events: [
+      { type: "model", at, turn: 0, message: { role: "assistant", content: "Final answer." } },
+      { type: "resumed", at, tasks: ["task_a"] },
+      { type: "model", at, turn: 1, message: { role: "assistant", content: "Final answer." } },
+    ] };
+    const items = timeline(repeated);
+    expect(items.map((i) => i.kind)).toEqual(["results", "assistant"]);
+  });
   it("escapes untrusted text in tool data and labels run states", () => {
     const html = renderToStaticMarkup(createElement(ToolInvocation, null,
       createElement(ToolInvocationContentCollapsible, { defaultOpen: true, header: createElement(ToolInvocationName, { name: "mcp_post_task", type: "output-error" }) },
