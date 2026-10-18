@@ -11,7 +11,7 @@ Branch: `feat/b-buyer`, initially based on `19f7431`; merged main through `700f9
 | `pnpm --filter @atm/web build` | Pass; Vite production bundle generated. |
 | `pnpm --filter @atm/web test` | 14 tests pass (latest run after v0.2 / MPP integration): public rendering, payment/runtime labels, filtering, links/leases, MCP response handling, input validation, endpoint-bound identity, commitment failure handling, and unfamiliar settlement rail fallback. |
 | Crypto tests | Initially six passed; seven pass in the merged workspace suite. |
-| `pnpm test` after merging C's integration | Pass: 76 tests — web 14, crypto 7, runner-core 19, agent-daemon 6 (+1 Wassette test skipped), marketplace server 30. The original missing-server-tests failure is resolved. |
+| `pnpm test` after merging C's integration | Pass: 79 tests after incorporating D's payment guards — web 14, crypto 7, runner-core 19, agent-daemon 6 (+1 Wassette test skipped), marketplace server 33. The original missing-server-tests failure is resolved. |
 | `pnpm smoke` on main `8ace6e6`, 02:40Z | Pass: registered-key and per-claim flows both APPROVED with verified commitments; MEMORY storage, MOCK settlement, no external model or payment calls. |
 | Skill creator `quick_validate.py skills/marketplace` | Pass. PyYAML installed in an ignored local validation environment. |
 | `node scripts/buyer.mjs whoami` | Registers once, privately stores the key, then reuses the buyer. |
@@ -72,6 +72,16 @@ Using the existing buyer credential in private process configuration, `node scri
 
 The browser dashboard now reads the hosted API; it displays live metadata, both test payment rails, and latest-claim key labels. Public screenshot: `.atm-state/screenshots/dashboard-hosted-overview.png`. Connection recipes and `llms.txt` now contain the working hosted URL; `.env.example` points the web app at it. B's PR #1 was merged at `24c7c86`; this hosted documentation is a follow-up.
 
+## Armature accepted-task evidence from C
+
+C's [redacted report](../ARMATURE-RESULTS.md) records run `e7b625cc-1d27-5d05-ba0a-4b1e178e4612`, case `6fedcf8e-56aa-4084-82f3-7ca2a9da81a5`, started at 02:40:41Z using Codex / GPT-5.6 Terra in the team's Armature account. The case passed 5/5, with all three criteria passing, 53.1 seconds of agent time, 9 recorded tool calls, and 0 failures. This is one accepted-task workflow evaluation, not an aggregate benchmark or five completed scenarios.
+
+C reports this buyer sequence: `marketplace_info` → `register_agent` → `list_sellers` + `whoami` → one `post_task` → two `get_task` → `get_result`; the timeline also includes a later evaluator `list_my_tasks`. Registration used a 100-test-cent cap. The result was APPROVED with `commitment_verified=true`; the agent distinguished commitment verification from judge approval. No new wording defect was reported in this accepted flow after A incorporated B's guidance findings.
+
+B independently read the hosted public dashboard and confirmed task `task_19a38f56a2162259`: APPROVED, CAPTURED, APPROVE / RUBRIC_MATCH, STRIPE_TEST settlement with 75-cent seller payout and 25-cent buyer refund. The private result and tool trace remain in the team Armature account; B did not obtain another buyer's credential or repeat its purchase. [Open the run](https://app.armature.tech/eval/runs?range=7d&drawer=run%3Ae7b625cc-1d27-5d05-ba0a-4b1e178e4612). C saved `outputs/armature-accepted-pass.png` on its machine with tool payloads closed; it is not a screenshot captured locally by B.
+
+C's UI reported zero of 1000 monthly Armature credits used after this run; that is not proof model inference was free. No token-billing figure was supplied. The 75-cent marketplace amount is simulated Stripe money and is not measured compute cost.
+
 ## Still pending
 
-C has usable team Armature access and reports successful discovery of all 21 hosted tools. The actual evaluation outcomes and redacted evidence have not yet been handed to B. B is waiting for C's run, then will verify and incorporate the case results instead of repeating purchases. The prepared [evaluation cases](evaluation.md) remain pending until that evidence exists. A human Link-wallet evaluation is also unverified; the wallet recipe describes the integrated test-mode flow without claiming that it was exercised by B.
+Four prepared Armature cases remain unrun: insufficient cap, pending seller, rejected result, and unknown post outcome. B asked C to continue those using the existing authorized test budget, preserve caps/identities, keep shared workers running, and report concrete fixture constraints if a case cannot run. The [case table](evaluation.md) distinguishes this pending coverage from the accepted-case pass. D separately records successful human-approved Link-wallet test payments in [payments verification](../payments/README.md); B has not repeated that payment flow.
