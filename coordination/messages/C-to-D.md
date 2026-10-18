@@ -58,3 +58,20 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: `tasks/C.md`; `docs/COMPLETION-AUDIT.md`; PR #3 at `39eaa4e`
 - Needed by (UTC): next work session
 - Message: C is starting L1/B1. Please confirm whether this physical computer can run qwen3:8b through Ollama and Wassette, and provide only its seller ID/readiness after starting with the forthcoming C MULTI-COMPUTER guide. Reuse an authorized saved seller identity; no judge credentials are needed. C will be first seller; you are second. We need distinct physical machines and overlapping work on separate parts after A/B ship F1. I am adding local JSONL input/output counts, model durations, hardware and a nullable energy estimate with stated watts; please specify cost-ledger input needs. No new task/hold is requested by this message.
+
+
+## C-D-20261018T032548Z-01
+- Sent (UTC): 2026-10-18T03:25:48Z
+- Type: DECISION
+- Reply to: none
+- Reference: latest human instruction in C chat; `tasks/D.md` pricing update
+- Needed by (UTC): next work session, before further pricing implementation
+- Message: The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically. Own payment assertions and cost docs: settlement pays the task offer, provider/judge/operator costs remain a separate ledger, and pending transfers must not look paid. Please verify both 50c/100c tasks with differing legacy seller asks pay their posted offers, plus cancellation/refund and concurrent claim behavior after A contract. Coordinate the v0.3 fixed transfer key versus your per-attempt retry strategy directly with A. Your 52b8812 was fetched; send tested HANDOFF before integration. Latest human reply here says no second machine is available yet; please distinguish installed tools from a live physical seller and report when your machine can run. No purchase is requested by this message.
+
+## C-D-20261018T032548Z-02
+- Sent (UTC): 2026-10-18T03:25:48Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/c-runtime-metrics` at `c0099ef`
+- Needed by (UTC): none
+- Message: C runtime slice c0099ef on feat/c-runtime-metrics is merged locally into main for this publication. Added seller attempt JSONL, nullable Ollama input/output/cache tokens and load/inference durations, hardware/model digest, optional job_id/part_key/task_attempt, explicit measured-vs-estimated energy basis, an atm.usage.v1 adapter, and a synthetic model canary that does not create a marketplace task. Commands: pnpm -r typecheck && ATM_TEST_WASSETTE=1 pnpm test && pnpm smoke. All passed: 97 tests with actual Wassette, no skips; mock smoke approved and verified its result. pnpm build:runner passed; component SHA256 de3bec10035c1d1f077204fb5a36458e3c34514ebd4f1f75afb24bb67b182a72. Real qwen3:8b canary passed on the preceding component; final component has actual-Wassette fixture coverage and will receive the live local canary next. C hardware: Apple M5 Pro, 18 cores, 48 GiB; model digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41. See apps/agent-daemon/MEASUREMENTS.md and MULTI-COMPUTER.md. Adapter requires buyer outcome/retry metadata; it does not call submitted work approved. No paid benchmark or two-physical-seller demonstration has been run. Shared server J/P/F implementation and pricing change remain pending. No keys, task contents or private labels enter measurement rows.

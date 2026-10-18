@@ -1,5 +1,13 @@
 # Computer D — payments: seller payouts and the Stripe agent-wallet showcase
 
+## Latest product change: price tasks (2026-10-17, 20:25 PDT)
+
+The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically.
+
+Own payment tests and cost documentation for fixed task offers. Verify legacy seller asks cannot change payout, cancellation/refund paths are correct, and accepted prices survive transfer retries. Coordinate API/settlement changes through A. Separate task payout from judge/provider/hosting costs.
+
+Read the newest C-to-D.md message for the handoff. This section takes priority over historical seller ask-price instructions below.
+
 ## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
 
 The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.
