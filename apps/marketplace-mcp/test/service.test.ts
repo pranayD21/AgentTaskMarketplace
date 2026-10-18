@@ -10,10 +10,12 @@ import * as svc from "../src/service.ts";
 // helpers
 // ---------------------------------------------------------------------------
 
-/** Stands in for Ollama: answers every chat with `answer`. */
+/** Stands in for Ollama: lists qwen3:8b and answers every chat with `answer`. */
 function fakeOllamaHost(answer: string): RunnerHost {
+  const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { "content-type": "application/json" } });
   return {
-    fetch: (async () => new Response(JSON.stringify({ message: { content: answer }, eval_count: 3 }), { headers: { "content-type": "application/json" } })) as typeof fetch,
+    fetch: (async (url: string | URL | Request) =>
+      String(url).endsWith("/api/tags") ? json({ models: [{ name: "qwen3:8b", digest: "test" }] }) : json({ message: { content: answer }, eval_count: 3 })) as typeof fetch,
     getSecret: async () => undefined,
     now: () => Date.now(),
   };
@@ -80,7 +82,7 @@ async function runCycle(s: AgentRow, taskId: string, answer = "Lima") {
 async function judgeOnce(judge: AgentRow) {
   const pkg = await svc.fetchReviewPackage(judge);
   expect(pkg).not.toBeNull();
-  const verdict = await createRunner(judgeHost).judgeTask(pkg!.payload_enc_judge, pkg!.result_enc_judge, { buyer_public_key: pkg!.buyer_public_key }, judgeKeypair());
+  const verdict = await createRunner(judgeHost).judgeTask(pkg!.payload_enc_judge, pkg!.result_enc_judge, { buyer_public_key: pkg!.buyer_public_key, commitment_sha256: pkg!.commitment_sha256 }, judgeKeypair());
   return svc.submitVerdict(judge, { task_id: pkg!.task_id, result_id: pkg!.result_id, ...verdict });
 }
 
