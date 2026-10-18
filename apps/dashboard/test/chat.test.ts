@@ -5,6 +5,7 @@ import { tasks, timeline, runHeadline } from "../src/lib/chat";
 import type { Run } from "../src/lib/api";
 import { TaskCard } from "../src/components/task-card";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData } from "../src/components/ui/tool-invocation";
+import { Markdown } from "../src/components/markdown";
 
 const at = "2026-10-18T02:00:00.000Z";
 const run: Run = {
@@ -59,6 +60,13 @@ describe("chat timeline", () => {
     ] };
     const items = timeline(repeated);
     expect(items.map((i) => i.kind)).toEqual(["results", "assistant"]);
+  });
+  it("renders Markdown with inline and block LaTeX as MathML, never as raw HTML", () => {
+    const html = renderToStaticMarkup(createElement(Markdown, { text: "Area is $\\pi r^2$.\n\n$$E = mc^2$$\n\n<script>x</script> **bold**" }));
+    expect(html).toContain("<math");
+    expect(html).toContain('display="block"');
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).not.toContain("<script>");
   });
   it("escapes untrusted text in tool data and labels run states", () => {
     const html = renderToStaticMarkup(createElement(ToolInvocation, null,

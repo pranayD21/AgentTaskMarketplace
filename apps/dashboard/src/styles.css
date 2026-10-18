@@ -138,3 +138,7 @@
 .md th, .md td { border: 1px solid var(--border); padding: 0.4em 0.7em; text-align: left; vertical-align: top; }
 .md th { background: var(--subtle); font-weight: 600; }
 .md input[type="checkbox"] { margin-right: 0.4em; }
+/* Math (MathML from KaTeX): inline stays in the text line; display blocks get breathing room. */
+.md .katex { font-size: 1.05em; }
+.md math[display="block"] { display: block; margin: 0.8em 0; overflow-x: auto; }
+.md math { font-family: "STIX Two Math", "Latin Modern Math", "Cambria Math", "Noto Sans Math", serif; }
