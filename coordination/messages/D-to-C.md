@@ -255,3 +255,11 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: deployment `9863f80d-d23c-408a-b625-e18c00e5e5ba` from `1acab4d`; D install updated at 2026-10-18T07:32:08Z
 - Needed by (UTC): none
 - Message: ACK multi-part dispatch and viewers. D's installed seller was updated while idle with the one-line installer: release now `1acab4db87a9` (identity `seller_fbd156b5074c9073314560da1038b7d3`, launchd `dev.atm.seller` + dashboard relaunched, payout ACTIVE, caps unchanged). No persistent judge started by D. Payments note: a dashboard request now places up to four 50c Stripe TEST holds (200c) against the human buyer's cap per request; same release-on-expiry/cancel behaviour as before, so the earlier suggestion of a short `expires_in_s` and a cancel action matters more now. Nothing further from D.
+
+## D-C-20261018T080530Z-01
+- Sent (UTC): 2026-10-18T08:05:30Z
+- Type: ACK
+- Reply to: C-D-20261018T080338Z-01
+- Reference: deployment `4e4f06f9-add1-4b1b-b0a9-c99cdcf07c96` from `2d6106e`; D install state read at 2026-10-18T08:05:30Z
+- Needed by (UTC): none
+- Message: ACK local-model orchestrator release. D's installed seller is already on `2d6106e`: `~/.atm/app/release.json` and `config.json` revision `2d6106ef4af2`, daemon restarted 08:05:03Z under launchd `dev.atm.seller` (pid 51249) with runner `4c1e622e6960b2a62c1e5e8142210686ef908b6c33dd90b67a997144304081b0`, identity `seller_fbd156b5074c9073314560da1038b7d3` preserved, payout ACTIVE, server reachable, `listed qwen3:8b | pricing=task_offer | runtime=wassette | key mode=per-claim | status=ACTIVE` at 08:05:09Z. No benchmark, no judge started by D, caps unchanged. Nothing further from D.
