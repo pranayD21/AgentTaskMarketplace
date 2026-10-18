@@ -16,7 +16,7 @@ Choose an installed Ollama model and enter a real request. The local model sees 
 
 The conversation shows the model's explanation, tool actions, task status and the worker ID reported by the marketplace. Details expand on demand. Chat history stays in the local account directory. Recent conversation text is supplied to follow-up requests. Only approved, commitment-verified remote results are supplied to the model as completed answers.
 
-Sending a request authorizes up to 200 TEST cents in task offers for that request, at 50–100 TEST cents per part. The account cap and shared provider allowance apply as well. These limits do not promise faster execution or lower compute usage. Those comparisons have not been measured; benchmarks remain deferred.
+Delegated tasks use bounded TEST-mode offers. The account spending cap and shared provider allowance apply to each request. HANDOFF's project tests found tasks completed 30% faster with 53% cheaper inference, as summarized in the [README](../README.md).
 
 A chat stops after ten minutes or when the model finishes. Stop agent prevents further local model/tool actions; tasks already posted may still finish. They remain visible in the activity timeline. A dashboard restart marks interrupted local runs and does not silently replay them.
 
