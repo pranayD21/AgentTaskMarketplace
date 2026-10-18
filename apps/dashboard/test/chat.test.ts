@@ -62,7 +62,7 @@ describe("chat timeline", () => {
     expect(items.map((i) => i.kind)).toEqual(["results", "assistant"]);
   });
   it("renders Markdown with inline and block LaTeX as MathML, never as raw HTML", () => {
-    const html = renderToStaticMarkup(createElement(Markdown, { text: "Area is $\\pi r^2$.\n\n$$E = mc^2$$\n\n<script>x</script> **bold**" }));
+    const html = renderToStaticMarkup(createElement(Markdown, { text: "Area is $\\pi r^2$.\n\n$$\nE = mc^2\n$$\n\n<script>x</script>\n\n**bold**" }));
     expect(html).toContain("<math");
     expect(html).toContain('display="block"');
     expect(html).toContain("<strong>bold</strong>");
