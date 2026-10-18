@@ -4,11 +4,13 @@ import { api, type Run } from "@/lib/api";
 import { ACTIVE_RUN, conversationOf, tasks, timeline, toolLabel } from "@/lib/chat";
 import { defaultModel } from "@/lib/setup";
 import { cn } from "@/lib/utils";
+import type { TimelineItem } from "@/lib/chat";
 import { useWorkspace } from "@/hooks/workspace";
 import { useChatContext } from "@/hooks/chat-context";
 import { useLocalSetting } from "@/hooks/useChat";
-import { Thinking } from "@/components/ui/shimmer";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { StatusLine } from "@/components/ui/status-orb";
+import { Orb } from "@/components/ui/thinking-orbs";
+import { ToolGroup } from "@/components/tool-group";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData } from "@/components/ui/tool-invocation";
 import { TaskCard } from "@/components/task-card";
 
@@ -89,39 +91,54 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
   const lastStreaming = last?.kind === "assistant" && last.streaming;
   const transcript = items.filter((i) => i.kind === "assistant" && !i.streaming).map((i) => (i as { content: string }).content).filter(Boolean).join("\n\n");
   const cardsInline = items.some((i) => i.kind === "results");
-  const cardGrid = cards.length > 0 ? <div className="my-1 grid gap-3">{cards.map((t) => <TaskCard key={t.task_id} task={t} />)}</div> : null;
+  const cardGrid = cards.length > 0
+    ? <ToolGroup summary={`Delegated ${cards.length} network task${cards.length === 1 ? "" : "s"}`} running={ACTIVE_RUN.has(run.status) && cards.some((c) => !["APPROVED", "REJECTED", "EXPIRED", "CANCELLED"].includes(c.status))}>{cards.map((t) => <TaskCard key={t.task_id} task={t} className="max-w-none rounded-none border-0 bg-transparent" />)}</ToolGroup>
+    : null;
+  // Fold consecutive tool calls into one block so the thread reads as prose.
+  const blocks = useMemo(() => {
+    const out: Array<TimelineItem | { kind: "tools"; key: string; tools: Extract<TimelineItem, { kind: "tool" }>[] }> = [];
+    for (const item of items) {
+      if (item.kind === "task" || item.kind === "note") continue; // status rows are covered by the task block
+      const last = out.at(-1);
+      if (item.kind === "tool") { if (last?.kind === "tools") last.tools.push(item); else out.push({ kind: "tools", key: item.key, tools: [item] }); }
+      else out.push(item);
+    }
+    return out;
+  }, [items]);
   return (
     <section aria-label="Request" className="flex flex-col gap-5">
       <div className="flex justify-end">
         <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-xl bg-user-bubble px-4 py-2.5 text-[15px] leading-6 text-user-bubble-foreground">{run.prompt}</div>
       </div>
       <div className="flex flex-col gap-3 text-[15px] leading-[1.7]">
-        {items.map((item) => {
+        {blocks.map((item) => {
           if (item.kind === "assistant") return (
             <div key={item.key} className="flex flex-col gap-2">
-              {item.thinking && (
-                <Collapsible defaultOpen={false} className="text-[13px]">
-                  <CollapsibleTrigger className="w-auto text-muted-foreground hover:text-foreground">
-                    {item.streaming && !item.content ? <Thinking label="Reasoning" /> : "Reasoning"}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-1.5 border-l-2 border-border pl-3"><pre className="scroll-thin max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans leading-relaxed text-muted-foreground">{item.thinking}</pre></CollapsibleContent>
-                </Collapsible>
-              )}
+              {item.thinking && <Reasoning text={item.thinking} streaming={item.streaming && !item.content} />}
               {item.content && <p className="whitespace-pre-wrap break-words">{item.content}{item.streaming && <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden />}</p>}
             </div>
           );
-          if (item.kind === "tool") return (
-            <ToolInvocation key={item.key} className="max-w-[560px]">
-              <ToolInvocationContentCollapsible header={<ToolInvocationName name={item.name} label={toolLabel(item.name)} type={item.state} />}>
-                <ToolInvocationRawData data={item.args} title="Arguments" />
-                <ToolInvocationRawData data={item.result} title="Result" />
-              </ToolInvocationContentCollapsible>
-            </ToolInvocation>
-          );
+          if (item.kind === "tools") {
+            const running = item.tools.filter((t) => t.state === "input-available" || t.state === "input-streaming").length;
+            const failed = item.tools.filter((t) => t.state === "output-error").length;
+            const summary = `${running ? "Using" : "Used"} ${item.tools.length} tool${item.tools.length === 1 ? "" : "s"}${failed ? ` · ${failed} failed` : ""}`;
+            return (
+              <ToolGroup key={item.key} summary={summary} running={running > 0} defaultOpen={running > 0}>
+                {item.tools.map((tool) => (
+                  <ToolInvocation key={tool.key} className="rounded-none border-0 bg-transparent">
+                    <ToolInvocationContentCollapsible header={<ToolInvocationName name={tool.name} label={toolLabel(tool.name)} type={tool.state} />}>
+                      <ToolInvocationRawData data={tool.args} title="Arguments" />
+                      <ToolInvocationRawData data={tool.result} title="Result" />
+                    </ToolInvocationContentCollapsible>
+                  </ToolInvocation>
+                ))}
+              </ToolGroup>
+            );
+          }
           if (item.kind === "results") return <div key={item.key}>{cardGrid}</div>;
           return null;
         })}
-        {live && !lastStreaming && <Thinking label={run.status === "waiting" ? "Waiting for network workers" : "Thinking"} />}
+        {live && !lastStreaming && <StatusLine state={run.status === "waiting" ? "waiting" : "working"} label={run.status === "waiting" ? "Waiting for network workers" : "Working"} />}
         {!cardsInline && cardGrid}
         {run.error && <p className={cn("text-[13px]", run.status === "failed" ? "text-danger" : "text-muted-foreground")}>{run.error}</p>}
         <div className="flex items-center gap-1 text-muted-foreground">
@@ -141,5 +158,19 @@ function CopyButton({ text }: { text: string }) {
     <button onClick={() => void copy()} aria-label="Copy response" title="Copy" className="grid size-7 place-items-center rounded-md hover:bg-accent hover:text-foreground">
       {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
     </button>
+  );
+}
+
+/** Model reasoning streams inline as quiet text beside a reasoning orb; finished, it folds to two lines. */
+function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex gap-2.5 text-[13.5px] leading-relaxed text-muted-foreground">
+      <Orb state="reasoning" paused={!streaming} className="mt-[3px] shrink-0" />
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open || streaming}
+        className={cn("min-w-0 text-left whitespace-pre-wrap break-words hover:text-foreground/80", !streaming && !open && "line-clamp-2")}>
+        {text}{streaming && <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-muted-foreground" aria-hidden />}
+      </button>
+    </div>
   );
 }
