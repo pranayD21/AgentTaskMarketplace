@@ -1,6 +1,6 @@
 # Live demo (under 3 minutes)
 
-For a judge-facing overview, use the [three-minute walkthrough](../docs/JUDGES.md), [sponsor track guide](../docs/SPONSORS.md), and [claim status](../docs/CLAIMS.md). This runbook contains a historical recorded two-Mac run and live procedures; show Stripe amounts as **TEST** and describe the two parts as explicitly prepared.
+For the judge-facing overview, use the [main README](../README.md). This runbook contains a historical recorded two-Mac run and live procedures; show Stripe amounts as **TEST** and describe the two parts as explicitly prepared.
 
 Owner: **E**. Rehearsal at 07:00 with **C** (acting integrator). Every command runs from the repo root; `bash demo/run.sh <step>` wraps them. All money is **Stripe TEST mode**.
 

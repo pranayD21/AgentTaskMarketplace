@@ -1,6 +1,6 @@
 # Progress log — what has been built, verified, and learned
 
-For current judge review, start with the [product README](../README.md), [three-minute walkthrough](JUDGES.md), [sponsor integrations](SPONSORS.md), and [claim/evidence status](CLAIMS.md). The dated sections below preserve build history; their former computer assignments and early test counts are historical.
+For current judge review, start with the [product README](../README.md). Its sponsor, architecture, benchmark, and evidence sections form the current project overview. The dated sections below preserve build history; their former computer assignments and early test counts are historical.
 
 ## Current A/C integration, October 17, 21:01 PDT
 

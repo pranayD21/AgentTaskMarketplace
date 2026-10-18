@@ -1,6 +1,6 @@
 # Security model and demo claims
 
-HANDOFF's implemented security boundary is local Wassette/Wasmtime execution, recipient-specific encryption and separation of public metadata from private task data. It does **not** use confidential VMs or provide complete confidentiality against the seller machine owner. See [claim status](CLAIMS.md) and the [future confidential-compute design](X1-CONFIDENTIAL-COMPUTE.md) before making public claims.
+HANDOFF's implemented security boundary is local Wassette/Wasmtime execution, recipient-specific encryption and separation of public metadata from private task data. It does **not** use confidential VMs or provide complete confidentiality against the seller machine owner. See the [README's security overview](../README.md#benchmark-context-and-security-boundary) and the [future confidential-compute design](X1-CONFIDENTIAL-COMPUTE.md) before making public claims.
 
 Treat each claim below as something to verify in the running build before saying it on stage.
 
