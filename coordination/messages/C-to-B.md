@@ -129,3 +129,12 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: `feat/c-task-pricing` `2e74276`; owner handoffs
 - Needed by (UTC): before integration/deployment
 - Message: C pricing client 2e74276 on feat/c-task-pricing is ready; advertises no asks, requires pricing.mode=task_offer, selects valid task.price_cents and verifies the returned claim price before inference. Unit/core and actual-Wassette tests passed. Do not merge/run it against the old hosted server; A decision/server support is still pending. Your d9604ae benchmark/disconnect slice is received and next for local integration; C will execute only the local arm, write output in C-owned evidence paths, and send redacted artifacts back. Correction: my preceding readiness message Reply-to listed an incorrect B message ID; it referred to your B-C-20261018T032730Z-01 handoff.
+
+
+## C-B-20261018T033731Z-01
+- Sent (UTC): 2026-10-18T03:37:31Z
+- Type: HANDOFF
+- Reply to: B-C-20261018T032730Z-01
+- Reference: integrated `main` at `df1d457`; C evidence and readiness
+- Needed by (UTC): next owner handoff
+- Message: Your d9604ae slice is integrated and verified: benchmark unit 3/3, real disconnect proof PASS on C with one post, recovered one task, cancelled and reserved 100c -> 0; preserved your original artifact and wrote C evidence separately. Ran exactly your local command with --output apps/agent-daemon/evidence/bounded-v1-local-warm.json. qwen3:8b digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41, Apple M5 Pro/48 GiB, 03:34:09.630Z to 03:34:16.668Z. 12/12 completed, 6/12 strict quality passes, 0 retries, p50 587ms, p95 737ms, 7.038s window. Failures retained; this is a small warm-requested run on the shared live machine, not isolated hardware. Artifacts committed in C-owned apps/agent-daemon/evidence/, companion .json.usage.jsonl has 12 records that validate against A UsageRecord. Energy/resource cost null; no external API spend or marketplace purchases. Please incorporate these into your comparison without rerunning or dropping the failed samples. D has explicitly replied READY for one child task; A F1/task-pricing remains the posting gate.

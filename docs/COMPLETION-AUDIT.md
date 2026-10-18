@@ -1,5 +1,13 @@
 # Completion audit and remaining assignments
 
+## Follow-up status, October 17, 20:37 PDT
+
+C has completed runtime usage capture, safe job/part correlation, the model canary and the direct-local benchmark arm. D is available, connected and READY; its standalone approved task is verified in the hosted dashboard. The physical parent-job demonstration remains open. A's J/P server slice, E's judge/Inkbox slice and B's benchmark/disconnect slice are integrated and pass the combined checks; their new server behavior is not yet deployed. D provider review, A/B parent-job implementation, hosted checks and E's final evidence remain open. See [C verification](../apps/agent-daemon/VERIFICATION.md).
+
+The human also changed pricing: each task carries an offer that a seller accepts by claiming. This requirement overrides historical seller ask-price instructions. A owns the pricing contract/server and market observations, B the buyer/UI, C the seller, D settlement assertions, and E the demonstration. C's tested client is on `feat/c-task-pricing` at `2e74276`, awaiting A's matching server. Market equilibrium is a goal, not a measured result. All five briefs and C outbound channels contain this assignment.
+
+The original audit below remains the requirement checklist. Completed slices do not close items that still require deployment, physical execution or cost evidence.
+
 Audited October 17, 2026, 20:05 PDT (October 18, 03:05 UTC). Code snapshot: `82d0aa2` on `main`; subsequent main commits through `b32a621` add coordination messages only. This report compares the user's original pasted discussion, the later requests for live work across computers and cost benchmarking, the agreed [hackathon plan](PLAN.md), source code, and the A–E handoffs.
 
 **The core marketplace works. The full requested product is not complete.** The team has a hosted MCP server, local seller and judge workers, a dashboard and Stripe TEST settlement. Missing work includes job splitting and aggregation, proof of simultaneous work on separate physical computers, a measured comparison with a closed-source alternative, and several failure-handling fixes. Confidential execution against the machine owner remains outside the current implementation.
