@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, keypairFromSecretB64, openJson, toB64 } from "@atm/crypto";
 import { createRunner, type RunnerHost } from "@atm/runner-core";
-import { MAX_PRICE_CENTS, MarketplaceError, type ClaimPublic, type KeyDescriptor, type SellerPayload } from "@atm/shared";
+import { MAX_PRICE_CENTS, MarketplaceError, type ClaimPublicV02, type KeyDescriptor, type SellerPayload } from "@atm/shared";
 import { db, unwrap, type AgentRow, type TaskRow } from "../src/db.ts";
 import { payments } from "../src/payments.ts";
 import * as svc from "../src/service.ts";
@@ -94,7 +94,7 @@ describe("claim_task with a per-claim runner key (contract v0.2)", () => {
     const s = await seller();
     const task = await post(buyer);
     const kp = generateKeypair();
-    const claim: ClaimPublic = await svc.claimTask(s, task.task_id, "qwen3:8b", { runner_pubkey_b64: toB64(kp.publicKey) });
+    const claim: ClaimPublicV02 = await svc.claimTask(s, task.task_id, "qwen3:8b", { runner_pubkey_b64: toB64(kp.publicKey) });
 
     expect(claim.runner_key_source).toBe("per-claim");
     expect(claim.runner_key_id).toMatch(/^runner-[0-9a-f]{16}$/);

@@ -29,7 +29,7 @@ import {
   nowIso,
   plusSecondsIso,
   type AgentKind,
-  type ClaimPublic,
+  type ClaimPublicV02,
   type JudgePayload,
   type KeyDescriptor,
   type ResultPlaintext,
@@ -472,7 +472,7 @@ export interface ClaimKeyInput {
   runner_key_id?: string;
 }
 
-export async function claimTask(agent: AgentRow, taskId: string, modelId: string, perClaim: ClaimKeyInput = {}): Promise<ClaimPublic> {
+export async function claimTask(agent: AgentRow, taskId: string, modelId: string, perClaim: ClaimKeyInput = {}): Promise<ClaimPublicV02> {
   if (perClaim.runner_key_id && !perClaim.runner_pubkey_b64) {
     throw new MarketplaceError("VALIDATION_ERROR", "runner_key_id was sent without runner_pubkey_b64.", {
       next_action: "Send runner_pubkey_b64 (and optionally runner_key_id) together, or neither to use your registered key.",

@@ -17,7 +17,7 @@ import http from "node:http";
 import path from "node:path";
 import { generateKeypair, keyIdFor, openJson, toB64 } from "@atm/crypto";
 import { createRunner, type RunnerHost } from "@atm/runner-core";
-import type { ClaimPublic, SellerPayload } from "@atm/shared";
+import type { ClaimPublicV02, SellerPayload } from "@atm/shared";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PORT = Number(process.env.SMOKE_PORT ?? 3917);
@@ -156,7 +156,7 @@ async function main() {
   const host: RunnerHost = { fetch, getSecret: async () => undefined, now: () => Date.now() };
   const runner = createRunner(host);
   const key = runner.getPublicKey();
-  const { claim } = (await s2.ok("claim_task", { task_id: t2, model_id: "qwen3:8b", runner_pubkey_b64: key.public_key_b64, runner_key_id: key.key_id })) as { claim: ClaimPublic };
+  const { claim } = (await s2.ok("claim_task", { task_id: t2, model_id: "qwen3:8b", runner_pubkey_b64: key.public_key_b64, runner_key_id: key.key_id })) as { claim: ClaimPublicV02 };
   if (claim.runner_key_source !== "per-claim" || claim.seller_envelope.recipient_key_id !== key.key_id) fail(`claim not sealed to the per-claim key: ${JSON.stringify({ src: claim.runner_key_source, rk: claim.seller_envelope.recipient_key_id })}`);
   if (!claim.buyer_public_key?.key_id || claim.judge_public_key?.key_id !== judgeKeyId) fail("claim response is missing buyer/judge keys");
   console.log(`  claim_task with key ${key.key_id} → ${claim.claim_id}, sealed to it, buyer=${claim.buyer_public_key.key_id} judge=${claim.judge_public_key.key_id}`);
