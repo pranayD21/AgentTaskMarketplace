@@ -18,6 +18,8 @@ export async function runBuyerAgent(options: {
   thinking?:boolean|string;stream?:boolean;
   structuredActions?:boolean;
   onIdle?():Promise<ChatMessage[]|null>;
+  /** Called before every model turn; returned messages (asynchronous results) are appended without waiting. */
+  beforeTurn?():ChatMessage[]|null;
   acquireModel?(signal:AbortSignal):Promise<()=>void>;
 }) {
   const messages: ChatMessage[] = [
@@ -37,6 +39,7 @@ export async function runBuyerAgent(options: {
   let consecutiveToolErrors=0;
   for (let turn = 0; turn < 100 && !options.isComplete(); turn++) {
     options.signal.throwIfAborted();
+    const arrived=options.beforeTurn?.();if(arrived?.length)messages.push(...arrived);
     const started = Date.now();
     const release=await options.acquireModel?.(options.signal);
     let data:any;
