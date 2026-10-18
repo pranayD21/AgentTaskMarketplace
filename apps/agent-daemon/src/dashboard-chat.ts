@@ -205,7 +205,11 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
    if(!inventory.models?.some((m:any)=>m.name===input.model))throw Error('Choose a local model installed on this computer.');
    const metadata=await fetch('http://localhost:11434/api/show',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:input.model}),signal:AbortSignal.timeout(5000)});
    const modelInfo=metadata.ok?await metadata.json():{};
-   const thinking_control=modelThinkingControl(modelInfo);
+   // Structured actions are decoded under a JSON schema. Models that only offer thinking *levels*
+   // (gpt-oss reports low/medium/high and no "off") emit broken JSON when a level is set together
+   // with that schema, so the orchestrator always runs them with thinking off.
+   const preferred=modelThinkingControl(modelInfo);
+   const thinking_control=typeof preferred==='string'?false:preferred;
    const run:Run={id:randomUUID(),owner_id:buyer.owner.user_id,buyer_id:buyer.agent_id,prompt:input.prompt,thinking_control,mode:'agent',conversation_id,model:input.model,status:'running',events:[],task_ids:[],posts:{},jobs:[]};
    runs.push(run);if(runs.length>30)runs.shift();persist();const controller=new AbortController();active.set(run.id,controller);void execute(run,buyer,controller);json(202,{id:run.id});
   }catch(error){json(400,{error:error instanceof Error&&/^(Sign in|Message|Enter |Choose a local)/.test(error.message)?error.message:'Chat is unavailable. Check your account and marketplace connection.'});}
