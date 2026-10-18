@@ -55,8 +55,8 @@ describe("F1: a job split into parts", () => {
     await judgeAll(judge, { [a.task_id]: "APPROVE", [b.task_id]: "APPROVE" });
 
     const done = await svc.getJobForBuyer(buyer, job.job_id);
-    expect(done.job).toMatchObject({ status: "COMPLETE", reserved_cents: 0, spent_cents: 120, progress: { parts: 2, approved: 2, failed_latest: 0 } });
-    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 120 });
+    expect(done.job).toMatchObject({ status: "COMPLETE", reserved_cents: 0, spent_cents: 200, progress: { parts: 2, approved: 2, failed_latest: 0 } });
+    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 200 });
 
     const publicView = JSON.stringify([await svc.dashboard(), await svc.listSellers()]);
     expect(publicView).not.toContain("PART-A-SECRET");
@@ -110,7 +110,7 @@ describe("F1: a job split into parts", () => {
     expect((await svc.getJobForBuyer(buyer, job.job_id)).job).toMatchObject({ status: "PARTIAL_FAILURE", progress: { parts: 2, approved: 1, rejected: 1, failed_latest: 1 } });
   });
 
-  it("concurrent identical part posts create one task and give the loser's hold back", async () => {
+  it("concurrent identical part posts create one task and place one hold", async () => {
     const buyer = await agent("buyer");
     const { job } = await svc.createJob(buyer, { budget_cents: 300 });
     const release = vi.spyOn(payments(), "release");
@@ -118,7 +118,7 @@ describe("F1: a job split into parts", () => {
     const one = () => post(buyer, { job_id: job.job_id, part_key: "same" });
     const [x, y] = await Promise.all([one(), one()]);
     expect(x.task_id).toBe(y.task_id);
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
     expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 100 });
     expect((await svc.getJobForBuyer(buyer, job.job_id)).job.reserved_cents).toBe(100);
   });
@@ -209,7 +209,7 @@ describe("migrations", () => {
   it("every startup patch that adds a column or index is also in db/schema.sql", () => {
     const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8").toLowerCase();
     for (const stmt of SCHEMA_PATCHES.filter((p) => /^(alter|create)/i.test(p))) {
-      const name = /add column if not exists (\w+)/i.exec(stmt)?.[1] ?? /(?:index|table) if not exists (\w+)/i.exec(stmt)?.[1];
+      const name = /function (\w+)/i.exec(stmt)?.[1] ?? /add column if not exists (\w+)/i.exec(stmt)?.[1] ?? /(?:index|table) if not exists (\w+)/i.exec(stmt)?.[1];
       expect(name, stmt).toBeTruthy();
       expect(schema, stmt).toContain(name!.toLowerCase());
     }

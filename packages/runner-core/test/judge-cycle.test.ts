@@ -14,13 +14,16 @@ const reply = (text: string) => Response.json({ model: "claude-test", stop_reaso
  * Synthetic marketplace with one SUBMITTED task. The package is served until a
  * verdict is submitted, like the server's JUDGING → SUBMITTED requeue.
  */
-function judgeFixture(o: { answer?: string; rubric?: "contains" | "llm"; tamper?: "commitment" | "envelope"; empty?: boolean; provider?: Provider } = {}) {
+function judgeFixture(o: { answer?: string; rubric?: "contains" | "llm"; tamper?: "commitment" | "envelope"; empty?: boolean; provider?: Provider; v03?: boolean } = {}) {
   const judge = generateKeypair(), buyer = generateKeypair();
   const judgeKey = keyDescriptor("judge-test", judge.publicKey), buyerKey = keyDescriptor("buyer-test", buyer.publicKey);
   const result = { answer: o.answer ?? "Paris", task_id: "task_fixture", claim_id: "claim_1", model_id: "qwen3:8b", salt_b64: toB64(new Uint8Array(32)) };
   const c = commitment(result);
   const calls: string[] = [];
   const verdicts: Record<string, unknown>[] = [];
+  const deferrals: Record<string, unknown>[] = [];
+  const replacements: Record<string, unknown>[] = [];
+  let replacementStatus: "PENDING" | "DELIVERED" | null = null;
   let providerCalls = 0;
   const rubric = o.rubric === "llm" ? { kind: "llm_rubric", criteria: `Names the capital ${MARKER}` } : { kind: "contains_text", expected_text: "Paris" };
   const pkg = {
@@ -40,20 +43,35 @@ function judgeFixture(o: { answer?: string; rubric?: "contains" | "llm"; tamper?
     if (req.method === "notifications/initialized") return new Response(null, { status: 202 });
     const ok = (value: unknown) => Response.json({ jsonrpc: "2.0", id: req.id, result: value }, { headers: { "mcp-session-id": "s" } });
     if (req.method === "initialize") return ok({ protocolVersion: "2025-06-18" });
+    if (req.method === "tools/list") return ok({ tools: ["fetch_review_package", "submit_verdict", ...(o.v03 ? ["fetch_replacement_package", "submit_replacement"] : [])].map((name) => ({ name })) });
     const name = req.params.name!;
     calls.push(name);
     const text = (v: unknown) => ok({ content: [{ type: "text", text: JSON.stringify(v) }] });
     if (name === "fetch_review_package") return text({ package: o.empty || verdicts.length ? null : pkg, judge_key_id: "judge-test" });
     if (name === "submit_verdict") {
       const v = req.params.arguments!;
+      if (o.v03 && String(v.reason_code).startsWith("JUDGE_")) {
+        deferrals.push(v);
+        return text({ deferred: true, verdict: null, settlement: null, review: { status: "RETRY_PENDING", attempts: deferrals.length, retry_at: "2026-10-18T04:00:00Z" } });
+      }
       verdicts.push(v);
+      if (o.v03 && v.verdict === "REJECT") replacementStatus = v.replacement_enc_buyer ? "DELIVERED" : "PENDING";
       return text({ idempotent: false, seller_status: v.verdict === "APPROVE" ? "ACTIVE" : "SUSPENDED", settlement: { seller_payout_cents: v.verdict === "APPROVE" ? 60 : 0, note: null } });
+    }
+    if (o.v03 && name === "fetch_replacement_package") {
+      return text({ package: replacementStatus === "PENDING" ? { task_id: "task_fixture", result_id: "result_fixture", payload_enc_judge: pkg.payload_enc_judge, buyer_public_key: buyerKey, attempts: replacements.length } : null });
+    }
+    if (o.v03 && name === "submit_replacement") {
+      const r = req.params.arguments!;
+      replacements.push(r);
+      if (r.replacement_enc_buyer) replacementStatus = "DELIVERED";
+      return text({ idempotent: false, replacement_status: replacementStatus, attempts: replacements.length });
     }
     throw new Error(`UNKNOWN_TOOL_${name}`);
   }) as typeof globalThis.fetch;
   const secrets: Record<string, string | undefined> = { AGENT_API_KEY: "atm_sk_judge", JUDGE_PRIVATE_KEY_B64: toB64(judge.secretKey), ANTHROPIC_API_KEY: o.provider ? "test" : undefined };
   const host = (overrides: Record<string, string | undefined> = {}): RunnerHost => ({ fetch, now: () => Date.now(), getSecret: async (n) => (n in overrides ? overrides[n] : secrets[n]) });
-  return { host, calls, verdicts, buyer, providerCalls: () => providerCalls };
+  return { host, calls, verdicts, deferrals, replacements, buyer, providerCalls: () => providerCalls };
 }
 
 const replacementOf = (f: ReturnType<typeof judgeFixture>) => openJson(f.buyer, f.verdicts[0]!.replacement_enc_buyer as Envelope);
@@ -62,13 +80,13 @@ describe("judge cycle", () => {
   it("returns idle when nothing is waiting", async () => {
     const f = judgeFixture({ empty: true });
     expect(await judgeCycle(f.host(), opts)).toEqual({ idle: true });
-    expect(f.calls).toEqual(["fetch_review_package"]);
+    expect(f.calls).toEqual(["fetch_review_package"]); // a v0.2 server has no replacement tools to poll
   });
 
   it("fetches, verifies, grades and submits APPROVE in one call", async () => {
     const f = judgeFixture();
     const out = await judgeCycle(f.host(), opts);
-    expect(out).toMatchObject({ idle: false, deferred: false, verdict: "APPROVE", reason_code: "RUBRIC_MATCH", replacement_status: "not_needed", seller_payout_cents: 60, usage: [] });
+    expect(out).toMatchObject({ idle: false, kind: "verdict", deferred: false, verdict: "APPROVE", reason_code: "RUBRIC_MATCH", replacement_status: "not_needed", seller_payout_cents: 60, usage: [] });
     expect(f.calls).toEqual(["fetch_review_package", "submit_verdict"]);
     expect(JSON.stringify(out)).not.toContain("Paris");
   });
@@ -112,10 +130,10 @@ describe("J2: judge infrastructure failures are not seller rejections", () => {
   ] as [string, Provider, string][])("%s: bounded retries, then deferred with no verdict", async (_name, provider, code) => {
     const f = judgeFixture({ rubric: "llm", provider });
     const out = await judgeCycle(f.host(), { ...opts, max_attempts: 3 });
-    expect(out).toMatchObject({ idle: false, deferred: true, task_id: "task_fixture", failure_code: code });
+    expect(out).toMatchObject({ idle: false, kind: "deferred", deferred: true, task_id: "task_fixture", failure_code: code, reported_code: null, review: null });
     expect(f.calls).not.toContain("submit_verdict"); // no strike, no settlement
     expect(f.providerCalls()).toBe(3);
-    if (!out.idle && out.deferred) expect(out.usage.map((u) => u.outcome)).toEqual([code, code, code]);
+    if (!out.idle) expect(out.usage.map((u) => u.outcome)).toEqual([code, code, code]);
   });
 
   it("does not retry a refusal, and still submits nothing", async () => {
@@ -129,7 +147,7 @@ describe("J2: judge infrastructure failures are not seller rejections", () => {
     const f = judgeFixture({ rubric: "llm", provider: (n) => (n < 3 ? new Response("down", { status: 503 }) : reply('{"score": 1, "pass": true}')) });
     const out = await judgeCycle(f.host(), { ...opts, max_attempts: 3 });
     expect(out).toMatchObject({ deferred: false, verdict: "APPROVE", reason_code: "LLM_RUBRIC_PASS" });
-    if (!out.idle && !out.deferred) expect(out.usage.map((u) => u.outcome)).toEqual(["JUDGE_PROVIDER_HTTP_503", "JUDGE_PROVIDER_HTTP_503", "ok"]);
+    if (!out.idle) expect(out.usage.map((u) => u.outcome)).toEqual(["JUDGE_PROVIDER_HTTP_503", "JUDGE_PROVIDER_HTTP_503", "ok"]);
   });
 
   it("completes on a later round after the provider recovers, with exactly one verdict", async () => {
@@ -181,5 +199,53 @@ describe("J3: every rejection reports replacement availability", () => {
   it("reports unavailable without a model key", async () => {
     const f = judgeFixture({ answer: "Lyon" });
     expect(await judgeCycle(f.host(), opts)).toMatchObject({ verdict: "REJECT", reason_code: "RUBRIC_MISMATCH", replacement_status: "unavailable", replacement_failure_code: "MISSING_ANTHROPIC_API_KEY" });
+  });
+});
+
+describe("contract v0.3 server (deferrals and the replacement loop)", () => {
+  const down = () => new Response("down", { status: 503 });
+
+  it.each([
+    ["503", down, "JUDGE_UNAVAILABLE"],
+    ["timeout", () => new Promise<Response>(() => {}), "JUDGE_TIMEOUT"],
+    ["malformed", () => reply("not json"), "JUDGE_MALFORMED"],
+  ] as [string, Provider, string][])("%s: reports %s as a deferral, never a quality verdict", async (_n, provider, code) => {
+    const f = judgeFixture({ rubric: "llm", provider, v03: true });
+    const out = await judgeCycle(f.host(), { ...opts, max_attempts: 2 });
+    expect(out).toMatchObject({ kind: "deferred", reported_code: code, review: { status: "RETRY_PENDING", attempts: 1 } });
+    expect(f.deferrals).toEqual([{ task_id: "task_fixture", result_id: "result_fixture", verdict: "REJECT", reason_code: code }]);
+    expect(f.verdicts).toHaveLength(0);
+  });
+
+  it("settles exactly once after the provider recovers", async () => {
+    let up = false;
+    const f = judgeFixture({ rubric: "llm", provider: () => (up ? reply('{"score": 1, "pass": true}') : down()), v03: true });
+    await judgeCycle(f.host(), { ...opts, max_attempts: 1 });
+    up = true;
+    expect(await judgeCycle(f.host(), { ...opts, max_attempts: 1 })).toMatchObject({ kind: "verdict", verdict: "APPROVE" });
+    expect(f.deferrals).toHaveLength(1);
+    expect(f.verdicts).toHaveLength(1);
+  });
+
+  it("delivers a pending replacement on a later round without touching the verdict", async () => {
+    let up = false;
+    const f = judgeFixture({ tamper: "commitment", provider: () => (up ? reply("Paris") : down()), v03: true });
+    expect(await judgeCycle(f.host(), { ...opts, max_attempts: 1 })).toMatchObject({ kind: "verdict", verdict: "REJECT", reason_code: "COMMITMENT_MISMATCH", replacement_status: "unavailable" });
+    // Provider still down: the replacement attempt is reported with an infrastructure code.
+    expect(await judgeCycle(f.host(), { ...opts, max_attempts: 1 })).toMatchObject({ kind: "replacement", outcome: "retry", replacement_status: "PENDING" });
+    expect(f.replacements[0]).toEqual({ task_id: "task_fixture", result_id: "result_fixture", reason_code: "JUDGE_UNAVAILABLE" });
+    up = true;
+    const out = await judgeCycle(f.host(), { ...opts, max_attempts: 1 });
+    expect(out).toMatchObject({ kind: "replacement", outcome: "delivered", replacement_status: "DELIVERED" });
+    expect(openJson(f.buyer, f.replacements[1]!.replacement_enc_buyer as Envelope)).toEqual({ answer: "Paris", produced_by: "judge" });
+    expect(f.verdicts).toHaveLength(1);
+    expect(await judgeCycle(f.host(), opts)).toEqual({ idle: true });
+  });
+
+  it("a v0.2 server never receives infrastructure codes or replacement calls", async () => {
+    const f = judgeFixture({ rubric: "llm", provider: down });
+    await judgeCycle(f.host(), { ...opts, max_attempts: 1 });
+    await judgeCycle(f.host(), { ...opts, max_attempts: 1 });
+    expect(f.calls.filter((c) => c !== "fetch_review_package")).toEqual([]);
   });
 });

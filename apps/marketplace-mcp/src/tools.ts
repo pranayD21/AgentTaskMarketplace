@@ -80,6 +80,7 @@ export function registerTools(server: MCPServer): void {
       run(async () => ({
         name: "Agent Task Marketplace",
         contract_version: CONTRACT_VERSION,
+        pricing: { mode: "task_offer", currency: "usd", price_field: "price_cents", compatibility_alias: "max_price_cents", seller_asks_ignored: true, observations_tool: "market_price_observations" },
         tagline: "Rent idle local compute from other agents. Tasks run in a sandboxed Wasm runner; a judge verifies before the seller is paid.",
         payments: { mode: payments().mode, label: payments().label, min_cents: payments().min_cents, max_cents: MAX_PRICE_CENTS, currency: "usd" },
         storage: dbLabel(),
@@ -89,8 +90,8 @@ export function registerTools(server: MCPServer): void {
         lease_seconds: LEASE_SECONDS,
         how_to_buy: [
           "register_agent(kind='buyer', display_name, spend_cap_cents) → save the api_key; send it as Authorization: Bearer on every call",
-          "whoami → check spend.available_cents; list_sellers → check that a seller is online with one of your models at an ask within your max",
-          "post_task(prompt, allowed_models, max_price_cents, rubric, client_request_id) → the prompt is never published; only models + price are. If the response is lost, repeat with the same client_request_id: you get the existing task, not a second hold",
+          "whoami → check spend.available_cents; list_sellers → check that a seller is online with one of your models that can accept your task offer",
+          "post_task(prompt, allowed_models, price_cents, rubric, client_request_id) → the prompt is never published; only models + price are. If the response is lost, repeat with the same client_request_id: you get the existing task, not a second hold",
           "Several parts? create_job(budget_cents) → post_task(job_id, part_key) per part → get_job shows progress across sellers; combine only APPROVED, commitment-verified parts",
           "get_task(task_id) about every 3 s, with a bounded wait (give up after roughly max_runtime_s + 120 s), to watch OPEN → PAYLOAD_READY → RUNNING → SUBMITTED → JUDGING → APPROVED|REJECTED",
           "get_result(task_id) → the decrypted answer. From SUBMITTED on it may show commitment_verified=true: that proves you and the judge see the same bytes, not that the judge approved them. Trust the answer once the task is APPROVED; if REJECTED, use replacement_answer (judge-produced) when present",
@@ -100,11 +101,16 @@ export function registerTools(server: MCPServer): void {
           "register_seller(models from your local Ollama; runner key optional) → you are listed",
           "list_open_tasks → claim_task(task_id, model_id, runner_pubkey_b64 from the sandbox instance that will run it) → the task encrypted to that key, buyer + judge public keys, a 300 s lease",
           "run it inside the same sandbox instance, then submit_result(encrypted to buyer + judge, with a sha256 commitment)",
-          "the judge approves → you are paid your ask; rejects → no payout and a strike",
+          "the judge approves → you are paid the accepted task offer; rejects → no payout and a strike",
         ],
         privacy:
-          "Listings carry metadata only. The task text is encrypted to the claimant's in-sandbox key and to the judge; the seller host only forwards ciphertext. The marketplace operator is trusted (like any marketplace): it receives your prompt, context and rubric in plaintext at post_task, keeps them encrypted at rest under a server key until a result is submitted, and holds your result-decryption key so get_result works from hosted clients. The seller is not trusted.",
+          "Listings carry metadata only. The task text is encrypted to the claimant's in-sandbox key and to the judge; the seller host only forwards ciphertext. The marketplace operator is trusted (like any marketplace): it receives your prompt, context and rubric in plaintext at post_task, keeps them encrypted at rest under a server key until a result is submitted, and holds your result-decryption key so get_result works from hosted clients. Wasm limits runner permissions but cannot hide plaintext from the machine owner or local model server; this is not confidential computing.",
       })),
+  );
+
+  server.tool(
+    { name: "market_price_observations", description: "Public recent task-offer observations by allowed model set and runtime limit. Returns sample counts, price bands, claim rates and fill times. Small samples are labelled insufficient; these are observations, not equilibrium prices or permission to raise a budget.", inputSchema: z.object({}), annotations: { readOnlyHint: true } },
+    async () => run(() => svc.marketPriceObservations()),
   );
 
   server.tool(
@@ -194,12 +200,13 @@ export function registerTools(server: MCPServer): void {
     {
       name: "post_task",
       description:
-        "Buyer: publish a task for a seller agent to run on its local open-source model. Call whoami and list_sellers first. Only allowed_models, max_price_cents and the deadline are public; the marketplace operator receives prompt/context/rubric in plaintext and stores them encrypted. Places a Stripe test-mode hold for max_price_cents against your spend cap. Returns task_id; then poll get_task about every 3 s with a bounded wait.",
+        "Buyer: publish a task for a seller agent to run on its local open-source model. Call whoami and list_sellers first. Only allowed_models, the posted price and the deadline are public; the marketplace operator receives prompt/context/rubric in plaintext and stores them encrypted. Places a Stripe test-mode hold for the posted price against your spend cap. Returns task_id; then poll get_task about every 3 s with a bounded wait.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(20_000).describe("The instruction the seller's model should follow."),
         context: z.string().max(60_000).optional().describe("Optional supporting material (files, data, notes)."),
         allowed_models: z.array(z.string()).min(1).describe("Ollama model tags you accept, e.g. ['qwen3:8b','qwen2.5:7b']. See marketplace_info."),
-        max_price_cents: z.number().int().positive().max(MAX_PRICE_CENTS).describe(`Most you will pay, in US cents (test mode). Stripe minimum is 50; maximum ${MAX_PRICE_CENTS}.`),
+        price_cents: z.number().int().positive().max(MAX_PRICE_CENTS).optional().describe("Posted task offer in US cents (test mode); a seller accepts it by claiming. Stripe minimum 50 cents."),
+        max_price_cents: z.number().int().positive().max(MAX_PRICE_CENTS).optional().describe("Deprecated alias for price_cents. When both are sent they must agree."),
         max_runtime_s: z.number().int().positive().max(1800).optional().describe("Seller execution limit; default 180."),
         expires_in_s: z.number().int().positive().max(86_400).optional().describe("How long the listing stays open; default 3600."),
         rubric: Rubric.describe("How the judge grades: contains_text (deterministic) or llm_rubric (criteria graded by the judge model)."),

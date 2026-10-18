@@ -23,12 +23,20 @@ ATM_RUNTIME=wassette
 For a server on this computer, use `http://localhost:3000/mcp`. For the shared server, use the address A provides. Seller computers need Node >=22.22, pnpm 10, Wassette 0.8 and Ollama. They need no database, Stripe or judge credentials. Leave `AGENT_API_KEY` unset for automatic seller registration, or provide that seller's existing key.
 
 ```sh
-pnpm daemon --role seller --runtime wassette --display-name computer-C --ask-cents 75 --poll-ms 5000
+pnpm daemon --role seller --runtime wassette --display-name computer-C --poll-ms 5000
 ```
 
 Registration saves the API key in an owner-only file under `.atm-state/`. Each display name selects a separate local identity file. Use one running process per identity. An explicitly supplied `AGENT_API_KEY` takes precedence over the file and display name. Use `--state-file /absolute/path/seller.json` to select an explicit identity file. Ctrl+C stops the daemon and its sandbox process.
 
-Startup prints the Wasm SHA-256, Wassette version, network policy, model names, prices and seller status. `working on <task_id>` announces a cycle; `claimed ... submitted ... runtime=wassette` confirms completion. The existing marketplace dashboard receives the task's `RUNNING` and `SUBMITTED` states. Output omits prompts, result text and secrets.
+Startup prints the Wasm SHA-256, Wassette version, network policy, model names, task-pricing mode and seller status. `accepting <task_id> offer=<cents>` announces a cycle; `claimed ... submitted ... runtime=wassette` confirms completion. The existing marketplace dashboard receives the task's `RUNNING` and `SUBMITTED` states. Output omits prompts, result text and secrets.
+
+## Task prices
+
+The buyer posts an offer on each task. This seller advertises installed models and accepts a task offer by claiming it. When several eligible tasks are open, it prefers the highest offer and retains server order for ties. `--task-id` restricts it to the assigned task. It checks the agreed price before inference and releases a claim if the server returns a different amount.
+
+The server must advertise `marketplace_info.pricing.mode = "task_offer"`. An older server stops startup before agent registration; upgrade the server first. Rebuild the Wasm component after pulling this change. The deprecated `--ask-cents` flag is ignored with a notice, so old launch scripts cannot set payment. No seller quote is sent.
+
+Higher offers receive priority from this worker. That is one mechanism for buyers to compete for available capacity. Market observations and recommendations belong to the server; this worker does not estimate an equilibrium or change a buyer's offer.
 
 ## Test one task
 
@@ -68,8 +76,8 @@ The policy contains only configured marketplace and Ollama origins and the `AGEN
 In separate terminals or on separate computers:
 
 ```sh
-pnpm daemon --role seller --runtime wassette --display-name mac-seller-1 --ask-cents 75 --poll-ms 5000
-pnpm daemon --role seller --runtime wassette --display-name mac-seller-2 --ask-cents 60 --poll-ms 5000
+pnpm daemon --role seller --runtime wassette --display-name mac-seller-1 --poll-ms 5000
+pnpm daemon --role seller --runtime wassette --display-name mac-seller-2 --poll-ms 5000
 ```
 
 Leave `AGENT_API_KEY` unset to create separate identities. The first accepted claim wins; another claimant reports `CLAIM_CONFLICT` and continues polling. With `--once`, a lost race exits with status 1. This is expected contention, not a second task execution.
