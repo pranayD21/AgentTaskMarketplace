@@ -33,9 +33,3 @@ B disabled its old local posting policy and confirmed 2,390 microusd booked agai
 Each non-mock new task reserves 2,200,000 microusd conservatively for provider fallback. Deterministic approval releases that reservation; uncertain outcomes remain held for operator reconciliation. A failed task preparation can also leave a conservative hold. Do not reset the ledger to clear it. Inspect durable task/payment evidence before reconciling.
 
 Current non-mock posts require a saved request ID, contains-text grading, and at most 4,096 output tokens. The prompt, context, and grading text follow their individual field limits; there is no combined 2,500-byte limit. Contains-text acceptance does not prove general correctness. The agent must assess the answer for the user's actual task.
-
-## Verification scope
-
-Workspace typecheck and 265 tests passed (two optional Wassette tests skipped). Tests cover model-chosen delegation, no automatic posting for a local answer, reported claim transitions, account ownership, stable buyer identity, shared-budget concurrency, and retry deduplication. Browser inspection used a clearly labeled visual fixture with no live task or provider calls.
-
-Fresh human Google/Stripe acceptance and a live chat-to-independent-worker run remain to be verified on an installed dashboard. Existing workers and identities were preserved. This dashboard verification did not rerun the project benchmarks.

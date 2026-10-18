@@ -1,6 +1,6 @@
 # Contract v0.3 — MCP tools, envelopes, states
 
-Computer **A** owns this file. B, C, D and E build against it. Propose a change in your directed message file to A (`coordination/messages/<you>-to-A.md`) before changing a shared request, response or state transition. Source of truth for schemas is `packages/shared/src/index.ts`; this document explains them.
+This document defines the shared request, response and state-transition contract. Source of truth for schemas is `packages/shared/src/index.ts`; update this document and its consumers together when that contract changes.
 
 ## 1. Transport and auth
 
@@ -92,7 +92,7 @@ In MPP mode (Stripe test preview), posting creates `AWAITING_PAYMENT` and return
 
 Secrets inside the sandbox come from `wasi:config/store`, supplied by Wassette's env permission: seller `AGENT_API_KEY`; judge `AGENT_API_KEY`, `ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`. Network grants are full origins; Wassette 0.8 enforces scheme + hostname, not port (SECURITY.md). Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
 
-## 7. v0.2 changes — ADOPTED (server side on `main`, see `docs/PROGRESS.md`)
+## 7. v0.2 changes — ADOPTED
 
 Needed for the sandbox fix: Wassette gives every component call a fresh instance, so the key that decrypts a claim must be generated in the same call that claims it.
 

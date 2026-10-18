@@ -1,13 +1,12 @@
 # Instructions for coding agents (and humans)
 
-One person, with whatever agents they run, maintains this whole repository. There is no ownership split by path, no other computer to message, and no decision to wait for: if a change needs a file, edit the file. The `coordination/`, `tasks/` and per-computer notes in `docs/` are history from the five-computer build and are not instructions.
+One person, with whatever agents they run, maintains this whole repository. There is no ownership split by path, no other computer to message, and no decision to wait for: if a change needs a file, edit the file.
 
 Read, in this order:
 
-1. [`README.md`](README.md) — what the product is and what already works.
-2. [`docs/PROGRESS.md`](docs/PROGRESS.md) — what has been built and verified.
-3. [`docs/CONTRACT.md`](docs/CONTRACT.md) — the exact MCP tools, states, envelopes. Source of truth; change it together with the code it describes.
-4. [`docs/PLAN.md`](docs/PLAN.md) and [`docs/SECURITY.md`](docs/SECURITY.md).
+1. [`README.md`](README.md) — the product and working paths.
+2. [`docs/CONTRACT.md`](docs/CONTRACT.md) — the exact MCP tools, states, envelopes. Source of truth; change it together with the code it describes.
+3. [`docs/SECURITY.md`](docs/SECURITY.md) — the implemented trust boundary.
 
 ## Working rules
 

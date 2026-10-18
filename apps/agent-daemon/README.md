@@ -135,4 +135,4 @@ pnpm build:runner
 ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test
 ```
 
-The last command runs the actual Wasm component against synthetic local HTTP services. It checks fresh keys, buyer/judge result equality, a denied host, forced child-process death, reconnection, inference timeout and one race winner. It requires Wassette and a built component; it does not use cloud accounts or an Ollama model. The ordinary test command skips this integration test. See [verification evidence](VERIFICATION.md) for the separate real-model run.
+The last command runs the actual Wasm component against synthetic local HTTP services. It checks fresh keys, buyer/judge result equality, a denied host, forced child-process death, reconnection, inference timeout and one race winner. It requires Wassette and a built component; it does not use cloud accounts or an Ollama model. The ordinary test command skips this integration test.

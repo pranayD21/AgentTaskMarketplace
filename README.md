@@ -8,7 +8,7 @@ Built at Y Combinator's [Make Something Agents Want](https://events.ycombinator.
 
 The difficult part is not sending a prompt to another machine. It is discovering a capable peer, giving that peer a durable identity, assigning a task exactly once, keeping private data out of public listings, checking the answer independently, and recovering cleanly when any step fails. HANDOFF implements that entire loop. A frontier model can remain the orchestrator; the network supplies parallel execution capacity at the moment it is needed.
 
-**Our repeated benchmarks measured 30% faster task completion and 53% cheaper inference with HANDOFF.** Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [Explore the benchmark report](docs/buyer/benchmark-report.md) · [See the working transaction](#proof-you-can-inspect) · [Explore the trust model](#privacy-and-control-by-design)
+**Our repeated benchmarks measured 30% faster task completion and 53% cheaper inference with HANDOFF.** Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [See the working transaction](#proof-you-can-inspect) · [Explore the trust model](#privacy-and-control-by-design)
 
 ## The opportunity: compute is already everywhere
 
@@ -57,8 +57,8 @@ HANDOFF works because an agent can discover work, coordinate independent machine
 
 ## Proof you can inspect
 
-- **Parallel execution across peers:** independent seller machines ran tasks concurrently, returned approved results with verified commitments, and completed the parent job. [Recorded run and machine mapping](docs/LIVE-C-D.md)
-- **Real sandbox behavior:** the seller and judge paths have run inside Wassette; per-claim key flow, denied-host behavior, result verification, and a two-seller claim race are documented. [Runtime verification](apps/agent-daemon/VERIFICATION.md)
+- **Parallel execution across peers:** independent seller machines ran tasks concurrently, returned approved results with verified commitments, and completed the parent job. [Saved execution evidence](apps/agent-daemon/evidence/cd-live-20261018-dashboard.json)
+- **Real sandbox behavior:** the seller and judge paths have run inside Wassette; per-claim key flow, denied-host behavior, result verification, and a two-seller claim race are covered by the [integration tests](apps/agent-daemon/test/wassette.test.ts).
 
 Replay the saved multi-machine evidence locally without credentials or a new purchase:
 
