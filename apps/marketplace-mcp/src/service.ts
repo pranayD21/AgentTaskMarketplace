@@ -855,7 +855,7 @@ export async function submitResult(agent: AgentRow, taskId: string, claimId: str
   ) as TaskRow[];
   if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task left the active state while submitting.", { next_action: "Call get_task; the lease may have lapsed and the task reopened." });
   unwrap(await db().from("sellers").update({ last_seen: nowIso() }).eq("agent_id", agent.id));
-  await logEvent("result.submitted", { task_id: taskId, agent_id: agent.id, meta: { result_id: resultId, runtime_ms: input.runtime_ms, commitment_sha256: input.commitment_sha256 } });
+  await logEvent("result.submitted", { task_id: taskId, agent_id: agent.id, meta: { claim_id: claimId, result_id: resultId, runtime_ms: input.runtime_ms, commitment_sha256: input.commitment_sha256 } });
   await notifyTask(rows[0]!, { type: "submitted", to_handle: null, text: `Result for ${taskId} submitted; awaiting judge.` });
   return { result_id: resultId, task: toTaskPublic(rows[0]!) };
 }

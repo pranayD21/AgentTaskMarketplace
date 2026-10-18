@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { parseEnv } from 'node:util';
+import { execFileSync } from 'node:child_process';
 
 // The deploy CLI parses KEY=VALUE literally. Supply only server configuration,
 // with no quotes, comments, local URLs, buyer/seller keys or judge private keys.
@@ -12,6 +13,7 @@ const allowed = [
   'SUSPEND_AFTER_STRIKES', 'DEFAULT_SPEND_CAP_CENTS',
 ];
 const values = Object.fromEntries(allowed.filter((key) => source[key]).map((key) => [key, source[key]]));
+values.ATM_BUILD_REVISION = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 Object.assign(values, { DB_MODE: 'insforge', PAYMENT_MODE: values.PAYMENT_MODE ?? 'card', HOST: '0.0.0.0', PORT: '3000' });
 for (const key of ['INSFORGE_BASE_URL', 'INSFORGE_API_KEY', 'SERVER_KEK_B64', 'JUDGE_PUBLIC_KEY_B64', 'JUDGE_KEY_ID', 'JUDGE_REGISTRATION_SECRET']) {
   if (!values[key]) throw new Error(`Missing server setting: ${key}`);
