@@ -69,6 +69,7 @@ import { RESUME_AFTER_S, finalizeSettlement, outcomeForStatus, recordIntent, ret
 const JUDGING_TIMEOUT_S = 10 * 60;
 
 interface ServerPlaintext {
+  marketplace_only?: boolean;
   prompt: string;
   context?: string;
   rubric: Rubric;
@@ -311,6 +312,7 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
 // ---------------------------------------------------------------------------
 
 export interface PostTaskInput {
+  marketplace_only?: boolean;
   prompt: string;
   context?: string;
   allowed_models: string[];
@@ -412,7 +414,7 @@ export async function postTask(buyer: AgentRow, raw: PostTaskInput): Promise<{ t
   const id = newId("task");
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
-  const plaintext: ServerPlaintext = { prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
+  const plaintext: ServerPlaintext = { marketplace_only: input.marketplace_only, prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
   const row = {
     id,
     buyer_id: buyer.id,
@@ -663,13 +665,21 @@ async function settleClosed(task: TaskRow, outcome: "CANCEL" | "EXPIRE", reason?
 export const OPEN_TASKS_DEFAULT_LIMIT = 50;
 export const OPEN_TASKS_MAX_LIMIT = 100;
 
+async function independentSeller(task:TaskRow, seller:AgentRow):Promise<boolean> {
+  if(!task.plaintext_enc_server)return false;
+  if(!kekOpen<ServerPlaintext>(task.plaintext_enc_server).marketplace_only)return true;
+  const buyer=await getAgent(task.buyer_id);
+  return Boolean(buyer?.owner_user_id && seller.owner_user_id && buyer.owner_user_id!==seller.owner_user_id);
+}
+
 export async function listOpenTasksFor(agent: AgentRow, limit = OPEN_TASKS_DEFAULT_LIMIT): Promise<{ tasks: (TaskPublic & { eligible_models: string[] })[]; seller_models: string[] }> {
   await sweep();
   const seller = await getSeller(agent.id);
   const myModels = seller?.models ?? [];
   const n = Math.min(Math.max(1, Math.trunc(limit) || OPEN_TASKS_DEFAULT_LIMIT), OPEN_TASKS_MAX_LIMIT);
   const rows = await publicRows<TaskRow>("tasks", n, async () => unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(n)) as TaskRow[], "and t.status = 'OPEN'", true);
-  const tasks = rows
+  const eligibleRows = (await Promise.all(rows.map(async row => await independentSeller(row,agent) ? row : null))).filter((row):row is TaskRow=>row!==null);
+  const tasks = eligibleRows
     .map((t) => {
       const eligible = myModels.filter((m) => t.allowed_models.includes(m.model_id)).map((m) => m.model_id);
       return { ...toTaskPublic(t), eligible_models: eligible };
@@ -710,6 +720,7 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
   }
   const task = await mustGetTask(taskId);
   if (task.status !== "OPEN") throw new MarketplaceError("CLAIM_CONFLICT", `Task is ${task.status}, not OPEN.`, { next_action: "Call list_open_tasks for tasks you can still claim." });
+  if (!(await independentSeller(task,agent))) throw new MarketplaceError("FORBIDDEN", "This task requires a seller signed in with a different Google account.");
   if (env().DB_MODE === 'insforge' && !(await getAgent(task.buyer_id))?.owner_user_id) {
     throw new MarketplaceError('FORBIDDEN', 'Legacy test tasks cannot be claimed.', { next_action: 'Choose a task from list_open_tasks.' });
   }

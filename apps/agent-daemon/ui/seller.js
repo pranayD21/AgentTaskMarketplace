@@ -55,10 +55,10 @@ function refreshAccount() {
  $('buyer-detail').textContent=ready?'Stripe buying is connected. Your payment method is saved with Stripe.':!linked?'Connect your Google account first, then complete Stripe buying.':'Required: complete Stripe’s hosted buying setup to unlock requests and new seller starts.';
  $('buyer-status').textContent=!linked?'Sign in with Google to use one account for buying and selling.':`${data.owner.email} · ${ready?'Payment ready': 'Payment setup needed for network tasks'} · ${data.provider_budget?.remaining_microusd != null ? '$'+(data.provider_budget.remaining_microusd/1e6).toFixed(3)+' shared provider allowance remaining' : 'Shared allowance awaiting confirmation'}`;
  const models=data?.machine?.models??[], select=$('chat-model'), previous=select.value;
- const names=models.map(x=>x.name);
+ const names=data?.allowed_models??[];
  if(JSON.stringify(names)!==select.dataset.models){select.replaceChildren(...names.map(name=>new Option(name,name)));select.dataset.models=JSON.stringify(names);if(names.includes(previous))select.value=previous;}
  $('chat-send').disabled=!linked||!ready||!names.length||chatSending;
- $('chat-notice').textContent=!linked?(data?.owner?'Your seller login needs one upgrade. Select Enable chat with Google below; your worker can keep running.':'Continue with Google below to start.'):!names.length?'Prepare a local model below before chatting.':!ready?'Complete required Stripe buying setup below to unlock Send request.':'Your agent can request network help within the account’s existing spending limits.';
+ $('chat-notice').textContent=!linked?(data?.owner?'Your seller login needs one upgrade. Select Enable chat with Google below; your worker can keep running.':'Continue with Google below to start.'):!names.length?'No marketplace models are available.':!ready?'Complete required Stripe buying setup below to unlock Send request.':'Every request is sent to another account’s worker for 50 TEST cents.';
 }
 const originalRefresh=refresh;
 refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
@@ -79,6 +79,8 @@ async function refreshChats(){
    if(event.type==='model'){
     if(event.message?.content)bubble(section,'Your agent',event.message.content,'assistant');
     if(event.message?.tool_calls?.length)eventDetails(section,'Requested tools',event.message.tool_calls);
+   }else if(event.type==='remote_answer'){
+    bubble(section,'Worker answer · '+String(event.seller_id??'Marketplace'),event.answer,'assistant');
    }else if(event.type==='task_status'){
     const task=event.task??{};const item=document.createElement('div');item.className='chat-event';
     const label=document.createElement('strong');label.textContent=`${task.status??'Status unavailable'} · ${task.task_id??'Task'}`;

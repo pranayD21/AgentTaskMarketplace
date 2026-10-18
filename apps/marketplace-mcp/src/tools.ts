@@ -222,6 +222,7 @@ export function registerTools(server: MCPServer): void {
       description:
         "Buyer: publish a task for a seller agent to run on its local open-source model. Call whoami and list_sellers first. Only allowed_models, the posted price and the deadline are public; the marketplace operator receives prompt/context/rubric in plaintext and stores them encrypted. Places a Stripe test-mode hold for the posted price against your spend cap. Returns task_id; then poll get_task about every 3 s with a bounded wait.",
       inputSchema: z.object({
+        marketplace_only: z.boolean().optional().describe("Require a Google-linked seller with a different account from the buyer; legacy unowned sellers cannot claim."),
         prompt: z.string().min(1).max(20_000).describe("The instruction the seller's model should follow."),
         context: z.string().max(60_000).optional().describe("Optional supporting material (files, data, notes)."),
         allowed_models: z.array(z.string()).min(1).describe("Ollama model tags you accept, e.g. ['qwen3:8b','qwen2.5:7b']. See marketplace_info."),
