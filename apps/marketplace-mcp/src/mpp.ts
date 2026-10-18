@@ -225,6 +225,7 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
   const receipted = await result.withReceipt(json({ ok: true, task_id: t.id, status: "OPEN", payment_state: MPP_PAID_STATE, amount_cents: t.max_price_cents, label: provider.label }));
   const receipt = Receipt.fromResponse(receipted);
   try {
+    await assertTestMoney(provider.stripe, receipt.reference, t.max_price_cents);
     await markTaskPaid(t, receipt.reference);
   } catch (err) {
     // Money moved but the task could not be opened: give it back rather than strand it.
@@ -233,6 +234,20 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
     return { response: json({ error: { code: "INTERNAL_ERROR", message: "Payment received but the task could not be opened; the payment was refunded. Retry.", retryable: true } }, 500) };
   }
   return { response: receipted, paid: { task_id: t.id, payment_intent_id: receipt.reference } };
+}
+
+/**
+ * Hard stop: this marketplace never moves real money. The client is built
+ * from an sk_test_ key, so Stripe would already reject a live token, but the
+ * PaymentIntent is checked anyway; anything live or over the task's price
+ * is refunded by the caller.
+ */
+export async function assertTestMoney(stripe: Stripe, paymentIntentId: string, maxCents: number): Promise<void> {
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  if (pi.livemode) throw new MarketplaceError("PAYMENT_FAILED", `PaymentIntent ${pi.id} is LIVE MODE; this marketplace only accepts Stripe test money.`);
+  if (pi.currency !== "usd" || pi.amount > maxCents) {
+    throw new MarketplaceError("PAYMENT_FAILED", `PaymentIntent ${pi.id} is ${pi.amount} ${pi.currency}; expected at most ${maxCents} usd.`);
+  }
 }
 
 // ---------------------------------------------------------------- challenge pinning
