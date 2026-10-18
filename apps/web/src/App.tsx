@@ -265,14 +265,15 @@ export function DashboardView({
                 </div>
                 <div className="runtime">
                   <Badge
-                    tone={s.runner.runtime === "wassette" ? "good" : "bad"}
+                      tone={s.runner.key_source === "none" ? "" : s.runner.runtime === "wassette" ? "good" : "bad"}
                   >
-                    {s.runner.runtime === "wassette"
+                    {s.runner.key_source === "none" ? "Awaiting runner setup" : s.runner.runtime === "wassette"
                       ? "● wassette"
                       : "● node-unsandboxed · UNSANDBOXED"}
                   </Badge>
                 </div>
                 <div className="models">
+                  {!s.models.length && <small>No models advertised yet</small>}
                   {s.models.map((m) => (
                     <div key={m.model_id}>
                       <code>{m.model_id}</code>
@@ -286,7 +287,7 @@ export function DashboardView({
                   <div>
                     <dt>Runner key</dt>
                     <dd>
-                      <code>{s.runner.public_key.key_id}</code>
+                      <code>{s.runner.public_key?.key_id ?? "Not registered"}</code>
                     </dd>
                   </div>
                   <div>

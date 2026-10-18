@@ -109,6 +109,21 @@ function fixture() {
 }
 
 describe("public dashboard boundary", () => {
+  it("renders newly enrolled sellers without a runner key while rejecting malformed advertised keys", () => {
+    const raw = fixture();
+    const pending = {...raw.sellers[0], seller_id:"seller_pending", models:[],
+      runner:{...raw.sellers[0]!.runner,key_source:"none",public_key:{key_id:"none",public_key_b64:""}}};
+    const data = Dashboard.parse({...raw,sellers:[pending,...raw.sellers]});
+    expect(data.sellers[0]!.runner.public_key).toBeNull();
+    const html=renderToStaticMarkup(<DashboardView data={data} now={Date.parse(stamp)} filter="ALL" search="" />);
+    expect(html).toContain("Awaiting runner setup");
+    expect(html).toContain("No models advertised yet");
+    expect(html).toContain("Not registered");
+    expect(html).toContain("task_synthetic");
+    expect(html).not.toContain(privateMarker);
+    for(const key_source of ["registered","per-claim"])
+      expect(Dashboard.safeParse({...raw,sellers:[{...pending,runner:{...pending.runner,key_source}}]}).success).toBe(false);
+  });
   it("discards private fields and free-form reasons, labels runtime, test money, and pending transfers", () => {
     const data = Dashboard.parse(fixture());
     expect(data.events[0]!.id).toBe("123");
