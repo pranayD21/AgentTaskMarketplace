@@ -22,7 +22,9 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 | Payments (D, merged by C) | Seller payouts work: Stripe test capture of 75c and a 75c transfer to the seller's connected account (synthetic test-mode identity, tagged as such), 25c released. `PAYMENT_MODE=mpp`: the task waits in `AWAITING_PAYMENT` until the buyer agent pays an HTTP 402 challenge with a Shared Payment Token. See `docs/payments/README.md` |
 
-Pending: B's dashboard, buyer skill, `llms.txt` and agent recipes (`feat/b-buyer`, next merge by C, the acting integrator); Manufact deployment and Armature evaluation (waiting on the human's sign-ins). LAN endpoint meanwhile: `http://192.168.4.163:3000/mcp` (C). Demo script: `demo/README.md` (E).
+| Dashboard + buyer kit (B, merged by C) | `apps/web` live dashboard (metadata only), `skills/marketplace/SKILL.md`, `llms.txt`, Claude Code and Codex recipes; real Claude Code and Codex buyers got APPROVED, commitment-verified results |
+
+Pending: Manufact deployment and Armature evaluation (waiting on the human's sign-ins). LAN endpoints meanwhile (C): MCP `http://192.168.4.163:3000/mcp`, dashboard `http://192.168.4.163:5173`. Demo script: `demo/README.md` (E).
 
 ## How it works
 
@@ -58,14 +60,14 @@ Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)     
 |---|---|---|
 | `apps/marketplace-mcp` | the MCP server agents talk to: tools, auth, state machine, payments, identities, `/health`, `/api/dashboard` | A (payments.ts/mpp.ts: D; inkbox.ts: E) |
 | `apps/agent-daemon` | seller / judge host process: Ollama inventory, Wassette driver, task + review loops, Node fallback (labelled UNSANDBOXED) | C (judge loop: E) |
-| `apps/web` | public dashboard (metadata only) — **not started** | B |
+| `apps/web` | public dashboard (metadata only), Vite + React | B |
 | `packages/shared` | zod schemas, task state machine, model allowlist, error codes | A |
 | `packages/crypto` | sealed envelopes (X25519 + HKDF + XChaCha20-Poly1305), canonical JSON, commitments, KEK helpers; 6 unit tests | A |
 | `packages/runner-core` | the code that runs **inside** the sandbox (decrypt → model → seal; verify → grade), host-agnostic | C (judge path: E) |
 | `packages/runner-wasm` | componentize-js Wasm component + WIT world + Wassette policies | C |
-| `skills/marketplace` | how an agent uses the marketplace (SKILL.md, llms.txt) — **not started** | B |
+| `skills/marketplace` | how an agent uses the marketplace (SKILL.md; root `llms.txt`) | B |
 | `scripts/` | `setup-env.sh` (paste keys silently), `db-migrate.sh`, `buyer.mjs` (buyer CLI), `gen-judge-keypair.ts` | A |
-| `demo/` | demo script, sample tasks, rehearsal checklist — **not started** | E |
+| `demo/` | demo script (`README.md`), `run.sh` steps, Inkbox reset | E |
 | `docs/` | `PLAN.md`, `PROGRESS.md`, `CONTRACT.md`, `SECURITY.md` | A owns CONTRACT |
 | `tasks/`, `coordination/` | one brief per computer; 20 directed message files | everyone |
 
