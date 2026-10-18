@@ -31,13 +31,23 @@ export class FetchMarketplace {
     }, 20_000, "MARKETPLACE_TIMEOUT");
   }
 
+  private async init() {
+    if (this.ready) return;
+    const init = await this.rpc("initialize", { protocolVersion: this.version, capabilities: {}, clientInfo: { name: "atm-sandbox", version: "0.2.0" } });
+    this.version = init.protocolVersion ?? this.version;
+    await this.rpc("notifications/initialized", {}, true);
+    this.ready = true;
+  }
+
+  /** Names of the tools the server offers (feature detection across contract versions). */
+  async toolNames(): Promise<string[]> {
+    await this.init();
+    const result = await this.rpc("tools/list", {});
+    return ((result?.tools ?? []) as { name?: unknown }[]).map((t) => t.name).filter((n): n is string => typeof n === "string");
+  }
+
   async call<T = Record<string, unknown>>(name: string, args: Record<string, unknown> = {}): Promise<T> {
-    if (!this.ready) {
-      const init = await this.rpc("initialize", { protocolVersion: this.version, capabilities: {}, clientInfo: { name: "atm-sandbox", version: "0.2.0" } });
-      this.version = init.protocolVersion ?? this.version;
-      await this.rpc("notifications/initialized", {}, true);
-      this.ready = true;
-    }
+    await this.init();
     const result = await this.rpc("tools/call", { name, arguments: args });
     const value = result.structuredContent ?? JSON.parse(result.content?.find((c: { type: string }) => c.type === "text")?.text ?? "{}");
     if (result.isError || value.error) {

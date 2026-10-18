@@ -38,7 +38,7 @@ const DEFAULT_JUDGE_MODEL = "claude-opus-5-5";
  * @atm/shared so the server projects the same text (including old rows);
  * apps/marketplace-mcp/src/inkbox.ts keeps an identical copy until then.
  */
-export const PUBLIC_REASON: Record<VerdictReasonCode, string> = {
+export const PUBLIC_REASON: Record<string, string> = {
   RUBRIC_MATCH: "The answer contains the buyer's expected text.",
   RUBRIC_MISMATCH: "The answer does not contain the buyer's expected text.",
   COMMITMENT_MISMATCH: "The result does not match the seller's commitment or task.",
@@ -75,7 +75,7 @@ export class JudgeInfraError extends Error {
 }
 
 const verdict = (v: "APPROVE" | "REJECT", reason_code: VerdictReasonCode, score?: number): JudgeTaskOutput =>
-  JudgeTaskOutput.parse({ verdict: v, reason_code, reason_public: PUBLIC_REASON[reason_code], ...(score !== undefined ? { score } : {}) });
+  JudgeTaskOutput.parse({ verdict: v, reason_code, reason_public: PUBLIC_REASON[reason_code] ?? "Reviewed by the judge.", ...(score !== undefined ? { score } : {}) });
 
 export async function judge(host: RunnerHost, taskEnvelope: Envelope, resultEnvelope: Envelope, opts: JudgeTaskOpts, judgeKey: Keypair): Promise<JudgeOutcome> {
   const usage: JudgeUsage[] = [];
@@ -113,6 +113,28 @@ export async function judge(host: RunnerHost, taskEnvelope: Envelope, resultEnve
   }
   if (!graded.pass) return reject(graded.reason_code, graded.score);
   return { kind: "verdict", output: verdict("APPROVE", graded.reason_code, graded.score), replacement_status: "not_needed", replacement_failure_code: null, usage };
+}
+
+/**
+ * Contract v0.3 infrastructure code for a judge failure (CONTRACT §8.2):
+ * the server treats these as deferrals, never as a seller verdict.
+ */
+export function infraReasonCode(failure: string): "JUDGE_UNAVAILABLE" | "JUDGE_TIMEOUT" | "JUDGE_MALFORMED" {
+  if (failure === "JUDGE_MODEL_TIMEOUT") return "JUDGE_TIMEOUT";
+  if (failure === "JUDGE_MALFORMED_RESPONSE" || failure === "JUDGE_EMPTY_REPLACEMENT") return "JUDGE_MALFORMED";
+  return "JUDGE_UNAVAILABLE";
+}
+
+/** J3 retry path: a judge answer for an already-rejected task, sealed to the buyer. */
+export async function replacementFor(host: RunnerHost, payloadEnvelope: Envelope, opts: JudgeTaskOpts, judgeKey: Keypair): Promise<{ envelope?: Envelope; failure_code: string | null; usage: JudgeUsage[] }> {
+  const usage: JudgeUsage[] = [];
+  let task: JudgePayload;
+  try {
+    task = JudgePayload.parse(JSON.parse(fromUtf8(open(judgeKey, payloadEnvelope))));
+  } catch {
+    return { failure_code: "JUDGE_PAYLOAD_UNREADABLE", usage };
+  }
+  return { ...(await replacement(host, opts, task, usage)), usage };
 }
 
 async function grade(host: RunnerHost, opts: JudgeTaskOpts, rubric: Rubric, task: JudgePayload, answer: string, usage: JudgeUsage[]) {
