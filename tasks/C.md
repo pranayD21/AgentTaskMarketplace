@@ -1,3 +1,49 @@
+# Computer C — seller onboarding: one command to become a seller (human request, 2026-10-18 04:55 UTC)
+
+**This section takes priority over everything below it.** The human wants a seller to join with one command on a fresh Mac — a friend's laptop — and then stay on the network as a general worker. You own the daemon and the runner, so you build this; D supplies the payout-onboarding link, A serves the static files. Spec written by D at the human's request; argue with D-to-C if something is wrong.
+
+## What the seller types
+
+```sh
+curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash
+```
+
+Nothing else. No display name, no prices (task-offer pricing), no model list. For now the script is only reachable by URL; publishing to Homebrew or npm comes later.
+
+## What `install.sh` must do, in order
+
+1. **Preflight.** macOS + Apple silicon for this build (Linux later). Install Homebrew if missing. `brew install node pnpm ollama wassette` (Node ≥ 22.22, pnpm 10, Wassette 0.8). `brew services start ollama`. Refuse clearly on unsupported hardware instead of half-installing.
+2. **Model.** If Ollama has no allowlisted model, `ollama pull qwen3:8b` (show the size and progress). Models are **auto-detected** from `GET /api/tags` with digests — the seller never names them. Say in the summary that detection is self-reported plus a liveness canary, not attestation.
+3. **Code.** Download the seller bundle from the hosted server (`GET /seller-bundle.tgz`, built from `main` by A/C — the repo is private, so no `git clone`), unpack to `~/.atm/app`, `pnpm install --frozen-lockfile --prod`. Download the **prebuilt** `runner.wasm` and its `.sha256` from the hosted server and verify the hash; do not build on the seller's machine.
+4. **Canary.** Run the existing `--canary-only` probe; stop with a readable error if it fails.
+5. **Identity.** First run registers the seller automatically (`register_agent` → `register_seller`), display name = hostname, state in `~/.atm/seller.json` (mode 600). Reuse it on every later start; never create a second identity.
+6. **Stripe payout onboarding.** Right after registration, ask the server for the seller's hosted Connect onboarding link and print it as a clickable URL ("Open this to set up payouts"); open it in the browser if possible; keep installing while the human completes it; poll `whoami` until payouts are active. Working without finishing it is allowed — transfers just stay `PENDING_ONBOARDING` until it is done. This is Stripe **Connect** for the seller; the Link wallet is the buyer's side and is not involved.
+7. **Persistence.** Install a launchd agent (`~/Library/LaunchAgents/dev.atm.seller.plist`, KeepAlive, RunAtLoad) that runs the daemon with `--runtime wassette --poll-ms 5000` against the hosted endpoint, logs to `~/.atm/logs/seller.log`, measurements to `~/.atm/measurements/`. Install a tiny CLI `atm-seller` with `status | logs | stop | start | uninstall`.
+8. **Summary.** Print seller id, models and digests detected, component hash, Wassette version, payout status, and "polling for tasks". That is the moment they are on the network.
+
+## Server-side pieces (not C's files; ask the owner)
+
+- A: `GET /install.sh`, `GET /seller-bundle.tgz`, `GET /runner.wasm` + `GET /runner.wasm.sha256` on the hosted server; a version endpoint so an old daemon refuses to claim after a contract change.
+- D: `register_seller` (or `whoami`) returns `payout_onboarding_url` and `payout_status` — `onboardingLink()` in `payments.ts` already creates the Stripe v2 Account Link; D wires it when A exposes the field.
+
+## Acceptance
+
+A Mac with nothing installed runs the one command and, with no other typing, appears in `list_sellers` with its hash and detected models, passes the canary, claims and completes a task posted by someone else, prints the payout link, survives a reboot (launchd), and `atm-seller status` shows it. Record the exact transcript (redacted) in `apps/agent-daemon/README.md`.
+
+## Until the installer exists: the manual path for a friend's Mac (works now)
+
+```sh
+brew install node pnpm ollama wassette && brew services start ollama && ollama pull qwen3:8b
+git clone git@github.com:pranayD21/AgentTaskMarketplace.git && cd AgentTaskMarketplace   # needs repo access
+pnpm install --frozen-lockfile && pnpm build:runner
+printf 'MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp\nOLLAMA_URL=http://localhost:11434\nATM_RUNTIME=wassette\n' > .env
+pnpm daemon --role seller --runtime wassette --display-name <their-name> --computer-id F --poll-ms 5000
+```
+
+No database, Stripe or judge keys go on the seller machine. Only the seller's own identity file is created.
+
+---
+
 # Computer C — seller runtime and the Wasm sandbox
 
 ## Current C handoff, October 17, 21:08 PDT
