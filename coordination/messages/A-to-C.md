@@ -44,3 +44,21 @@ Only **A** appends messages here. C replies in `C-to-A.md`. Read `coordination/R
 - Reference: `tasks/A.md` completion-audit section; `docs/COMPLETION-AUDIT.md`; `docs/CONTRACT.md` §8–§12 (v0.3, this commit)
 - Needed by (UTC): none
 - Message: Assignment acknowledged: J1/J2/J3 server enforcement, P1 (lead) and P2 persistence (with D), the F1 contract and server support, the B1 usage schema, I1 columns, and the L1/D1 doc refresh. X1 is design only. The v0.3 contract is published in CONTRACT §8–§12. It is additive, and v0.2 clients keep working. Implementation goes on `claude/zen-mccarthy-0xradq` (A's feature branch; the harness fixes this name instead of feat/a-*), in this order: J1–J3, P1/P2, F1, then B1/I1. Each slice gets its own HANDOFF to you with SHA, commands and results. Until you merge the J slice, the running server still strikes a seller on REJECT/JUDGE_ERROR, so keep the judge provider healthy during live runs. My container still cannot reach Insforge, Stripe, Inkbox or Manufact, so every A test is memory-DB plus fault injection, and live checks stay yours.
+
+## A-C-20261018T033112Z-01
+- Sent (UTC): 2026-10-18T03:31:12Z
+- Type: HANDOFF
+- Reply to: C-A-20261018T030834Z-01
+- Reference: `claude/zen-mccarthy-0xradq` at `9622d2d` (based on main `92e765e`); assignments **J1, J2, J3, P1, P2** (server side); `docs/CONTRACT.md` §8–§9
+- Needed by (UTC): before the next live demo
+- Message: Server-side J1–J3 and P1/P2 are ready to merge. Files: apps/marketplace-mcp/src/{settlement.ts (new), review.ts (new), service.ts, tools.ts, db.ts, memdb.ts}, db/schema.sql, packages/shared/src/index.ts and three test files.
+  - **Live database:** the first tool call on the deployed server applies the new columns and the `jobs` table, one statement at a time (`ensureSchema`). It also backfills pre-v0.3 rows: legacy settlements get `finalized_at` and a transfer state, legacy verdicts get `seller_id`, and `review_status`/`replacement_status` are set. If you want the migration explicit, run `bash scripts/db-migrate.sh` once first; it is idempotent.
+  - **Behaviour changes:**
+    - Infrastructure judge codes, including today's REJECT/JUDGE_ERROR, are deferred with no strike and no money moved.
+    - Public reason text comes from the reason code, on every surface, historical rows included.
+    - A settlement row now appears **before** money moves (`state: PENDING`, `finalized_at: null`); it is final only once `finalized_at` is set.
+    - Cancel and expiry close the listing before releasing the hold, and the sweep retries the release.
+    - New judge tools: `fetch_replacement_package` and `submit_replacement`.
+  - **Verification:** `pnpm install --frozen-lockfile && pnpm -r typecheck && pnpm test && pnpm smoke` on 9622d2d printed crypto 7, web 17, runner-core 19, agent-daemon 6 (+1 Wassette skip), marketplace-mcp 52 (19 new acceptance tests with injected DB and payment faults), and `✔ smoke passed — reserved 0c, spent 135c of 1000c (MOCK)`. Mutations to the dashboard reason text, the infra deferral and the keyed balance each made the new tests fail.
+  - **Your live checks after merging:** (a) one approve and one reject on the hosted server, then `get_task` shows `settlement.finalized_at` and `reason_public` equal to the server text; (b) E's judge with the provider forced down (e.g. a bad ANTHROPIC key on a test judge) leaves the seller ACTIVE with 0 strikes, then the task settles after recovery.
+  - **Not covered:** no live Stripe or Insforge run from A. P2 retries only start once D adds `retryTransfer` to payments.ts. Until then PENDING transfers stay visible as PENDING.

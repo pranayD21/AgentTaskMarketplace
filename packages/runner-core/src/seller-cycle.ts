@@ -1,5 +1,6 @@
 import { ClaimPublic, KeyDescriptor, LEASE_SECONDS, MarketplaceError, type ModelInfo } from "@atm/shared";
 import { createRunner, type RunnerHost } from "./index.js";
+import type { SellerUsage } from "./seller-measurements.js";
 import { FetchMarketplace, safeFailureCode } from "./marketplace.js";
 
 export interface SellerRegistration {
@@ -26,6 +27,7 @@ export interface RunCycleOutput {
   runtime_ms: number;
   tokens_out?: number;
   key_id: string;
+  seller_usage?: SellerUsage | null;
 }
 
 /** A fresh runner and key stay alive for the complete claim-to-submit call. */
@@ -73,7 +75,7 @@ export async function runCycle(host: RunnerHost, opts: RunCycleOpts): Promise<Ru
       commitment_sha256: out.commitment_sha256, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out,
     });
     if (!submitted.result_id) throw new Error("MISSING_RESULT_ID");
-    return { task_id: opts.task_id, claim_id: claim.claim_id, result_id: submitted.result_id, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out, key_id: key.key_id };
+    return { task_id: opts.task_id, claim_id: claim.claim_id, result_id: submitted.result_id, runtime_ms: out.runtime_ms, tokens_out: out.tokens_out, key_id: key.key_id, seller_usage: out.seller_usage };
   } catch (error) {
     if (claimId) await mp.call("release_task", { task_id: opts.task_id, claim_id: claimId, reason: safeFailureCode(error) }).catch(() => {});
     throw error;

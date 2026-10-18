@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { MeasurementRecorder } from "./measurements.js";
+import { listOllamaModels } from "./ollama.js";
 import { sellerLoop } from "./seller.js";
 import { safeFailureCode } from "@atm/runner-core";
 import { parseArgs } from "node:util";
@@ -22,6 +24,11 @@ const { values: args } = parseArgs({
     "poll-ms": { type: "string", default: "5000" },
     "state-file": { type: "string" },
     "task-id": { type: "string" },
+    "computer-id": { type: "string" },
+    "measurement-file": { type: "string" },
+    "estimated-watts": { type: "string" },
+    canary: { type: "boolean", default: false },
+    "canary-only": { type: "boolean", default: false },
     "deny-ollama": { type: "boolean", default: false },
     "deny-marketplace": { type: "boolean", default: false },
     once: { type: "boolean", default: false },
@@ -32,6 +39,9 @@ if (!Number.isInteger(Number(args["poll-ms"])) || Number(args["poll-ms"]) < 100)
 if (!Number.isInteger(Number(args["ask-cents"])) || Number(args["ask-cents"]) < 0) throw new Error("ask-cents must be a nonnegative integer");
 if (args["deny-ollama"] && (args.runtime !== "wassette" || args.role !== "seller")) throw new Error("deny-ollama requires the Wassette seller");
 if (args["deny-marketplace"] && (args.runtime !== "wassette" || args.role !== "judge")) throw new Error("deny-marketplace requires the Wassette judge");
+if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.role !== "seller") throw new Error("seller measurement/canary options require --role seller");
+if (args["measurement-file"] && !/^[ABCDE]$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires --computer-id A|B|C|D|E");
+if (args["estimated-watts"] && (!args["measurement-file"] || !Number.isFinite(Number(args["estimated-watts"])) || Number(args["estimated-watts"]) <= 0)) throw new Error("estimated-watts requires a measurement file and positive watts");
 const role = args.role as "seller" | "judge";
 const MARKETPLACE_URL = process.env.MARKETPLACE_URL ?? "http://localhost:3000/mcp";
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
@@ -39,6 +49,7 @@ const STATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const suffix = args["display-name"] ? `-${createHash("sha256").update(args["display-name"]).digest("hex").slice(0, 10)}` : "";
 const STATE_FILE = args["state-file"] ? path.resolve(args["state-file"]) : path.join(STATE_DIR, `${role}${suffix}.json`);
 const pollMs = Number(args["poll-ms"]);
+const measurementFile = args["measurement-file"] ? path.resolve(STATE_DIR, "..", args["measurement-file"]) : undefined;
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), `[${role}]`, ...a);
 
 interface State { agent_id: string; api_key: string; display_name: string }
@@ -106,14 +117,34 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, async ()
 });
 try {
   log(`marketplace ${MARKETPLACE_URL}`);
-  const state = await ensureAgent(mp);
-  log(`agent ${state.agent_id} (${state.display_name})`);
-  rt = await makeRuntime(state.api_key);
-  if (role === "seller") await sellerLoop(mp, rt, {
-    marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs, askCents: Number(args["ask-cents"]),
-    models: args.model, once: args.once, taskId: args["task-id"], log,
-  });
-  else await judgeLoop(rt);
+  if (args["canary-only"]) {
+    rt = await makeRuntime("local-canary-no-marketplace-identity");
+    const recorder = measurementFile ? new MeasurementRecorder({ file: measurementFile, computerId: args["computer-id"]!, sellerId: null,
+      estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined;
+    const models = await listOllamaModels(OLLAMA_URL);
+    const selected = args.model?.length ? args.model : ["qwen3:8b"];
+    for (const model of selected) {
+      const finish = recorder?.begin({ kind: "model_canary", model_id: model, model_digest: models.find((m) => m.model_id === model)?.digest });
+      try {
+        if (!rt.modelCanary) throw new Error("CANARY_UNSUPPORTED");
+        const out = await rt.modelCanary({ ollama_url: OLLAMA_URL, model_id: model });
+        finish?.({ status: out.passed ? "passed" : "failed", ...out, error_code: out.passed ? undefined : "CANARY_MISMATCH" });
+        log(`canary model=${model} passed=${out.passed} runtime=${rt.info().runtime} elapsed=${out.runtime_ms}ms; no marketplace task; not attestation`);
+        if (!out.passed) process.exitCode = 1;
+      } catch (error) { finish?.({ status: "failed", error_code: safeFailureCode(error) }); throw error; }
+    }
+  } else {
+    const state = await ensureAgent(mp);
+    log(`agent ${state.agent_id} (${state.display_name})`);
+    rt = await makeRuntime(state.api_key);
+    if (role === "seller") await sellerLoop(mp, rt, {
+      marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs, askCents: Number(args["ask-cents"]),
+      models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
+      measurements: measurementFile ? new MeasurementRecorder({ file: measurementFile, computerId: args["computer-id"]!, sellerId: state.agent_id === "env" ? null : state.agent_id,
+        estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined,
+    });
+    else await judgeLoop(rt);
+  }
 } catch (error) {
   log(`stopped: ${safeFailureCode(error)}`);
   process.exitCode = 1;
