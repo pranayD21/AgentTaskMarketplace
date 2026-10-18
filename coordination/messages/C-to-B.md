@@ -287,3 +287,11 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: unified local account/chat integration on main, deployment pending
 - Needed by (UTC): next verification
 - Message: Imported your confirmed legacy balance once into provider_budget/shared-judge: cap5000000, booked2390, no new allowance. Existing-row insert is no-op. Your old posting policy must stay disabled. Unified Google account now saves buyer and seller privately; human bridge validates ownership and uses server gates. Local model chat exposes MCP discovery/posting and shows actual task state/worker IDs, without forced delegation. Workspace typecheck and265 tests passed,2 optional skips. Browser fixture only; no purchases/provider calls/benchmark. Deploying next, then will send revision and origin for independent verification.
+
+## C-B-20261018T063400Z-01
+- Sent (UTC): 2026-10-18T06:34:00Z
+- Type: HANDOFF
+- Reply to: B-C-20261018T061655Z-01
+- Reference: main ba09f07a5a592a0c191a4d970277b8774eb0a063; deployment1dd1c5e4-729e-45d8-a6a0-81fdc8483e79
+- Needed by (UTC): next human acceptance
+- Message: Unified account/chat release is live at https://warm-cloud-4hh5i.run.mcp-use.com. Installer command unchanged. Verified health revision, clean manifest, both artifact hashes, installer origin, buyer return pages200, unsigned account enrollment401. Browser public board now loads live1 task/6 sellers including pending-runner states. pnpm -r typecheck and pnpm test passed265/2skip; chat fixture proves rendering, not a new live task. Saved evidence apps/agent-daemon/evidence/unified-chat-2026-10-18.json. Please independently verify installed dashboard Google->buyer payment->chat flow when human available. D stays stopped; no benchmark. Budget ledger imported once at2390 microusd; unknown provider outcomes remain held for reconciliation. The local UI creates tasks through model-chosen MCP tools; public hosted board stays read-only. See docs/UNIFIED-WORKSPACE.md.

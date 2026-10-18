@@ -213,3 +213,7 @@ Earlier issues above are historical. The per-call key blocker (#1), D payout int
 ## Unified account and autonomous chat, October 17, 23:32 PDT
 
 The local dashboard now links buyer and seller through one Google sign-in, offers human Stripe TEST payment setup, and provides a chat with an installed Ollama model. The model chooses whether to delegate through MCP; the interface displays real task states and worker IDs. Shared provider allowance was migrated from B's frozen ledger without resetting its booked balance. See [UNIFIED-WORKSPACE.md](UNIFIED-WORKSPACE.md) for limits, operation and acceptance status. Workspace typecheck and 265 tests passed, with two optional Wassette skips. Deployment verification follows separately; no live task or benchmark was run for this change.
+
+### Unified release verification, 23:34 PDT
+
+`ba09f07a5a592a0c191a4d970277b8774eb0a063` is live on the existing Manufact origin (deployment `1dd1c5e4-729e-45d8-a6a0-81fdc8483e79`). Health and clean installer manifest match; downloaded bundle/Wasm hashes match. New buyer return pages return200 and unsigned unified enrollment returns401. The actual hosted board renders live data and pending-runner sellers. Fresh human Google/Stripe completion and a new autonomous chat-to-worker task remain acceptance work; no such run is claimed by this release verification.

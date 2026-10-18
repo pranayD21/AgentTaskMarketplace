@@ -1,0 +1,75 @@
+{
+  "checked_at": "2026-10-18T06:33:16.913Z",
+  "base": "https://warm-cloud-4hh5i.run.mcp-use.com",
+  "health": {
+    "ok": true,
+    "service": "agent-task-marketplace",
+    "contract": "0.3",
+    "pricing": "task_offer",
+    "revision": "ba09f07a5a592a0c191a4d970277b8774eb0a063",
+    "payments": "card",
+    "db": "Insforge Postgres",
+    "base_url": "https://warm-cloud-4hh5i.run.mcp-use.com",
+    "time": "2026-10-18T06:33:09.703Z"
+  },
+  "manifest": {
+    "schema": 1,
+    "revision": "ba09f07a5a592a0c191a4d970277b8774eb0a063",
+    "dirty": false,
+    "created_at": "2026-10-18T06:30:03.215Z",
+    "platform": "darwin-arm64",
+    "contract_version": "0.3",
+    "seller_protocol": 1,
+    "node_min": "22.22.0",
+    "wassette": "0.8.x",
+    "allowed_models": [
+      "qwen3:8b",
+      "qwen3:4b",
+      "qwen3:14b",
+      "qwen2.5:7b",
+      "qwen2.5-coder:7b",
+      "llama3.1:8b",
+      "gemma3:4b",
+      "gemma3:12b",
+      "deepseek-r1:8b",
+      "mistral:7b"
+    ],
+    "artifacts": {
+      "seller-bundle.tgz": {
+        "sha256": "ae1fa2dee52b6d8f4176ed33a5220e07adb8b021d70f84cefc9cd2811267a9ff",
+        "size_bytes": 535007
+      },
+      "runner.wasm": {
+        "sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34",
+        "size_bytes": 21164376
+      }
+    }
+  },
+  "files": [
+    {
+      "name": "seller-bundle.tgz",
+      "bytes": 535007,
+      "sha256": "ae1fa2dee52b6d8f4176ed33a5220e07adb8b021d70f84cefc9cd2811267a9ff",
+      "verified": true
+    },
+    {
+      "name": "runner.wasm",
+      "bytes": 21164376,
+      "sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34",
+      "verified": true
+    }
+  ],
+  "installer_origin_verified": true,
+  "stripe_return_pages_verified": true,
+  "unauthenticated_enrollment_status": 401,
+  "human_google_oauth": "pending",
+  "human_stripe_onboarding": "pending",
+  "fresh_mac_install": "pending",
+  "reboot": "pending",
+  "benchmark": "deferred",
+  "unified_account_unauthenticated_status": 401,
+  "buyer_return_pages": "HTTP200",
+  "chat_bundle_contents": "verified",
+  "browser_public_board": "Live refresh,1 task,6 sellers; registered and pending-runner display works",
+  "chat_live_worker_acceptance": "pending human Google/Stripe and actual chat task"
+}
