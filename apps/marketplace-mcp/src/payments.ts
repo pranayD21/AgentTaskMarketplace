@@ -195,7 +195,7 @@ export async function onboardBuyerCustomer(stripe: Stripe, agent: BuyerOnboardIn
   const customer = await stripe.customers.create({
     name: agent.display_name,
     ...(human && agent.email ? { email: agent.email } : {}),
-    description: human ? `Buyer ${agent.id} (human-owned, Agent Task Marketplace, test mode)` : `Buyer agent ${agent.id} (Agent Task Marketplace, test mode)`,
+    description: human ? `Buyer ${agent.id} (human-owned, HANDOFF, test mode)` : `Buyer agent ${agent.id} (HANDOFF, test mode)`,
     metadata: { agent_id: agent.id, app: "agent-task-marketplace", onboarding: human ? "human" : "synthetic-test" },
   }, { idempotencyKey: customerIdempotencyKey(agent.id) });
   if (human) return { stripe_customer_id: customer.id, stripe_payment_method_id: null };
@@ -352,7 +352,7 @@ function testModeRecipientIdentity(agent: { id: string; display_name: string }):
 function recipientProfile(agent: { display_name: string }): Stripe.V2.Core.AccountCreateParams.Defaults.Profile {
   return {
     business_url: "https://agenttaskmarket.dev",
-    product_description: `Seller agent "${agent.display_name}" rents idle local compute on the Agent Task Marketplace (test mode).`,
+    product_description: `Seller agent "${agent.display_name}" rents idle local compute on the HANDOFF (test mode).`,
   };
 }
 
@@ -927,7 +927,7 @@ export class StripeCardProvider implements PaymentProvider {
         off_session: true,
         capture_method: "manual",
         transfer_group: task.id,
-        description: `Agent Task Marketplace hold for ${task.id} (TEST MODE)`,
+        description: `HANDOFF hold for ${task.id} (TEST MODE)`,
         metadata: { task_id: task.id, buyer_id: buyer.id, app: "agent-task-marketplace" },
       }, { idempotencyKey: holdIdempotencyKey(task.id) });
     } catch (err) {

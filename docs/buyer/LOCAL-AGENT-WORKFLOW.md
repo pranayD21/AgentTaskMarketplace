@@ -32,7 +32,7 @@ Stop selling before changing the selected model, CPU thread count, context size 
 
 Run the existing installer again, then open Account & setup and prepare the model if the runner changed. This preserves the Google-linked identities and models. Complete setup before activating Seller mode. Old installed runners do not gain new agent tools merely because the server was deployed.
 
-Benchmarking remains deferred. Functional tests use isolated fixture tasks; no speedup or cost advantage is claimed.
+The functional checks in the linked receipt do not measure performance or cost savings. The bounded-v1 marketplace and autonomous comparisons remain deferred; the project's 30%/53% claims were not independently verified in this review.
 
 ### Worker output and task failures
 

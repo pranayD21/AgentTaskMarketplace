@@ -33,7 +33,5 @@ post_task sends private text to the trusted marketplace immediately and encrypts
 - [Claude Code recipe](docs/buyer/claude-code.md)
 - [Codex recipe](docs/buyer/codex.md)
 - [Dashboard setup](apps/web/README.md)
-- [Evaluation cases](docs/buyer/evaluation.md)
-
 - [Durable buyer jobs and aggregation](docs/buyer/jobs.md)
-- [Benchmark protocol and measured limits](docs/buyer/benchmark-report.md)
+- [Benchmark protocol](docs/buyer/benchmark-plan.md)

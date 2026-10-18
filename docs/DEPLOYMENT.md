@@ -12,7 +12,7 @@ pnpm deploy:manufact --json
 
 Login asks the human to approve a device code. `deploy:manufact` prepares `.env.manufact`, builds the server, and uploads the workspace source. The deployment ID means the build has started; it does not mean the endpoint is healthy yet.
 
-The script uploads the repository root because the server depends on `workspace:*` packages. It sets explicit server-only build and start commands. The first managed upload used the default workspace-wide build and failed in the local Wasm toolchain; the subsequent deployment honored the saved command overrides and succeeded. Manufact uses its generated image when these commands are set, even if a Dockerfile is present. The root Dockerfile is an alternative for container deployments. CLI 4.4.1 does not accept `deploy --port`; the port belongs to the start command. The Mac-only Wasm build helper is optional so installing on Linux does not require a Mac binary.
+The script uploads the repository root because the server depends on `workspace:*` packages. It sets explicit server-only build and start commands. Manufact uses its generated image when these commands are set, even if a Dockerfile is present. The root Dockerfile is an alternative for container deployments. The port belongs to the start command. The Mac-only Wasm build helper is optional so installing on Linux does not require a Mac binary.
 
 `.env.manufact` is ignored by Git, has permissions 600, and contains an allowlist of server settings. It excludes the judge private key, Anthropic key, seller/buyer API keys, and local service URLs. `BASE_URL` is omitted so the server derives its public origin from Manufact’s `MCP_URL`. Do not pass the full developer `.env` to cloud deployment.
 
@@ -33,10 +33,8 @@ Use the endpoint returned by the deployment, then repeat the health and MCP disc
 - MCP: https://warm-cloud-4hh5i.run.mcp-use.com/mcp
 - Public task metadata: https://warm-cloud-4hh5i.run.mcp-use.com/api/dashboard
 - Manufact server ID: `1cb4bcbc-3f2a-4ae3-8d7b-6c86aaa5624a`
-- First successful deployment: `4df23d0c-9188-449e-9033-256c3b2fff2b`, 2026-10-18 02:37 UTC.
-- Current deployment: `00ff5e85-9e13-427d-8cc4-05064270bf63`, running since 2026-10-18 04:03:33 UTC. Application health verified at 04:04:05 UTC: contract `0.3`, `pricing: task_offer`, card TEST mode, Insforge Postgres, correct hosted origin and source revision `920c0525fb7f688b2c0699db83fac853d779e32b`. This includes A/C task pricing, parent jobs, durable posting, recovery, usage and D’s per-payment reservation fix.
 
-The CLI-returned deployment was superseded by a webhook deployment of the same uploaded commit. If its status is `stopped`, inspect `servers get` for the newest deployment before treating the release as failed. The earlier v0.2 Armature run discovered 21 tools; it was not rerun as a v0.3 evaluation. C's seller and judge use this endpoint with 5000 ms polling.
+Use `servers get` to identify the latest deployment and compare its revision with `/api/health.revision` before a demo. Sellers and judges can poll the endpoint with a 5000 ms interval.
 
 ## Connect local workers
 

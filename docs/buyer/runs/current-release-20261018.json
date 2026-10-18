@@ -204,5 +204,34 @@
       "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
       "paid_calls_by_this_followup": 0
     }
+  },
+  "repository_cleanup_followup": {
+    "source_commit": "4cbcb8d",
+    "checked_at": "2026-10-18T16:41:17.212Z",
+    "historical_narratives_removed_upstream": true,
+    "branch_narrative_history_commit": "d25e43fd1a8f8948ca95b6521fba2feb217b0bb4",
+    "branch_narrative_history_path": "docs/buyer/verification.md",
+    "json_receipts_preserved": true,
+    "coordination_paths_restored": false,
+    "verification_log_restored": false,
+    "unverified_claims_adopted": false,
+    "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+    "new_provider_usage_or_owned_fixture_evidence": false,
+    "integration_checks": {
+      "checked_at": "2026-10-18T16:43:23.642901+00:00",
+      "main_source_commit": "4cbcb8dc0dcb94b4b8e5bcd213cd8754571a896b",
+      "commands": [
+        "pnpm -r typecheck",
+        "pnpm test",
+        "pnpm --filter @atm/web build:hosted"
+      ],
+      "workspace_typecheck": "passed",
+      "tests_passed": 317,
+      "tests_skipped": 4,
+      "hosted_web_build": "passed",
+      "external_model_calls": 0,
+      "new_purchases": 0,
+      "hosted_browser_reverified": false
+    }
   }
 }

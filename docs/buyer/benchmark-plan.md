@@ -68,7 +68,7 @@ Per-attempt redacted JSON and summaries go to `docs/buyer/runs/<run>-<arm>-<phas
 
 ## Functional failures are separate
 
-`node scripts/benchmarks/disconnect-check.mjs` starts an isolated real MCP server in MEMORY/MOCK mode, cuts a real HTTP response after upstream post acceptance, restarts the buyer process, recovers its sole task, and cancels it. The redacted [disconnect result](runs/disconnect-v1.json) is functional evidence, not a quality/latency/cost sample or real Stripe test. Armature's missing-ID recovery remains labelled simulated in [evaluation.md](evaluation.md).
+`node scripts/benchmarks/disconnect-check.mjs` starts an isolated real MCP server in MEMORY/MOCK mode, cuts a real HTTP response after upstream post acceptance, restarts the buyer process, recovers its sole task, and cancels it. The redacted [disconnect result](runs/disconnect-v1.json) is functional evidence, not a quality/latency/cost sample or real Stripe test.
 
 ## Marketplace execution gate, 04:18Z
 

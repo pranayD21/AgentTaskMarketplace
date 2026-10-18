@@ -60,7 +60,7 @@ Current C seller: `seller_07a57bbbd50fd91e`, saved display name `computer-c-v02`
 3. B posts the job once. Ensure the two child IDs are assigned to different sellers. If task-specific filtering is needed, coordinate idle worker restarts before posting; do not compete with another process using the same identity.
 4. Capture overlapping RUNNING intervals using server events and the two local measurement files. Local timestamps alone are insufficient if the clocks disagree. B's display must show parent, parts, assigned sellers and progress without private text.
 5. B verifies each result commitment and judge state, combines only successful parts, and records partial failures honestly. D reconciles reservations, spend and transfers. Record restart/recovery behavior without duplicate purchases.
-6. E records the completed run and names the artifact location. C updates the completion audit with task IDs, machine mapping and test evidence.
+6. Keep the completed run's task IDs, machine mapping and test evidence with its run artifacts.
 
 The old race between two processes on C remains a concurrency test. Until the sequence above succeeds, L1 remains pending.
 

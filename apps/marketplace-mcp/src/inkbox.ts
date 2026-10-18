@@ -30,7 +30,7 @@ const TIMEOUT_MS = 5_000;
 const STATE_FILE = path.resolve(process.cwd(), "../../.atm-state/inkbox-marketplace.json");
 
 const SKILLS: Record<"buyer" | "seller" | "judge" | "marketplace", A2ASkill[]> = {
-  buyer: [{ id: "atm-buyer", name: "Task buyer", description: "Posts tasks to the Agent Task Marketplace and receives verdict notices.", tags: ["atm", "buyer"] }],
+  buyer: [{ id: "atm-buyer", name: "Task buyer", description: "Posts tasks to the HANDOFF and receives verdict notices.", tags: ["atm", "buyer"] }],
   seller: [{ id: "atm-seller", name: "Task seller", description: "Runs marketplace tasks on local open-source models inside a Wasm sandbox; receives assignment notices.", tags: ["atm", "seller", "ollama"] }],
   judge: [{ id: "atm-judge", name: "Task judge", description: "Verifies submitted results inside a Wasm sandbox before the seller is paid.", tags: ["atm", "judge"] }],
   marketplace: [{ id: "atm-notices", name: "Marketplace notices", description: "Sends task lifecycle notices (assignment, submitted, verdict) to marketplace agents.", tags: ["atm", "marketplace"] }],
@@ -95,7 +95,7 @@ async function buildSender(): Promise<Sender> {
   const ib = admin();
   let identity = await ib.getIdentity(MARKETPLACE_HANDLE).catch(() => null);
   if (!identity) {
-    identity = await ib.createIdentity(MARKETPLACE_HANDLE, { displayName: "Agent Task Marketplace" });
+    identity = await ib.createIdentity(MARKETPLACE_HANDLE, { displayName: "HANDOFF" });
     await identity.a2aEnable();
     await identity.a2aSetSkills(SKILLS.marketplace);
   }

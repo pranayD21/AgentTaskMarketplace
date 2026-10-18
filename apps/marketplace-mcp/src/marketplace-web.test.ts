@@ -12,6 +12,7 @@ it("serves the public build and versioned assets without exposing local state or
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "atm-web-")); directories.push(root);
   const dist = path.join(root, "dist"); await fs.mkdir(path.join(dist, "assets"), { recursive: true });
   const app = new Hono(); registerMarketplaceWebRoutes(app as any, dist);
+  const home = await app.request("/"); expect(home.status).toBe(302); expect(home.headers.get("location")).toBe("/marketplace/");
   expect((await app.request("/marketplace/")).status).toBe(503);
   await fs.writeFile(path.join(dist, "index.html"), '<div id="root"></div><script src="/marketplace/assets/index-Abc12345.js"></script>');
   await fs.writeFile(path.join(dist, "assets/index-Abc12345.js"), "console.log('public board')");

@@ -11,6 +11,7 @@ import {
 import type { MarketData } from "./market";
 import { useDashboard } from "./useDashboard";
 import { Buyer } from "./Buyer";
+import { BrandOrb } from "../../dashboard/src/components/brand-orb";
 
 function Badge({
   children,
@@ -453,13 +454,9 @@ export function App() {
       </a>
       <aside className="sidebar">
         <a className="brand" href="#main">
-          <span className="brand-icon">
-            a<span>↗</span>
-          </span>
+          <BrandOrb />
           <span>
-            agent task
-            <br />
-            <b>marketplace</b>
+            <b>HANDOFF</b>
           </span>
         </a>
         <div className="nav-label">OBSERVATORY</div>
@@ -486,7 +483,7 @@ export function App() {
           </small>
         </div>
         <div className="sidebar-footer">
-          ATM / OCT 2026 <span>↗</span>
+          HANDOFF / OCT 2026 <span>↗</span>
         </div>
       </aside>
       <main id="main">
@@ -607,7 +604,7 @@ export function App() {
         </section>
         <footer>
           <span>
-            AGENT TASK MARKETPLACE <b>↗</b>
+            HANDOFF <b>↗</b>
           </span>
           <span>
             {updated

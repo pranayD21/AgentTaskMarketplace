@@ -46,7 +46,7 @@ claude --strict-mcp-config --mcp-config .atm-state/claude-mcp.json \
   -p 'Use atm to get the capital of Japan in one word; grade contains_text Tokyo; offer 100 test cents; reuse my buyer; post once, wait at most three minutes, then report task ID, verification and test payment state.'
 ```
 
-The $1 flag limits Claude API usage; the separate marketplace cap still applies. See [evaluation evidence](verification.md) for what was actually exercised.
+The $1 flag limits Claude API usage; the separate marketplace cap still applies.
 
 If discovery reports MPP mode, use the [MPP payment sequence in the marketplace skill](../../skills/marketplace/SKILL.md#pay-an-mpp-task). A posted task stays AWAITING_PAYMENT until its returned link is paid through the configured wallet with human approval. PAID is an upfront test charge; it is not a card hold. Keep the same task ID through payment and review. B has verified the card workflow and mixed-rail dashboard. B has not repeated a human Link-wallet payment; D records its separate approved wallet run in [the payments verification](../payments/README.md).
 

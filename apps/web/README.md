@@ -42,4 +42,4 @@ The board shows all state counts and the latest 40 tasks. Sellers are the latest
 
 Unrecognized settlement rails receive a fixed label while known MPP settlements remain explicitly marked STRIPE_TEST. The response parser strips unknown fields; the view does not render event metadata, free-form verdict reasons, raw settlement notes, ciphertext, or raw JSON. Only the presence of `PENDING_ONBOARDING` is extracted from settlement notes. This limits accidental private-data rendering, but cannot repair a server that sends private fields over the network. Test the server boundary independently.
 
-`pnpm --filter @atm/web test` exercises the rendered privacy boundary, runtime/payment labels, state filters, leases, links, and buyer CLI protocol/identity behavior. Browser checks and integration outcomes are recorded in [buyer verification](../../docs/buyer/verification.md).
+`pnpm --filter @atm/web test` exercises the rendered privacy boundary, runtime/payment labels, state filters, leases, links, and buyer CLI protocol/identity behavior.

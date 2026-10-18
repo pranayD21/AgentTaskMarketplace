@@ -1,6 +1,6 @@
 # Payments — Stripe test mode, two rails
 
-Computer **D** owns this directory and `apps/marketplace-mcp/src/payments.ts`, `src/mpp.ts`, `src/mpp-routes.ts`. Everything below is **Stripe test mode**; the server refuses to start with a live key. Amounts are integer US cents.
+The payment implementation is in `apps/marketplace-mcp/src/payments.ts`, `src/mpp.ts`, and `src/mpp-routes.ts`. Everything below is **Stripe test mode**; the server refuses to start with a live key. Amounts are integer US cents.
 
 | | `PAYMENT_MODE=card` (default, GA APIs) | `PAYMENT_MODE=mpp` (showcase, preview APIs) |
 |---|---|---|
@@ -26,9 +26,9 @@ Computer **D** owns this directory and `apps/marketplace-mcp/src/payments.ts`, `
 
 Every id is recorded on the task (`payment.stripe_payment_intent_id`) and the settlement (`stripe_capture_id`, `stripe_transfer_id`, `note`), visible through `get_task` / `get_result` and `GET /api/dashboard`.
 
-## Seller payouts (Accounts v2) — what was blocking and what fixed it
+## Seller payouts (Accounts v2)
 
-Stripe rejects new Accounts v1 `type=custom` integrations, so sellers get a **v2 core account** with the recipient configuration. A bare account reports `stripe_transfers.status = restricted` with these requirements (verified 2026-10-18 01:48 UTC):
+Stripe rejects new Accounts v1 `type=custom` integrations, so sellers get a **v2 core account** with the recipient configuration. A bare account reports `stripe_transfers.status = restricted` with these requirements:
 
 ```
 defaults.profile.business_url
@@ -40,9 +40,9 @@ external_account                      ← restricts stripe_balance.payouts only,
 
 `createRecipientAccount` now supplies all of them at creation: `entity_type: individual`, an `individual` block made of Stripe's documented **test-mode verification values** (DOB `1901-01-01`, `us_ssn_last_4 = 0000`, address line `address_full_match`), the ToS attestation, and a profile URL. The capability is `active` in the create response and `transfers.create` succeeds (with `source_transaction` set to the buyer's charge so no platform balance is needed).
 
-Accounts created before this landed are repaired lazily: `ensureTransfersActive` runs before every transfer, updates the account in place with the same identity when it is still restricted, and polls the capability (5 × 1 s). If it is still not active the settlement note says `transfer PENDING_ONBOARDING: …` and the task still settles.
+Restricted accounts are repaired lazily: `ensureTransfersActive` runs before every transfer, updates the account in place with the same identity when it is still restricted, and polls the capability (5 × 1 s). If it is still not active the settlement note says `transfer PENDING_ONBOARDING: …` and the task still settles.
 
-**Honesty:** the identity is synthetic (it is tagged `synthetic_identity: stripe-test-mode-values` in the account metadata) and would be rejected in live mode. A real deployment collects the seller's own details through the hosted Connect flow — `onboardingLink(stripe, accountId, baseUrl)` in `payments.ts` creates that `v2.core.accountLinks` URL — and would keep the ToS attestation from the seller's real request (IP, user agent). `external_account` stays open on purpose: it only gates bank payouts from the connected account, which the demo does not do.
+The identity is synthetic (it is tagged `synthetic_identity: stripe-test-mode-values` in the account metadata) and would be rejected in live mode. A real deployment collects the seller's own details through the hosted Connect flow — `onboardingLink(stripe, accountId, baseUrl)` in `payments.ts` creates that `v2.core.accountLinks` URL — and would keep the ToS attestation from the seller's real request (IP, user agent). `external_account` stays open on purpose: it only gates bank payouts from the connected account, which the demo does not do.
 
 ## MPP mode (preview) — how it is wired
 
@@ -59,35 +59,6 @@ PAYMENT_MODE=mpp pnpm dev:server --no-open                    # or PORT=3001 BAS
 node docs/payments/simulate-spt.mjs --max 100                    # MARKETPLACE_URL=http://localhost:3001/mcp if you changed the port
 ```
 
-What it does and what it printed on 2026-10-18 02:01 UTC (ids trimmed):
-
-```
-[1] post_task → task_dc12229b74f50946 status=AWAITING_PAYMENT payment.state=AWAITING_PAYMENT
-    payment_link: http://localhost:3001/api/pay/task_dc12229b74f50946
-[2] POST payment_link (no credential) → HTTP 402
-    WWW-Authenticate: Payment id="QtUg7…", realm="localhost:3001", method="stripe", intent="charge", request="eyJhbW91…"
-    challenge.request: {"amount":"100","currency":"usd","externalId":"task_dc12…","methodDetails":{"networkId":"profile_test_…","paymentMethodTypes":["card","link"],…}}
-[3] test helper minted spt_1URjPy… (max 100c)        ← POST /v1/test_helpers/shared_payment/granted_tokens, payment_method=pm_card_visa
-[4] POST payment_link with credential → HTTP 200
-    Payment-Receipt: {"method":"stripe","status":"success","reference":"pi_3URjPy…","externalId":"task_dc12…"}
-[5] get_task → status=OPEN payment.state=PAID pi=pi_3URjPy…
-```
-
-Settlement on the same rail, 2026-10-18 02:06 UTC (task posted at 55c so only a seller asking 50c was eligible):
-
-```
-[judge] APPROVE task_40cea4…: RUBRIC_MATCH | payout 50c | seller ACTIVE | MPP payment pi_3URjUI… of 55c kept 50c;
-        refunded 5c to the buyer (re_3URjUI…); transferred 50c to acct_1URiul… (tr_3URjUI…)
-get_task → status APPROVED, payment.state CAPTURED, settlement {seller_payout_cents 50, buyer_refund_cents 5, stripe_capture_id ch_…, stripe_transfer_id tr_…}
-```
-
-and the refund path (`cancel_task` on a paid, still-OPEN task):
-
-```
-cancel_task → status CANCELLED, payment.state RELEASED
-settlement {seller_payout_cents 0, buyer_refund_cents 55, note "MPP payment pi_3URjVF… refunded in full (re_3URjVF…): cancelled by buyer"}
-```
-
 Manual equivalents:
 
 ```sh
@@ -96,8 +67,6 @@ curl -s http://localhost:3001/openapi.json | jq .                   # MPP discov
 export MPPX_STRIPE_SECRET_KEY=sk_test_…                             # lets the validator pay the challenge itself (test mode)
 npx mppx@0.13.5 validate http://localhost:3001 --endpoint POST:/api/pay/<task_id>   # protocol conformance + a real test-mode roundtrip
 ```
-
-`mppx validate … --endpoint POST:/api/pay/<task_id>` (2026-10-18 02:15 UTC): 17 passed, 0 failed — discovery document found, challenge format, error handling (malformed credential → 402 with a fresh challenge), and the Stripe roundtrip (`Payment [stripe]: submitted` / `successful HTTP 200`). The task it paid is `OPEN` afterwards, so point it at a task you are willing to have paid. Plain `mppx validate http://localhost:3001` (discovery mode) finds `/api/pay/{task_id}` in `/openapi.json` but then POSTs the literal `{task_id}` path and reports a 404: the amount is per task, so always pass `--endpoint`.
 
 ### The showcase: a buyer agent paying with the Link agent wallet
 
@@ -124,41 +93,7 @@ Then the agent, in one conversation:
 
 Spend controls to show on stage: the marketplace cap (`whoami` → `spend.cap_cents / reserved / spent / available`), Link's per-transaction and daily limits (`user-info retrieve`), and the approval on the phone. Record a screen capture; if Link onboarding or verification blocks, demo the simulated path above instead and keep card mode as the default.
 
-### Showcase run (real Link agent wallet, 2026-10-18 02:28–02:35 UTC)
-
-Done on this Mac with the user's own US Link account; all Stripe **test mode**. What was typed and what printed (ids trimmed; no secrets):
-
-```
-$ npx -y @stripe/link-cli@0.28.0 auth login --client-name "Claude Code" --interval 5
-  Open: https://app.link.com/device/setup?code=<four-word phrase>   ← one-time device pairing, approved in the Link app
-  ✓ Successfully authenticated!   (scope: userinfo:read payment_methods.agentic)
-$ link-cli user-info retrieve      → agent_wallet_spend_limits: per_transaction 50000c, daily 500000c, thirty_day 2000000c
-$ link-cli approval-policy retrieve → 403 "This feature is not enabled on your account" (so every spend asks the human)
-
-$ node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max 55
-  task_a67c7ede93b31a01  status=AWAITING_PAYMENT  payment_link=http://localhost:3001/api/pay/task_a67c7ede93b31a01
-
-$ link-cli mpp pay http://localhost:3001/api/pay/task_a67c7ede93b31a01 --method POST --test --context "Buying 55 cents of sandboxed qwen3:8b compute …"
-  Waiting for approval…  Approve in Link app: https://app.link.com/activity/approve/lsrq_1URjqU…   ← the human approves on the phone
-  Error: MPP challenge changed after approval; refusing to use the approved payment credential     ← see fix below
-$ link-cli mpp pay http://localhost:3001/api/pay/task_a67c7ede93b31a01 --spend-request-id lsrq_1URjqU… --method POST --test
-  HTTP 200 {"ok":true,"task_id":"task_a67c7ede93b31a01","status":"OPEN","payment_state":"PAID","amount_cents":55}
-
-Stripe: pi_3URjtc… succeeded, amount 55, livemode false, metadata {machine_payment:"true", mpp_sdk:"mppx/0.13.5", mpp_challenge_id:…, task_id:…},
-        payment method card visa ••4242 (Link test-mode credential), charge ch_3URjtc…
-[seller] claimed task_a67c… price=50c … submitted result_de8a…
-[judge]  APPROVE task_a67c…: RUBRIC_MATCH | payout 50c | MPP payment pi_3URjtc… of 55c kept 50c; refunded 5c to the buyer (re_3URjtc…); transferred 50c to acct_1URiul… (tr_3URjtc…)
-
-# after the challenge-pinning fix, the stock command works in one go (second task):
-$ link-cli mpp pay http://localhost:3001/api/pay/task_7e3eb7acecd29bda --method POST --test --context "…"
-  Approve in Link app: https://app.link.com/activity/approve/lsrq_1URjv7…   → HTTP 200 {"task_id":"task_7e3eb7acecd29bda","status":"OPEN","payment_state":"PAID"}
-```
-
-**Finding → fix.** `link-cli mpp pay` probes the URL, asks the human to approve the challenge it saw, then re-probes and refuses to pay if the challenge differs. It ignores `id` and `expires` in that comparison but not `opaque`, and mppx puts a fresh issuance nonce in `opaque` on every 402. `payTask` now pins each task's challenge: an unauthenticated probe gets the identical `WWW-Authenticate` header back until the challenge expires (5 min; checked with two `curl -i -X POST` calls returning the same `id`), and a request that carries a credential always goes to mppx. The approved spend request can also be reused directly with `--spend-request-id`, which is how the first task was completed.
-
-**What the human saw.** One device-pairing approval (once per machine), then one spend approval per task in the Link app, each showing the merchant, the amount and the `--context` text. With a Link approval policy enabled on the account (`approval-policy retrieve` returned 403 here) spends under the owner's limits can be auto-approved and the agent runs unattended.
-
-## Card mode — exact commands and what they printed
+## Card mode commands
 
 ```sh
 pnpm dev:server --no-open
@@ -167,8 +102,6 @@ pnpm daemon --role seller --runtime node --once
 pnpm daemon --role judge  --runtime node --once
 node scripts/buyer.mjs task <task_id>        # settlement.stripe_transfer_id is set
 ```
-
-2026-10-18 01:58 UTC, judge log: `APPROVE task_c611df…: RUBRIC_MATCH | payout 75c | seller ACTIVE | captured 75c of the 100c hold (pi_3URjMH…); remainder released; transferred 75c to acct_1URjFG… (tr_3URjMH…)`. Settlement: `kind STRIPE_TEST`, `seller_payout_cents 75`, `buyer_refund_cents 25`, `stripe_capture_id ch_…`, `stripe_transfer_id tr_…`. The connected account (created bare by the previous code, repaired in place) shows `stripe_transfers: active` and a pending balance of the transferred cents.
 
 ## GA vs preview
 
@@ -207,10 +140,7 @@ The service (A) orchestrates; the provider layer promises these, each covered by
 
 ## Removing the human from the loop (test money)
 
-Two different gates exist, and only one is ours:
-
-1. **Marketplace cap** (`spend_cap_cents`): ours, server-side, always on.
-2. **Link wallet approval**: Stripe Link's. Findings on 2026-10-18 with a real Link account: `approval-policy retrieve` → `403 This feature is not enabled on your account`; `spend-request create --approve --approval-detail {…programmatic…}` → `409 This automatically approved Spend Request is not allowed because no approval policy is configured`. So with the Link wallet **every spend needs a tap in the app** until Stripe enables approval policies for the account (then `spend-request create --use-approval-policy …` and `mpp pay --spend-request-id …` run unattended within the owner's limits).
+Two gates apply: the marketplace enforces its server-side spending cap, and the Link wallet can require the human to approve a spend request. Approval-policy availability depends on the Link account.
 
 For an agent that must pay **autonomously with test money today**, use the test-helper token instead of a wallet:
 
