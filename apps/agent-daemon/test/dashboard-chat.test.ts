@@ -71,9 +71,9 @@ it('posts a repeated prompt to another worker but reuses the reservation after a
  expect(keys).toHaveLength(3);expect(keys[0]).not.toBe(keys[1]);expect(keys[2]).toBe(keys[0]);
  expect(JSON.parse(fs.readFileSync(path.join(root,'chat-history.json'),'utf8'))[0].task_ids).toHaveLength(2);
 });
-it('runs a model that only offers thinking levels with thinking off under the action schema',async()=>{
+it('runs gpt-oss with low thinking under the action schema',async()=>{
  setup();call.mockResolvedValue(account);const seen:any[]=[];
- vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{if(url.endsWith('/api/tags'))return Response.json({models:[{name:'gpt-oss:20b'}]});if(url.endsWith('/api/show'))return Response.json({capabilities:['completion','tools','thinking'],thinking:{values:['low','medium','high']}});seen.push(JSON.parse(init.body));return Response.json({message:{role:'assistant',content:JSON.stringify({action:'final',answer:'Hello'})}});}));
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{if(url.endsWith('/api/tags'))return Response.json({models:[{name:'gpt-oss:20b'}]});if(url.endsWith('/api/show'))return Response.json({capabilities:['completion','tools','thinking'],model_info:{'general.architecture':'gpt-oss'}});seen.push(JSON.parse(init.body));return Response.json({message:{role:'assistant',content:JSON.stringify({action:'final',answer:'Hello'})}});}));
  expect((await request('POST',{prompt:'Hello',model:'gpt-oss:20b'})).status).toBe(202);await vi.waitFor(async()=>expect((await request('GET')).body.runs[0].status).toBe('finished'));
- expect(seen[0].think).toBe(false);expect(seen[0].format.oneOf).toBeDefined();
+ expect(seen[0].think).toBe('low');expect(seen[0].format.oneOf).toBeDefined();
 });
