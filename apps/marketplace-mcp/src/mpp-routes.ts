@@ -10,6 +10,11 @@ import { payTask } from "./mpp.js";
 import { mppProvider, payments } from "./payments.js";
 
 export function registerMppRoutes(server: MCPServer): void {
+  server.get("/openapi.json", (c) => {
+    const provider = mppProvider();
+    if (!provider) return c.json({ error: { code: "NOT_FOUND", message: "No MPP-payable routes on this server (no STRIPE_PROFILE_ID)." } }, 404);
+    return c.json(provider.discoveryDocument());
+  });
   server.all("/api/pay/:task_id", async (c) => {
     const provider = mppProvider();
     if (!provider) {

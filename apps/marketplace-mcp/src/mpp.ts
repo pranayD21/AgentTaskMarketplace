@@ -18,6 +18,7 @@
  */
 import type Stripe from "stripe";
 import { Receipt } from "mppx";
+import { generate as generateOpenApi } from "mppx/discovery";
 import { Mppx, stripe as mppStripe } from "mppx/server";
 import { sha256Hex, utf8 } from "@atm/crypto";
 import { MarketplaceError, isPast, nowIso } from "@atm/shared";
@@ -118,6 +119,27 @@ export class StripeMppProvider implements PaymentProvider {
     this.mppx ??= buildMppx(this);
     return this.mppx;
   }
+
+  /**
+   * MPP discovery document (OpenAPI 3 + `x-payment-info`) served at /openapi.json
+   * so wallets and `mppx validate` can find the paid route without a task id.
+   * The amount shown is the rail minimum; each task's challenge carries its own.
+   */
+  discoveryDocument(): Record<string, unknown> {
+    const mppx = this.handler();
+    return generateOpenApi(mppx, {
+      info: { title: "Agent Task Marketplace — task payments (Stripe TEST MODE)", version: "0.1.0" },
+      routes: [
+        {
+          method: "POST",
+          path: "/api/pay/{task_id}",
+          summary: "Pay a posted task's max price with a Shared Payment Token (Machine Payments Protocol). The task becomes OPEN for sellers once paid.",
+          requestBody: { required: false, content: { "application/json": { schema: { type: "object", description: "No body needed; the task id in the path selects the amount." } } } },
+          handler: mppx.charge({ amount: (this.min_cents / 100).toFixed(2), description: "Agent Task Marketplace task (max price; the real amount is in each task's challenge)" }),
+        },
+      ],
+    });
+  }
 }
 
 /** HMAC key for mppx challenge ids: MPP_SECRET_KEY, else derived from the server KEK. */
@@ -138,7 +160,7 @@ function buildMppx(p: StripeMppProvider) {
     // Tag the PaymentIntent with the task so the seller transfer reconciles in the dashboard.
     connect: ({ request }) => (request.externalId ? { transferGroup: request.externalId } : undefined),
   });
-  return Mppx.create({ methods: [method], secretKey: mppSecret(), realm: new URL(p.baseUrl).host });
+  return Mppx.create({ methods: [method], secretKey: mppSecret(), realm: new URL(p.baseUrl).hostname });
 }
 
 // ---------------------------------------------------------------------------
