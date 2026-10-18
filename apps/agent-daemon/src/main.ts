@@ -13,6 +13,8 @@ import { NodeRuntime } from "./runtime/node.js";
 import { lockIdentity, readAgentState, registerSavedAgent } from "./identity.js";
 import { requireCompatibleRelease } from "./release.js";
 import type { Runtime } from "./runtime/types.js";
+import type { LiveView, OpenMode } from "./viewer/server.js";
+import type { Tap } from "./viewer/tap.js";
 
 const cliArgs = process.argv.slice(2);
 if (cliArgs[0] === "--") cliArgs.shift();
@@ -36,6 +38,10 @@ const { values: args } = parseArgs({
     "deny-ollama": { type: "boolean", default: false },
     "deny-marketplace": { type: "boolean", default: false },
     once: { type: "boolean", default: false },
+    viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" },
+    "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? "4700" },
+    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? "each" },
+    "viewer-no-tap": { type: "boolean", default: false },
   },
 });
 if (!["seller", "judge"].includes(args.role) || !["wassette", "node"].includes(args.runtime)) throw new Error("Use --role seller|judge and --runtime wassette|node");
@@ -46,6 +52,8 @@ if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.rol
 if (args["measurement-file"] && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires a computer-id of 1–64 letters, digits, dots, dashes or underscores");
 if (args["register-only"] && args.role !== "seller") throw new Error("register-only requires seller role");
 if (args["estimated-watts"] && (!args["measurement-file"] || !Number.isFinite(Number(args["estimated-watts"])) || Number(args["estimated-watts"]) <= 0)) throw new Error("estimated-watts requires a measurement file and positive watts");
+if (!["each", "first", "never"].includes(args["viewer-open"])) throw new Error("viewer-open must be each|first|never");
+if (!Number.isInteger(Number(args["viewer-port"])) || Number(args["viewer-port"]) < 0) throw new Error("viewer-port must be a port number (0 picks a free one)");
 const role = args.role as "seller" | "judge";
 const MARKETPLACE_URL = process.env.MARKETPLACE_URL ?? "http://localhost:3000/mcp";
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
@@ -54,7 +62,16 @@ const suffix = args["display-name"] ? `-${createHash("sha256").update(args["disp
 const STATE_FILE = args["state-file"] ? path.resolve(args["state-file"]) : path.join(STATE_DIR, `${role}${suffix}.json`);
 const pollMs = Number(args["poll-ms"]);
 const measurementFile = args["measurement-file"] ? path.resolve(STATE_DIR, "..", args["measurement-file"]) : undefined;
-const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), `[${role}]`, ...a);
+let viewer: LiveView | undefined;
+const taps: Tap[] = [];
+// With the observer tap on, the sandbox reaches the marketplace and Ollama through 127.0.0.1 forwarders.
+let SANDBOX_MARKETPLACE_URL = MARKETPLACE_URL;
+let SANDBOX_OLLAMA_URL = OLLAMA_URL;
+const log = (...a: unknown[]) => {
+  const line = [new Date().toISOString().slice(11, 19), `[${role}]`, ...a];
+  console.log(...line);
+  viewer?.log(line.map(String).join(" "));
+};
 
 interface State { agent_id: string; api_key: string; display_name: string }
 
@@ -90,11 +107,13 @@ async function makeRuntime(apiKey: string): Promise<Runtime> {
   if (args.runtime === "wassette") {
     const { WassetteRuntime } = await import("./runtime/wassette.js");
     return new WassetteRuntime(role, role === "judge" ? process.env.JUDGE_PRIVATE_KEY_B64 : undefined, {
-      apiKey, marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, denyOllama: args["deny-ollama"], denyMarketplace: args["deny-marketplace"],
+      apiKey, marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, denyOllama: args["deny-ollama"], denyMarketplace: args["deny-marketplace"], observer: viewer,
       stateDir: STATE_DIR,
     });
   }
-  return new NodeRuntime(role === "judge" ? process.env.JUDGE_PRIVATE_KEY_B64 : undefined, { AGENT_API_KEY: apiKey });
+  const node = new NodeRuntime(role === "judge" ? process.env.JUDGE_PRIVATE_KEY_B64 : undefined, { AGENT_API_KEY: apiKey });
+  if (viewer) viewer.vmUpdate(viewer.vmStarted({ role, runtime: "node-unsandboxed", wassette_version: null, wasm_sha256: null, network: [], env: [] }), { state: "ready", pid: process.pid });
+  return node;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -124,7 +143,7 @@ async function judgeLoop(rt: Runtime) {
   log(`judging with runtime=${info.runtime} (${info.description}); each round is one judge-cycle call that fetches, grades and submits inside the runner`);
   for (;;) {
     try {
-      const out = await rt.judgeCycle({ marketplace_url: MARKETPLACE_URL, judge_model: process.env.JUDGE_MODEL });
+      const out = await rt.judgeCycle({ marketplace_url: SANDBOX_MARKETPLACE_URL, judge_model: process.env.JUDGE_MODEL });
       if (out.idle) { if (args.once) { log("idle: nothing to review"); return; } await sleep(pollMs); continue; }
       recordJudgeUsage(out.task_id, out.result_id, out.usage);
       if (out.kind === "deferred") {
@@ -157,9 +176,36 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, async ()
   await rt?.close();
   await mp.close();
   unlock?.();
+  await closeViewer();
   process.exit(0);
 });
+async function startViewer() {
+  const { startLiveView } = await import("./viewer/server.js");
+  const tap = !args["viewer-no-tap"];
+  viewer = await startLiveView({ port: Number(args["viewer-port"]), open: args["viewer-open"] as OpenMode, role, runtime: args.runtime, marketplaceUrl: MARKETPLACE_URL, tap });
+  log(`live view: ${viewer.url} (a new window opens for each sandbox instance; --viewer-open each|first|never)`);
+  if (!tap) return;
+  const { startTap } = await import("./viewer/tap.js");
+  const marketplaceTap = await startTap(viewer, "marketplace", MARKETPLACE_URL);
+  taps.push(marketplaceTap);
+  SANDBOX_MARKETPLACE_URL = marketplaceTap.url;
+  // The denied-Ollama demo needs the real Ollama hostname so the policy still blocks it.
+  if (!args["deny-ollama"]) {
+    const ollamaTap = await startTap(viewer, "ollama", OLLAMA_URL);
+    taps.push(ollamaTap);
+    SANDBOX_OLLAMA_URL = ollamaTap.url;
+  }
+  log("observer tap ON: the sandbox reaches the marketplace and Ollama via 127.0.0.1 forwarders so the live view can show the prompt and stream model output. Demo aid; it exposes decrypted task content on this machine.");
+}
+
+async function closeViewer() {
+  for (const tap of taps.splice(0)) await tap.close().catch(() => {});
+  await viewer?.close().catch(() => {});
+  viewer = undefined;
+}
+
 try {
+  if (args.viewer) await startViewer();
   log(`marketplace ${MARKETPLACE_URL}`);
   if (args["canary-only"]) {
     rt = await makeRuntime("local-canary-no-marketplace-identity");
@@ -171,7 +217,7 @@ try {
       const finish = recorder?.begin({ kind: "model_canary", model_id: model, model_digest: models.find((m) => m.model_id === model)?.digest });
       try {
         if (!rt.modelCanary) throw new Error("CANARY_UNSUPPORTED");
-        const out = await rt.modelCanary({ ollama_url: OLLAMA_URL, model_id: model });
+        const out = await rt.modelCanary({ ollama_url: SANDBOX_OLLAMA_URL, model_id: model });
         finish?.({ status: out.passed ? "passed" : "failed", ...out, error_code: out.passed ? undefined : "CANARY_MISMATCH" });
         log(`canary model=${model} passed=${out.passed} runtime=${rt.info().runtime} elapsed=${out.runtime_ms}ms; no marketplace task; not attestation`);
         if (!out.passed) process.exitCode = 1;
@@ -195,7 +241,7 @@ try {
       if (prepared.seller_id !== state.agent_id || prepared.runner_sha256 !== rt.info().wasm_sha256) throw new Error("MODEL_SETUP_REQUIRED");
     }
     if (role === "seller") await sellerLoop(mp, rt, {
-      marketplaceUrl: MARKETPLACE_URL, ollamaUrl: OLLAMA_URL, pollMs,
+      marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, pollMs,
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       registerOnly: args["register-only"],
       beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {
@@ -231,4 +277,10 @@ try {
 } catch (error) {
   log(`stopped: ${safeFailureCode(error)}`);
   process.exitCode = 1;
-} finally { await rt?.close(); await mp.close(); unlock?.(); }
+} finally {
+  await rt?.close();
+  await mp.close();
+  unlock?.();
+  if (viewer && !stopping) { log(`run finished; live view stays at ${viewer.url}. Press Ctrl-C to exit.`); await new Promise(() => {}); }
+  await closeViewer();
+}

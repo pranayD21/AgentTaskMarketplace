@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandbox Live View</title>
+<style>
+:root {
+  --bg: #0b0e14; --panel: #121722; --panel-2: #171d2b; --line: #232b3d; --text: #e6e9f0; --muted: #8a93a8; --faint: #5b6478;
+  --accent: #6ea8ff; --ok: #3ecf8e; --warn: #f5b84b; --bad: #ff6b6b; --busy: #b18cff;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f5f6f9; --panel: #ffffff; --panel-2: #f0f2f7; --line: #dfe3ec; --text: #161a23; --muted: #5d6578; --faint: #9aa2b4;
+    --accent: #2f6fe0; --ok: #12a26a; --warn: #b7791f; --bad: #d64545; --busy: #7c4ddb; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); display: inline-block; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.chip.sim { color: var(--busy); border-color: color-mix(in srgb, var(--busy) 45%, transparent); }
+.grow { flex: 1; }
+main { flex: 1; display: grid; grid-template-columns: 260px 1fr; min-height: 0; }
+aside { border-right: 1px solid var(--line); overflow: auto; padding: 10px; background: var(--panel); }
+aside h2, section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 4px 4px 8px; font-weight: 600; }
+.vm-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 8px; cursor: pointer; background: var(--panel-2); }
+.vm-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.vm-card .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.vm-card .name { font-weight: 600; }
+.vm-card .sub { color: var(--muted); font-size: 11px; margin-top: 4px; font-family: var(--mono); }
+.badge { font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.b-booting { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.b-ready { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.b-busy { background: color-mix(in srgb, var(--busy) 20%, transparent); color: var(--busy); }
+.b-closed { background: color-mix(in srgb, var(--faint) 20%, transparent); color: var(--muted); }
+.b-crashed { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.content { overflow: auto; padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.vm-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.vm-head .title { font-size: 18px; font-weight: 650; }
+.kv { display: flex; flex-direction: column; }
+.kv span:first-child { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.kv span:last-child { font-family: var(--mono); font-size: 13px; }
+.spark { display: flex; align-items: center; gap: 6px; }
+.policy { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+.policy code { font-family: var(--mono); font-size: 11.5px; background: var(--panel-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; color: var(--text); }
+.boot { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.boot .b { font-size: 11px; font-family: var(--mono); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.boot .b.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.boot .b.active { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.boot .b.failed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+.runs { display: flex; gap: 6px; flex-wrap: wrap; }
+.runs button { font: inherit; font-size: 11.5px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; cursor: pointer; }
+.runs button.sel { color: var(--text); border-color: var(--accent); }
+.pipeline { display: flex; align-items: stretch; gap: 0; margin-top: 12px; overflow-x: auto; padding-bottom: 4px; }
+.stage { flex: 1; min-width: 110px; position: relative; padding: 10px 10px 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; margin-right: 18px; }
+.stage:not(:last-child)::after { content: ""; position: absolute; right: -15px; top: 50%; width: 12px; height: 2px; background: var(--line); }
+.stage .n { font-size: 10px; color: var(--faint); font-family: var(--mono); }
+.stage .l { font-weight: 600; margin-top: 2px; }
+.stage .m { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 3px; min-height: 15px; }
+.stage.active { border-color: var(--busy); }
+.stage.active .l { color: var(--busy); }
+.stage.active::before { content: ""; position: absolute; inset: -1px; border-radius: 10px; border: 1px solid var(--busy); animation: pulse 1.2s ease-in-out infinite; }
+.stage.done { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.stage.done .l { color: var(--ok); }
+.stage.failed { border-color: var(--bad); }
+.stage.failed .l { color: var(--bad); }
+.stage.skipped { opacity: .45; }
+@keyframes pulse { 0%,100% { opacity: .2 } 50% { opacity: 1 } }
+.run-summary { margin-top: 10px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.run-summary b { color: var(--text); font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; }
+.msg { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel-2); }
+.msg .r { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--accent); font-weight: 600; margin-bottom: 3px; }
+.msg pre, .out pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12.5px; }
+.out { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 180px; max-height: 420px; overflow: auto; }
+.cursor { display: inline-block; width: 7px; height: 14px; background: var(--busy); vertical-align: -2px; animation: pulse 1s steps(2) infinite; }
+.meta { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; flex-wrap: wrap; }
+.empty { color: var(--faint); font-style: italic; padding: 8px 2px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 6px; border-bottom: 1px solid var(--line); font-family: var(--mono); vertical-align: top; }
+tr.net { cursor: pointer; }
+tr.net:hover td { background: var(--panel-2); }
+td.s-ok { color: var(--ok); } td.s-bad { color: var(--bad); } td.s-pend { color: var(--busy); }
+.tgt { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+.tgt.ollama { color: var(--busy); } .tgt.marketplace { color: var(--accent); }
+tr.detail td { background: var(--panel-2); }
+tr.detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 11.5px; max-height: 320px; overflow: auto; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.detail-grid h4 { margin: 0 0 4px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.timeline { font-family: var(--mono); font-size: 11.5px; max-height: 300px; overflow: auto; }
+.timeline div { padding: 2px 0; border-bottom: 1px dashed color-mix(in srgb, var(--line) 60%, transparent); white-space: pre-wrap; word-break: break-word; }
+.timeline .ts { color: var(--faint); margin-right: 8px; }
+.timeline .k { display: inline-block; min-width: 56px; color: var(--accent); }
+.timeline .k.stderr { color: var(--warn); } .timeline .k.log { color: var(--muted); } .timeline .k.vm { color: var(--ok); }
+.welcome { margin: auto; text-align: center; color: var(--muted); max-width: 520px; padding: 40px 16px; }
+.welcome h2 { color: var(--text); font-size: 18px; text-transform: none; letter-spacing: 0; }
+footer { padding: 6px 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; background: var(--panel); }
+.toast { position: fixed; right: 16px; bottom: 40px; background: var(--panel); border: 1px solid var(--accent); padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.3); display: none; cursor: pointer; }
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 180px; }
+  .grid2, .detail-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="conn"></span>
+  <h1>Sandbox Live View</h1>
+  <span class="chip" id="role">connecting…</span>
+  <span class="chip" id="mkt"></span>
+  <span class="grow"></span>
+  <span class="chip sim" id="sim" hidden>SIMULATED DEMO DATA</span>
+  <span class="chip warn" id="tap" hidden title="Sandbox traffic to the marketplace and Ollama is routed through a 127.0.0.1 tap on this machine.">observer tap on · prompts &amp; output visible</span>
+  <label class="chip"><input type="checkbox" id="follow" checked> follow newest</label>
+</header>
+<main>
+  <aside>
+    <h2>Sandbox instances</h2>
+    <div id="vmlist"><div class="empty">No instance yet. One starts when the daemon boots its runner.</div></div>
+  </aside>
+  <div class="content" id="content">
+    <div class="welcome" id="welcome">
+      <h2>Waiting for a sandbox instance…</h2>
+      <p>Each time the daemon starts a Wassette (Wasmtime) instance it appears here, with its policy, every call into it, its network traffic and the model's output as it is generated.</p>
+    </div>
+  </div>
+</main>
+<footer>Wassette sandbox = WebAssembly isolation under a deny-by-default network policy. It is not a TEE, and model digests are not attestation. Observer tap is a demo aid.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const SELLER_STAGES = [
+  ["claim", "Claim task", "claim_task"], ["start", "Start", "start_task"], ["keys", "Recipient keys", "get_recipient_keys"],
+  ["tags", "Model check", "/api/tags"], ["infer", "Model inference", "/api/chat"], ["submit", "Seal + submit", "submit_result"],
+];
+const JUDGE_STAGES = [["fetch", "Fetch review", "fetch_review_package"], ["grade", "Decrypt + grade", null], ["verdict", "Submit verdict", "submit_verdict"]];
+const CYCLES = new Set(["run-cycle", "run-cycle-measured", "judge-cycle", "model-canary", "run-task", "judge-task"]);
+const BOOT = [["spawn", "spawn wassette"], ["load-component", "load runner.wasm"], ["grant-network-permission", "network grants"], ["grant-environment-variable-permission", "env grants"], ["ready", "ready"]];
+
+const S = { hello: null, vms: new Map(), selected: null, follow: true, nets: new Map(), expanded: new Set(), selectedRun: null };
+const routeVm = location.pathname.match(/^\/vm\/([\w-]+)/)?.[1] || null;
+if (routeVm) { S.selected = routeVm; S.follow = false; document.getElementById("follow").checked = false; }
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtMs = (ms) => ms == null ? "" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
+const fmtDur = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const fmtTime = (at) => new Date(at).toLocaleTimeString([], { hour12: false });
+const json = (v) => v === undefined ? "" : esc(JSON.stringify(v, null, 2));
+
+function vmOf(id) {
+  if (!id) id = "daemon";
+  let vm = S.vms.get(id);
+  if (!vm) {
+    vm = { id, role: S.hello?.role || "seller", runtime: id === "daemon" ? "daemon" : "?", state: id === "daemon" ? "ready" : "booting", grants: [], env: [], boot: {},
+      runs: [], cpu: [], rss: [], timeline: [], startedAt: Date.now(), pid: null };
+    S.vms.set(id, vm);
+  }
+  return vm;
+}
+function currentRun(vm, create) {
+  let run = vm.runs.at(-1);
+  if ((!run || run.status !== "running") && create) run = newRun(vm, "implicit");
+  return run;
+}
+function newRun(vm, kind) {
+  const stages = {};
+  for (const [k] of (vm.role === "judge" ? JUDGE_STAGES : SELLER_STAGES)) stages[k] = { state: "pending" };
+  const run = { n: vm.runs.length + 1, kind, status: "running", startedAt: Date.now(), stages, prompt: null, output: "", thinking: "", tokens: 0, model: null, firstAt: null, lastAt: null, result: null, error: null, opts: null, nets: [] };
+  vm.runs.push(run);
+  if (vm.id === S.selected) S.selectedRun = null;
+  return run;
+}
+function stageFor(vm, call) {
+  const list = vm.role === "judge" ? JUDGE_STAGES : SELLER_STAGES;
+  return list.find(([, , c]) => c && (call === c || (c.startsWith("/") && call?.startsWith(c))))?.[0];
+}
+function pushTimeline(vm, at, kind, text) {
+  vm.timeline.push({ at, kind, text });
+  if (vm.timeline.length > 1500) vm.timeline.splice(0, vm.timeline.length - 1500);
+}
+
+function apply(e) {
+  switch (e.t) {
+    case "hello": S.hello = e; break;
+    case "vm": {
+      const fresh = !S.vms.has(e.vm);
+      const vm = vmOf(e.vm);
+      if (fresh) {
+        vm.startedAt = e.at;
+        const pre = S.vms.get("daemon");
+        if (pre && !pre.runs.length) { vm.timeline = pre.timeline.concat(vm.timeline); S.vms.delete("daemon"); }
+      }
+      if (e.role) vm.role = e.role;
+      if (e.runtime) vm.runtime = e.runtime;
+      if (e.wassette_version !== undefined) vm.version = e.wassette_version;
+      if (e.wasm_sha256 !== undefined) vm.sha = e.wasm_sha256;
+      if (e.network) vm.grants = e.network;
+      if (e.env) vm.env = e.env;
+      if (e.pid != null) { vm.pid = e.pid; vm.boot.spawn = { state: "done", ms: e.at - vm.startedAt }; }
+      if (e.component) vm.component = e.component;
+      if (e.state) {
+        vm.state = e.state;
+        if (e.state === "booting" && !vm.boot.spawn) vm.boot.spawn = { state: "active" };
+        if (e.state === "ready" && !vm.readyAt) { vm.readyAt = e.at; vm.boot.ready = { state: "done", ms: e.at - vm.startedAt }; }
+        if (e.state === "closed" || e.state === "crashed") {
+          vm.closedAt = e.at; vm.reason = e.reason;
+          const run = vm.runs.at(-1);
+          if (run?.status === "running") { run.status = "failed"; run.error = e.reason; run.endedAt = e.at; }
+        }
+      }
+      pushTimeline(vm, e.at, "vm", fresh ? `instance created · ${vm.runtime} ${vm.version || ""} · allow-list ${vm.grants.join(", ") || "-"}` : `${e.state ? "state → " + e.state : ""}${e.pid ? " pid " + e.pid : ""}${e.component ? " component " + e.component : ""}${e.reason && e.reason !== "closed" ? " (" + e.reason + ")" : ""}`);
+      if (fresh) activity(vm);
+      if (fresh && !S.follow && e.vm !== S.selected && e.vm !== "daemon") toast(e.vm);
+      break;
+    }
+    case "step": {
+      const vm = vmOf(e.vm);
+      if (CYCLES.has(e.name)) {
+        if (e.phase === "start") { const run = newRun(vm, e.name); run.opts = e.args; run.startedAt = e.at; vm.state = "busy"; }
+        else {
+          const run = vm.runs.at(-1);
+          if (vm.state === "busy") vm.state = "ready";
+          if (!run) break;
+          const idle = e.result && e.result.idle === true;
+          if (idle) { vm.runs.pop(); vm.idlePolls = (vm.idlePolls || 0) + 1; break; }
+          run.endedAt = e.at; run.ms = e.ms;
+          run.status = e.ok ? "done" : "failed"; run.result = e.result; run.error = e.error;
+          for (const st of Object.values(run.stages)) {
+            if (st.state === "active") st.state = e.ok ? "done" : "failed";
+            if (st.state === "pending") st.state = e.ok ? "skipped" : "pending";
+          }
+          pushTimeline(vm, e.at, "cycle", `${e.name} ${e.ok ? "finished" : "failed"} in ${fmtMs(e.ms)}${e.error ? " · " + e.error : ""}`);
+        }
+      } else {
+        const key = e.name;
+        const prev = vm.boot[key];
+        if (e.phase === "start") vm.boot[key] = { state: "active", count: (prev?.count || 0) + 1, startedAt: e.at, ms: prev?.ms || 0 };
+        else vm.boot[key] = { ...prev, state: e.ok ? "done" : "failed", ms: (prev?.ms || 0) + (e.ms || 0) };
+        if (e.phase === "end") pushTimeline(vm, e.at, "call", `${e.name}${e.args?.host ? " " + e.args.host : e.args?.key ? " " + e.args.key : ""} → ${e.ok ? "ok" : "failed " + (e.error || "")} (${fmtMs(e.ms)})`);
+      }
+      break;
+    }
+    case "net": {
+      if (e.phase === "start") {
+        const vm = vmOf(e.vm);
+        const run = currentRun(vm, true);
+        const rec = { ...e, vmId: vm.id, run, startAt: e.at, status: null };
+        S.nets.set(e.id, rec); run.nets.push(rec);
+        const st = stageFor(vm, e.call);
+        if (st) {
+          run.stages[st] = { state: "active", at: e.at };
+          if (st === "claim" || st === "infer") activity(vm);
+          if (st === "infer") {
+            if (run.stages.keys?.state === "pending") run.stages.keys.state = "skipped";
+            run.prompt = e.req?.messages || null; run.model = e.req?.model || null; run.output = ""; run.thinking = ""; run.tokens = 0; run.firstAt = null; run.inferStart = e.at;
+          }
+          if (st === "verdict" && run.stages.grade) run.stages.grade = { state: "done", ms: e.at - (run.gradeAt || e.at) };
+        }
+        pushTimeline(vm, e.at, e.target, `→ ${e.method} ${e.call}`);
+      } else {
+        const rec = S.nets.get(e.id);
+        if (!rec) break;
+        Object.assign(rec, { status: e.status, ms: e.ms, ok: e.ok, res: e.res, error: e.error });
+        const vm = vmOf(rec.vmId), run = rec.run;
+        const st = stageFor(vm, rec.call);
+        if (st && run.stages[st]) run.stages[st] = { state: e.ok ? "done" : "failed", ms: e.ms };
+        if (st === "fetch" && e.ok) {
+          if (e.res && e.res.package === null) run.idleFetch = true;
+          else { run.stages.grade = { state: "active" }; run.gradeAt = e.at; run.review = e.res?.package; activity(vm); }
+        }
+        if (st === "infer" && e.res) run.inferRes = e.res;
+        if (rec.call === "release_task") { run.status = "failed"; run.error = run.error || "released"; }
+        if (rec.call === "submit_result" && e.ok) run.submitted = e.res;
+        if (rec.call === "submit_verdict" && e.ok) run.verdict = e.res;
+        pushTimeline(vm, e.at, rec.target, `← ${rec.call} ${e.status}${e.error ? " " + e.error : ""} (${fmtMs(e.ms)})`);
+      }
+      break;
+    }
+    case "token": {
+      const rec = S.nets.get(e.id);
+      const run = rec ? rec.run : currentRun(vmOf(e.vm), true);
+      run.output += e.text || ""; run.thinking += e.thinking || ""; run.tokens++;
+      run.firstAt ??= e.at; run.lastAt = e.at;
+      break;
+    }
+    case "stats": {
+      const vm = vmOf(e.vm);
+      vm.cpu.push(e.cpu); vm.rss.push(e.rss);
+      if (vm.cpu.length > 90) { vm.cpu.shift(); vm.rss.shift(); }
+      break;
+    }
+    case "stderr": pushTimeline(vmOf(e.vm), e.at, "stderr", e.line); break;
+    case "log": {
+      const target = S.vms.size ? [...S.vms.values()].filter((v) => v.id !== "daemon").at(-1) || vmOf("daemon") : vmOf("daemon");
+      pushTimeline(target, e.at, "log", e.line);
+      break;
+    }
+  }
+}
+
+/** "follow newest" tracks the instance that most recently started real work. */
+function activity(vm) {
+  if (!S.follow || S.selected === vm.id) return;
+  S.selected = vm.id; S.selectedRun = null;
+}
+
+function toast(vmId) {
+  const t = $("toast");
+  t.innerHTML = `New sandbox instance <b>${esc(vmId)}</b> — click to view`;
+  t.style.display = "block";
+  t.onclick = () => { S.selected = vmId; S.selectedRun = null; t.style.display = "none"; history.replaceState(null, "", `/vm/${vmId}`); render(); };
+  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = "none"), 6000);
+}
+
+function spark(values, max, color) {
+  if (!values.length) return `<svg width="90" height="22"></svg>`;
+  const m = max || Math.max(...values, 1);
+  const pts = values.map((v, i) => `${(i / Math.max(values.length - 1, 1)) * 88 + 1},${21 - (v / m) * 19}`).join(" ");
+  return `<svg width="90" height="22" viewBox="0 0 90 22"><polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+
+function renderSidebar() {
+  const list = [...S.vms.values()].filter((v) => v.id !== "daemon" || v.runs.length);
+  if (!list.length) return;
+  $("vmlist").innerHTML = list.slice().reverse().map((vm) => {
+    const up = (vm.closedAt || Date.now()) - vm.startedAt;
+    const runs = vm.runs.length;
+    return `<div class="vm-card ${vm.id === S.selected ? "sel" : ""}" data-vm="${esc(vm.id)}">
+      <div class="row"><span class="name">${esc(vm.id === "daemon" ? "daemon" : vm.id)} · ${esc(vm.role)}</span><span class="badge b-${esc(vm.state)}">${esc(vm.state)}</span></div>
+      <div class="sub">${esc(vm.runtime)}${vm.pid ? " · pid " + vm.pid : ""} · ${fmtDur(up)}</div>
+      <div class="sub">${runs} run${runs === 1 ? "" : "s"}${vm.idlePolls ? ` · ${vm.idlePolls} idle polls` : ""}</div>
+    </div>`;
+  }).join("");
+  for (const el of document.querySelectorAll(".vm-card")) el.onclick = () => {
+    S.selected = el.dataset.vm; S.selectedRun = null; S.follow = false; $("follow").checked = false;
+    history.replaceState(null, "", `/vm/${S.selected}`); render();
+  };
+}
+
+function renderStage(n, label, st) {
+  const m = st.state === "active" ? "running…" : st.state === "skipped" ? "skipped" : st.ms != null ? fmtMs(st.ms) : "";
+  return `<div class="stage ${st.state}"><div class="n">${String(n).padStart(2, "0")}</div><div class="l">${esc(label)}</div><div class="m">${esc(m)}</div></div>`;
+}
+
+function renderContent() {
+  const vm = S.vms.get(S.selected) || [...S.vms.values()].filter((v) => v.id !== "daemon").at(-1);
+  if (!vm) return;
+  $("welcome")?.remove();
+  const run = S.selectedRun != null ? vm.runs[S.selectedRun] : vm.runs.at(-1);
+  const up = (vm.closedAt || Date.now()) - vm.startedAt;
+  const cpu = vm.cpu.at(-1), rss = vm.rss.at(-1);
+  const stages = vm.role === "judge" ? JUDGE_STAGES : SELLER_STAGES;
+  const isLive = run && run.status === "running";
+  const tokRate = run && run.tokens > 1 && run.lastAt > run.firstAt ? (run.tokens - 1) / ((run.lastAt - run.firstAt) / 1000) : null;
+
+  const outEl = document.querySelector(".out");
+  const stick = !outEl || outEl.scrollTop + outEl.clientHeight >= outEl.scrollHeight - 30;
+  const tlEl = document.querySelector(".timeline");
+  const tlStick = !tlEl || tlEl.scrollTop + tlEl.clientHeight >= tlEl.scrollHeight - 30;
+  const outScroll = outEl?.scrollTop, tlScroll = tlEl?.scrollTop;
+
+  const summary = !run ? "" : run.status === "running" ? `<b>running</b> · ${fmtDur(Date.now() - run.startedAt)} elapsed` :
+    `<b class="${run.status === "done" ? "" : ""}">${run.status === "done" ? "completed" : "failed"}</b> in ${fmtMs(run.ms ?? (run.endedAt - run.startedAt))}` +
+    (run.result?.result_id ? ` · result ${esc(run.result.result_id)}` : "") +
+    (run.result?.price_cents ? ` · ${run.result.price_cents}c` : "") +
+    (run.result?.tokens_out != null ? ` · ${run.result.tokens_out} tokens` : "") +
+    (run.result?.verdict ? ` · verdict <b>${esc(run.result.verdict)}</b> ${esc(run.result.reason_code || "")}` : "") +
+    (run.error ? ` · <span style="color:var(--bad)">${esc(run.error)}</span>` : "");
+  const task = run?.opts?.task_id || run?.nets.find((n) => n.req?.task_id)?.req?.task_id || run?.result?.task_id;
+
+  const nets = run ? run.nets : [];
+  const netRows = nets.map((n) => {
+    const cls = n.status == null ? "s-pend" : n.ok ? "s-ok" : "s-bad";
+    const open = S.expanded.has(n.id);
+    return `<tr class="net" data-id="${esc(n.id)}"><td>${fmtTime(n.startAt)}</td><td><span class="tgt ${esc(n.target)}">${esc(n.target)}</span></td><td>${esc(n.call)}</td><td class="${cls}">${n.status ?? "…"}${n.error ? " " + esc(n.error).slice(0, 60) : ""}</td><td>${n.ms != null ? fmtMs(n.ms) : ""}</td></tr>` +
+      (open ? `<tr class="detail"><td colspan="5"><div class="detail-grid"><div><h4>request</h4><pre>${json(n.req) || "—"}</pre></div><div><h4>response</h4><pre>${json(n.res) || esc(n.error) || "—"}</pre></div></div></td></tr>` : "");
+  }).join("");
+
+  $("content").innerHTML = `
+  <section class="panel">
+    <div class="vm-head">
+      <span class="title">${esc(vm.id)} · ${esc(vm.role)}</span>
+      <span class="badge b-${esc(vm.state)}">${esc(vm.state)}</span>
+      <div class="kv"><span>runtime</span><span>${esc(vm.runtime)} ${esc(vm.version || "")}</span></div>
+      <div class="kv"><span>pid</span><span>${vm.pid ?? "—"}</span></div>
+      <div class="kv"><span>uptime</span><span>${fmtDur(up)}</span></div>
+      <div class="kv"><span>boot</span><span>${vm.readyAt ? fmtMs(vm.readyAt - vm.startedAt) : "…"}</span></div>
+      <div class="spark"><div class="kv"><span>cpu</span><span>${cpu != null ? cpu.toFixed(0) + "%" : "—"}</span></div>${spark(vm.cpu, 100, "var(--busy)")}</div>
+      <div class="spark"><div class="kv"><span>memory</span><span>${rss != null ? (rss / 1048576).toFixed(0) + " MB" : "—"}</span></div>${spark(vm.rss, 0, "var(--accent)")}</div>
+    </div>
+    <div class="policy">network allow-list ${vm.grants.length ? vm.grants.map((g) => `<code>${esc(g)}</code>`).join("") : "<code>none</code>"} &nbsp; env ${vm.env.length ? vm.env.map((g) => `<code>${esc(g)}</code>`).join("") : "<code>none</code>"}${vm.sha ? ` &nbsp; runner.wasm <code title="${esc(vm.sha)}">sha256 ${esc(vm.sha.slice(0, 12))}…</code>` : ""}</div>
+    ${vm.runtime === "node-unsandboxed" ? `<div class="policy" style="color:var(--bad)">UNSANDBOXED Node fallback: no Wasm instance, the host can read everything.</div>` : ""}
+    <div class="boot">${BOOT.map(([k, l]) => { const b = vm.boot[k] || { state: "pending" }; return `<span class="b ${b.state}">${esc(l)}${b.count > 1 ? " ×" + b.count : ""}${b.ms ? " · " + fmtMs(b.ms) : ""}</span>`; }).join("")}${vm.reason && vm.reason !== "closed" ? `<span class="b failed">${esc(vm.reason)}</span>` : ""}</div>
+  </section>
+
+  <section class="panel">
+    <h2>Task run ${run ? `#${run.n}${task ? " · " + esc(task) : ""}` : ""}</h2>
+    ${vm.runs.length > 1 ? `<div class="runs">${vm.runs.map((r, i) => `<button data-run="${i}" class="${r === run ? "sel" : ""}">#${r.n} ${r.status === "running" ? "●" : r.status === "done" ? "✓" : "✕"}</button>`).join("")}</div>` : ""}
+    ${run ? `<div class="pipeline">${stages.map(([k, l], i) => renderStage(i + 1, l, run.stages[k] || { state: "pending" })).join("")}</div>
+      <div class="run-summary">${summary}</div>` : `<div class="empty">${vm.role === "judge" ? "Polling for results to review…" : "Waiting for an eligible task…"}</div>`}
+  </section>
+
+${vm.role === "judge" ? `  <div class="grid2">
+    <section class="panel">
+      <h2>Review package</h2>
+      ${run?.review ? `<div class="msg"><pre>${json(run.review)}</pre></div>` : `<div class="empty">Appears when the judge fetches a result to review.</div>`}
+    </section>
+    <section class="panel">
+      <h2>Verdict</h2>
+      ${run?.result?.verdict ? `<div class="meta"><span>verdict <b style="color:${run.result.verdict === "APPROVE" ? "var(--ok)" : "var(--bad)"}">${esc(run.result.verdict)}</b></span><span>${esc(run.result.reason_code || "")}</span>${run.result.score != null ? `<span>score ${esc(run.result.score)}</span>` : ""}${run.result.seller_payout_cents != null ? `<span>payout ${esc(run.result.seller_payout_cents)}c</span>` : ""}</div>` : ""}
+      ${run?.verdict || run?.result ? `<div class="msg"><pre>${json(run.verdict || run.result)}</pre></div>` : `<div class="empty">${run?.stages.grade?.state === "active" ? "Grading inside the sandbox (model call to api.anthropic.com over TLS is not tapped)…" : "No verdict yet."}</div>`}
+    </section>
+  </div>
+
+` : `  <div class="grid2">
+    <section class="panel">
+      <h2>Prompt sent to the model ${run?.model ? "· " + esc(run.model) : ""}</h2>
+      ${run?.prompt ? run.prompt.map((m) => `<div class="msg"><div class="r">${esc(m.role)}</div><pre>${esc(m.content)}</pre></div>`).join("") :
+        `<div class="empty">${vm.role === "judge" ? "The judge grades through api.anthropic.com over TLS; the tap shows the review package and verdict, not the grading prompt." : S.hello?.tap === false ? "Observer tap is off (--viewer-no-tap), so the prompt is not visible." : "Appears when the runner calls Ollama."}</div>`}
+    </section>
+    <section class="panel">
+      <h2>Model output ${isLive && run?.stages.infer?.state === "active" ? "· live" : ""}</h2>
+      <div class="meta">
+        <span>tokens ${run?.inferRes?.eval_count ?? run?.tokens ?? 0}</span>
+        ${tokRate ? `<span>${tokRate.toFixed(1)} tok/s</span>` : ""}
+        ${run?.firstAt && run?.inferStart ? `<span>first token ${fmtMs(run.firstAt - run.inferStart)}</span>` : ""}
+        ${run?.inferRes?.prompt_eval_count != null ? `<span>prompt tokens ${run.inferRes.prompt_eval_count}</span>` : ""}
+        ${run?.inferRes?.load_duration_ms != null ? `<span>model load ${fmtMs(run.inferRes.load_duration_ms)}</span>` : ""}
+      </div>
+      <div class="out">${run?.thinking ? `<pre style="color:var(--muted)">${esc(run.thinking)}</pre><hr style="border:0;border-top:1px solid var(--line)">` : ""}<pre>${esc(run?.output || run?.inferRes?.content || "")}${run?.stages.infer?.state === "active" ? '<span class="cursor"></span>' : ""}</pre>${!run?.output && run?.stages.infer?.state !== "active" ? `<div class="empty">${run?.inferRes?.content ? "" : "No output yet."}</div>` : ""}</div>
+    </section>
+  </div>
+
+`}
+  <section class="panel">
+    <h2>Sandbox network traffic (click a row for details)</h2>
+    ${nets.length ? `<table><thead><tr><th>time</th><th>to</th><th>call</th><th>status</th><th>took</th></tr></thead><tbody>${netRows}</tbody></table>` : `<div class="empty">No traffic in this run.</div>`}
+  </section>
+
+  <section class="panel">
+    <h2>Event stream</h2>
+    <div class="timeline">${vm.timeline.map((l) => `<div><span class="ts">${fmtTime(l.at)}</span><span class="k ${esc(l.kind)}">${esc(l.kind)}</span>${esc(l.text)}</div>`).join("")}</div>
+  </section>`;
+
+  const out = document.querySelector(".out");
+  if (out) out.scrollTop = stick ? out.scrollHeight : outScroll;
+  const tl = document.querySelector(".timeline");
+  if (tl) tl.scrollTop = tlStick ? tl.scrollHeight : tlScroll;
+  for (const el of document.querySelectorAll("tr.net")) el.onclick = () => { const id = el.dataset.id; S.expanded.has(id) ? S.expanded.delete(id) : S.expanded.add(id); render(); };
+  for (const el of document.querySelectorAll(".runs button")) el.onclick = () => { const i = Number(el.dataset.run); S.selectedRun = i === vm.runs.length - 1 ? null : i; render(); };
+}
+
+function renderHeader() {
+  const h = S.hello;
+  if (!h) return;
+  $("role").textContent = $("conn").classList.contains("on") ? `${h.role} daemon · ${h.runtime}` : "daemon disconnected · showing last state";
+  $("mkt").textContent = h.marketplace;
+  $("tap").hidden = !h.tap;
+  $("sim").hidden = !h.simulated;
+}
+
+let pending = false;
+function render() {
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => {
+    pending = false;
+    // Do not rebuild while the user is selecting text in the page.
+    if (String(getSelection()).length) { setTimeout(render, 500); return; }
+    renderHeader(); renderSidebar(); renderContent();
+  });
+}
+
+$("follow").onchange = (ev) => {
+  S.follow = ev.target.checked;
+  if (S.follow) { const last = [...S.vms.values()].filter((v) => v.id !== "daemon").at(-1); if (last) S.selected = last.id; S.selectedRun = null; history.replaceState(null, "", "/"); render(); }
+};
+
+let resetOnNext = false;
+function connect() {
+  const es = new EventSource("/events");
+  es.onopen = () => $("conn").classList.add("on");
+  es.onmessage = (m) => {
+    // A reconnect replays history from scratch; keep the old view until it arrives.
+    if (resetOnNext) { resetOnNext = false; S.vms.clear(); S.nets.clear(); }
+    apply(JSON.parse(m.data)); render();
+  };
+  es.onerror = () => {
+    $("conn").classList.remove("on");
+    $("role").textContent = "daemon disconnected · showing last state";
+    es.close();
+    resetOnNext = true;
+    setTimeout(connect, 3000);
+  };
+}
+connect();
+setInterval(render, 1000);
+</script>
+</body>
+</html>
