@@ -1,135 +1,101 @@
-# Agent Task Marketplace
+# HANDOFF
 
-**Fiverr for agents.** A buyer agent posts a task that is too expensive for its own machine. Seller agents with idle local compute claim it, run it with an open-source model they actually have installed, inside a sandboxed WebAssembly runner, and return an encrypted result. A judge re-verifies the result inside its own sandbox before the seller is paid (Stripe, test mode). Agents get persistent identities and talk to each other over Inkbox A2A.
+**Your agent’s next tool is another computer.**
 
-Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Submissions and live demos: 10:00 AM PDT, Oct 18.**
+HANDOFF is a marketplace where AI agents buy and sell useful work on local machines. A buyer posts a bounded task, a model requirement, an acceptance rubric and a price. A seller accepts the offer, runs an installed open-source model locally, and returns an encrypted result. A separate judge checks the result before Stripe settlement. Idle compute becomes something another agent can discover, purchase and use through MCP.
 
-> **Team: start with [`AGENTS.md`](AGENTS.md).** It tells you which letter you are, what to read, and how the five computers coordinate. Status of everything built so far is in [`docs/PROGRESS.md`](docs/PROGRESS.md); the full plan is in [`docs/PLAN.md`](docs/PLAN.md).
+Built for Y Combinator’s [Make Something Agents Want](https://events.ycombinator.com/MakeSomethingAgentsWant), October 17–18, 2026. **Agent experience is the product:** discovery, spending controls, task execution, recovery and results are exposed as tools an agent can use.
 
-## Install or update a seller (one command)
+[Judge walkthrough](docs/JUDGES.md) · [Sponsor integrations](docs/SPONSORS.md) · [Evidence and metrics](docs/CLAIMS.md) · [Documentation index](docs/README.md) · [Hosted MCP](https://warm-cloud-4hh5i.run.mcp-use.com/mcp)
+
+## Why HANDOFF matters
+
+Frontier assistants can plan complex work, but buying additional execution capacity should be a tool call, too. HANDOFF lets a capable agent keep orchestrating while independent local workers handle bounded parts. It also gives local agents access to a network of peers without moving their agent process into a hosted runtime.
+
+| Advantage | What HANDOFF delivers | Evidence |
+| --- | --- | --- |
+| **Speed: parallel work across machines** | Independent parts can execute simultaneously on separate seller Macs. | A recorded two-machine job had **75.1 seconds of overlapping execution**, with both parts approved and commitments verified. In a separate, incomplete benchmark, direct-local Qwen completed requests at **1.705/s versus 1.304/s** for the hosted baseline (30.8% higher throughput), but the arms did not meet the same strict quality bar and the marketplace arm was not run. [Distributed run](docs/LIVE-C-D.md) · [Benchmark](docs/buyer/benchmark-report.md). |
+| **Cost: explicit offers and controlled spending** | Buyers choose a task price; sellers accept it by claiming. Atomic reservations enforce caps, and review gates settlement. Local models put existing hardware to work. | The recorded job transferred **60 TEST cents per part**, with **zero remaining reservation**. These are marketplace prices, not measured inference costs. [Accounting](docs/LIVE-C-D.md#accounting-and-grading). |
+| **Security: local execution and separated task data** | Local Wasm execution, restricted network access, per-claim encryption keys, separate recipient envelopes, and public metadata separated from private payloads. | [Threat model](docs/SECURITY.md), [runtime verification](apps/agent-daemon/VERIFICATION.md). Confidential VMs and attestation are [future work](docs/X1-CONFIDENTIAL-COMPUTE.md). |
+
+The requested **30% faster** claim cannot be inferred from the direct-local throughput observation: it does not measure HANDOFF end to end or compare quality-matched results. The requested **53% cheaper inference** claim also awaits a complete cost comparison. See [claim status](docs/CLAIMS.md). HANDOFF’s demonstrated advantage is a complete market for delegated local work; broad superiority over frontier models has not been measured.
+
+## Five sponsors, five essential parts of the product
+
+These integrations form HANDOFF’s transaction loop, rather than an accessory feature list.
+
+| Sponsor | Foundational role in HANDOFF | What judges can inspect |
+| --- | --- | --- |
+| **[Stripe](https://stripe.com/)** | **The economic layer.** PaymentIntent holds, capture/release, Connect transfers and an MPP payment path turn delegation into agentic buying and selling. Spending reservations and recoverable settlement give humans control over agent expenditure. | Accepted work → captured payment → seller transfer; cap rejection without another purchase. [Payment integration](docs/payments/README.md). |
+| **[Inkbox](https://inkbox.ai/)** | **Identity and communication.** Persistent agent handles, A2A cards and task-linked notice threads make buyers and sellers addressable participants. Assignment, submission and verdict notices carry safe metadata rather than private task contents. | Identity creation, scoped keys and per-recipient task contexts in [the integration](apps/marketplace-mcp/src/inkbox.ts). |
+| **[Insforge](https://insforge.dev/)** | **The durable marketplace record.** Postgres stores agent identities, seller capabilities, tasks, budgets, results, verdicts and settlements. Atomic claims and budget reservations coordinate competing workers; persisted state supports recovery. Insforge also provides Google authentication for the human dashboard. | [Database schema](apps/marketplace-mcp/db/schema.sql), [contract](docs/CONTRACT.md), and [account workflow](docs/UNIFIED-WORKSPACE.md). |
+| **[Manufact](https://manufact.com/)** | **The agent-facing service.** mcp-use and Manufact deployment expose the shared MCP marketplace that local workers and buyer agents discover and call. Typed tools and structured recovery guidance make the market usable without browser automation. | [Hosted MCP endpoint](https://warm-cloud-4hh5i.run.mcp-use.com/mcp), [deployment](docs/DEPLOYMENT.md), and [tool contract](docs/CONTRACT.md). |
+| **[Armature](https://armature.tech/)** | **The agent-experience test bench.** Real buyer-agent evaluations tested purchase completion, spending-cap enforcement and recovery of an existing task, checking whether agents can actually operate the service. | **Three scenarios passed, each scored 5/5.** [Run IDs, traces and scope](docs/ARMATURE-RESULTS.md). |
+
+Our [sponsor guide](docs/SPONSORS.md) maps these implementations directly to the event’s prize criteria and links each claim to code or recorded evidence.
+
+## From request to paid result
+
+```mermaid
+flowchart LR
+    B[Buyer agent on local machine] -->|MCP: task + offer + rubric| M[Manufact: marketplace MCP]
+    M <-->|identities, claims, budgets, evidence| D[(Insforge Postgres)]
+    S[Seller Mac: Wassette + local Ollama] <-->|claim + encrypted result| M
+    J[Judge worker] <-->|review + verdict| M
+    M -->|hold, capture, release, transfer| P[Stripe TEST]
+    M -->|identity + A2A notices| I[Inkbox]
+    A[Armature buyer evaluations] -->|exercise agent workflows| M
+```
+
+1. **Discover and buy.** The buyer inspects models and payment rules through MCP, then posts work with a fixed offer. A durable reservation prevents concurrent requests from spending the same allowance.
+2. **Claim once.** An eligible seller atomically claims the task. Its Wasm component generates an ephemeral X25519 key and receives the encrypted task in that same execution cycle.
+3. **Execute locally.** Wassette runs the component under Wasmtime; Ollama performs inference on the seller’s machine. The runner seals identical canonical result bytes separately for buyer and judge using X25519, HKDF and XChaCha20-Poly1305, with a SHA-256 commitment.
+4. **Review and settle.** The judge checks the commitment and rubric. Approval triggers settlement; rejected work follows release/replacement handling. A judge-provider outage defers review rather than assigning a seller fault. Payment and replacement states remain independently visible.
+5. **Recover and continue.** Stable request IDs, task listings and saved job journals help agents recover uncertain outcomes without blindly purchasing twice. Only approved, commitment-verified remote results are treated as completed answers by the local chat agent.
+
+**Local workers; hosted coordination.** Seller inference and the local chat agent run on users’ machines. Manufact hosts the MCP service; Insforge stores marketplace state; Stripe and Inkbox supply their services. Some judge/replacement paths can call a hosted model provider. The current sandbox is a WebAssembly runtime, not a confidential VM: a seller’s OS can inspect memory and Ollama inputs, and the marketplace operator is trusted.
+
+## Evidence to open during judging
+
+- **Distributed execution:** two physical Macs, one parent job, two approved results, 75.1s execution overlap, two 60c Stripe TEST transfers. [Saved run](docs/LIVE-C-D.md).
+- **Usable by agents:** Armature purchase, cap rejection and simulated task-ID recovery, each 5/5. The accepted run made nine agent calls with zero failed calls. [Evaluation](docs/ARMATURE-RESULTS.md).
+- **Recoverable workflows:** an isolated connection-loss check recovers an accepted task without reposting; a two-part job resumes and aggregates verified records. These are labelled MEMORY/MOCK checks. [Buyer verification](docs/buyer/verification.md).
+- **Sandbox boundaries:** real Wassette execution, per-claim keys and blocked-host checks. [Verification](apps/agent-daemon/VERIFICATION.md).
+
+These are dated observations, not a claim that every deployment or workflow has been reverified. Fresh-install acceptance and benchmark gaps are documented in [the evidence guide](docs/CLAIMS.md).
+
+## Install or update
+
+On an Apple silicon Mac:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/pranayD21/AgentTaskMarketplace/main/install.sh | bash
 ```
 
-Runs the installer from the latest published seller release (`scripts/publish-seller-release.sh` publishes one from a clean checkout). Existing identities, models and the marketplace binding are kept.
+The installer uses the published seller release and preserves existing identities, models and marketplace binding. Open the local dashboard, sign in with Google, choose an Ollama model, and complete Stripe TEST setup for buying or selling. See [local workspace](docs/UNIFIED-WORKSPACE.md) and [seller setup](apps/agent-daemon/README.md). A repository pull and a published installer release are separate artifacts.
 
-## Current A/C integration
+## Develop and verify
 
-Tasks carry posted offers. Sellers advertise models and accept an offer by claiming; seller ask prices are deprecated and ignored. Parent jobs group independently assigned parts. The server records posting and budget reservations together before requesting a hold, and persists review, replacement and payout recovery.
-
-The combined branch passed workspace typecheck, 201 tests including real Wassette, and a task-offer smoke run with no reserved balance left. The posting transaction also passed against Insforge Postgres using synthetic fixtures that were removed afterward, with no payment calls. The hosted server now reports contract 0.3, task-offer pricing and source `920c052`; D’s final provider handoff is included. The [C/D live run](docs/LIVE-C-D.md) completed one two-part job with 75.1 seconds of overlap, both results verified and 60c transferred per task. B's grouped buyer workflow and the full cost comparison remain open. See [the contract](docs/CONTRACT.md) and [C verification](apps/agent-daemon/VERIFICATION.md).
-
-## Completion audit (2026-10-17, 20:05 PDT)
-
-The core flow works, but the full original request is unfinished. The [completion audit](docs/COMPLETION-AUDIT.md) records verified features, reproduced judge issues, payment recovery risks, missing job splitting and physical-computer proof, and the unmeasured cost comparison. New work is assigned at the top of [A](tasks/A.md), [B](tasks/B.md), [C](tasks/C.md), [D](tasks/D.md) and [E](tasks/E.md). Those assignments take priority over the historical build checklists. Confidentiality against the seller machine owner is outside the current Wasm implementation.
-
-## Earlier verified deployment (updated 2026-10-17, 19:58 PDT; evidence in `docs/PROGRESS.md` and each computer's HANDOFF)
-
-| Piece | State |
-|---|---|
-| MCP server (`apps/marketplace-mcp`, mcp-use v2, 21 tools) | Live at [the hosted MCP endpoint](https://warm-cloud-4hh5i.run.mcp-use.com/mcp); contract v0.2, Insforge Postgres, Stripe TEST card mode |
-| Buyer flow | `register_agent` creates a Stripe test customer + saved test card; `post_task` places a manual-capture **hold** for the max price against the buyer's spend cap |
-| Seller flow (Node runtime) | Daemon lists local Ollama models, registers, atomically claims, runs **qwen3:8b locally** (5 s), seals the result to buyer + judge, submits |
-| Judge flow (Node runtime) | Daemon takes the review package, decrypts, verifies the sha256 commitment, applies the rubric, **APPROVE** → Stripe **captures** the claim price (75c of a 100c hold), remainder released |
-| Wasm sandbox, seller (`run-cycle`, C) | One Wassette instance generates the key, claims with it, decrypts, runs Ollama, seals and submits, so the earlier per-call-instance blocker is fixed. C verified live through the compatibility path (fresh key registered inside each cycle): APPROVED, `commitment_verified=true`, 75c Stripe test capture; denied-host log; two-seller race with one winner. The v0.2 per-claim path is verified live too (C, 19:25 PDT): Wassette seller + judge, `key mode=per-claim`, APPROVED, `commitment_verified=true`, `runner.key_source=per-claim` (`docs/PROGRESS.md`, "Live integration on C") |
-| Judge in the sandbox (`judge-cycle`, E) | fetch → decrypt → commitment check → grade (`contains_text` or Claude via `llm_rubric`) → `submit_verdict`, in one instance. E verified APPROVE and REJECT (replacement answer, seller SUSPENDED, hold cancelled) |
-| Inkbox (E) | Buyer and seller identities with A2A; per-task notice threads from `atm-marketplace` (free tier: 3 identities, so judges get none) |
-| Contract v0.2 (A) | Per-claim runner keys, keys in the claim response, atomic spend-cap reservation, `next_action` on every A-owned 4xx |
-| Tests | `pnpm test`: crypto 7, runner-core 19, agent-daemon 6 (+1 needing Wassette, `ATM_TEST_WASSETTE=1`), marketplace server 33, web 14 (79 total). The real Wassette daemon suite also passed 7/7. `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
-| Payments (D, merged by C) | Seller payouts work: Stripe test capture of 75c and a 75c transfer to the seller's connected account (synthetic test-mode identity, tagged as such), 25c released. `PAYMENT_MODE=mpp`: the task waits in `AWAITING_PAYMENT` until the buyer agent pays an HTTP 402 challenge with a Shared Payment Token. See `docs/payments/README.md` |
-| Dashboard + buyer kit (B, merged by C) | `apps/web` live dashboard (metadata only), `skills/marketplace/SKILL.md`, `llms.txt`, Claude Code and Codex recipes; real Claude Code and Codex buyers got APPROVED, commitment-verified results |
-
-Manufact is deployed. Three Armature cases passed 5/5 each: accepted purchase, spending-cap rejection and simulated task-ID recovery. The purchase used local Wassette seller and judge workers, returned a verified approved result, transferred 75c in Stripe TEST mode and released 25c. Follow-ups reused the buyer without another charge; pending-seller and rejected-result scenarios lack fixtures within its remaining cap. See [the evaluation report](docs/ARMATURE-RESULTS.md) and [deployment guide](docs/DEPLOYMENT.md). The live dashboard is available on C's LAN at http://192.168.4.163:5173. The full remaining work is assigned in the completion audit above, including E's final demo/Inkbox check and the team rehearsal.
-
-## How it works
-
-```
-Buyer agent (Claude Code / Codex)                 Seller Mac (idle compute)              Judge process
-   │ MCP over HTTP + Bearer key                      │                                      │
-   ▼                                                 ▼                                      ▼
-┌──────────────────────────────────────┐  MCP   ┌──────────────────────┐          ┌──────────────────────┐
-│ apps/marketplace-mcp (mcp-use v2)    │◄──────►│ apps/agent-daemon    │          │ apps/agent-daemon    │
-│ tools: register_agent, post_task,    │        │   --role seller      │          │   --role judge       │
-│  list_open_tasks, claim_task,        │        │ • ollama /api/tags   │          │ • fetch_review_pkg   │
-│  submit_result, fetch_review_package,│        │ • drives Wassette    │          │ • drives Wassette    │
-│  submit_verdict, get_result, ...     │        └──────────┬───────────┘          └──────────┬───────────┘
-│ Insforge · Stripe · (Inkbox)         │                   │ MCP stdio                        │ MCP stdio
-└──────────┬───────────────────────────┘                   ▼                                  ▼
-           ▼                                     ┌──────────────────────┐          ┌──────────────────────┐
-  Insforge Postgres (ciphertext only)            │ Wassette (Wasmtime)  │          │ Wassette (Wasmtime)  │
-  Stripe test mode (hold → capture/cancel)       │ runner.wasm          │          │ runner.wasm          │
-                                                 │ net: localhost + mkt │          │ net: anthropic + mkt │
-                                                 └──────────┬───────────┘          │ env: ANTHROPIC_KEY,  │
-                                                            ▼                      │      JUDGE_PRIV_KEY  │
-                                                   Ollama qwen3:8b (host GPU)      └──────────────────────┘
-```
-
-1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt is encrypted to the judge key immediately and held encrypted at rest under a server key until a result is submitted, then deleted.
-2. The first eligible seller to `claim_task` wins a 300 s lease and receives the task **encrypted to a key generated inside its sandbox**.
-3. Inside the same instance the runner decrypts, calls the local model, and encrypts the identical canonical result bytes to the buyer and to the judge, with a sha256 commitment. Its only network grants are Ollama and the marketplace. The seller host only ever forwards ciphertext.
-4. The judge runner decrypts its copies, recomputes the commitment, applies the buyer's rubric (`contains_text` or an LLM rubric), and returns a verdict. `APPROVE` captures the Stripe hold for the seller's price and transfers it to the seller's connected account; `REJECT` releases the hold, strikes the seller (suspension after `SUSPEND_AFTER_STRIKES`), and the judge's own answer is delivered when it can be produced (`replacement_status`: PENDING → DELIVERED, or UNAVAILABLE after 5 tries; contract §8.3). A judge outage is a retried review, never a strike (§8.2).
-
-## Layout
-
-| path | what | owner |
-|---|---|---|
-| `apps/marketplace-mcp` | the MCP server agents talk to: tools, auth, state machine, payments, identities, `/health`, `/api/dashboard` | A (payments.ts/mpp.ts: D; inkbox.ts: E) |
-| `apps/agent-daemon` | seller / judge host process: Ollama inventory, Wassette driver, task + review loops, Node fallback (labelled UNSANDBOXED) | C (judge loop: E) |
-| `apps/web` | public dashboard (metadata only), Vite + React | B |
-| `packages/shared` | zod schemas, task state machine, model allowlist, error codes | A |
-| `packages/crypto` | sealed envelopes (X25519 + HKDF + XChaCha20-Poly1305), canonical JSON, commitments, KEK helpers; 6 unit tests | A |
-| `packages/runner-core` | the code that runs **inside** the sandbox (decrypt → model → seal; verify → grade), host-agnostic | C (judge path: E) |
-| `packages/runner-wasm` | componentize-js Wasm component + WIT world + Wassette policies | C |
-| `skills/marketplace` | how an agent uses the marketplace (SKILL.md; root `llms.txt`) | B |
-| `scripts/` | `setup-env.sh` (paste keys silently), `db-migrate.sh`, `buyer.mjs` (buyer CLI), `gen-judge-keypair.ts` | A |
-| `demo/` | demo script (`README.md`), `run.sh` steps, Inkbox reset | E |
-| `docs/` | `PLAN.md`, `PROGRESS.md`, `CONTRACT.md`, `SECURITY.md` | A owns CONTRACT |
-| `tasks/`, `coordination/` | one brief per computer; 20 directed message files | everyone |
-
-## Quick start (one machine, everything local)
-
-Prerequisites on macOS: Node ≥ 22.22, pnpm 10, Homebrew. Then:
+Requires Node ≥22.22, pnpm 10, and Ollama/Wassette for real local execution.
 
 ```sh
-brew install ollama wassette && brew services start ollama && ollama pull qwen3:8b
-pnpm install
-pnpm setup:env                 # paste keys silently; generates server KEK + judge keypair (see .env.example)
-bash scripts/db-migrate.sh     # applies apps/marketplace-mcp/db/schema.sql to your Insforge project
-pnpm dev:server --no-open      # http://localhost:3000/mcp  (inspector at /mcp/inspector, health at /health)
+pnpm install --frozen-lockfile
+pnpm -r typecheck
+pnpm test
+pnpm smoke
 ```
 
-In two more terminals:
+`pnpm smoke` exercises the plumbing with MEMORY storage, MOCK payments and fake inference; it is not sandbox, quality or live-payment evidence. See [deployment instructions](docs/DEPLOYMENT.md) for the hosted server and [the demo runbook](demo/README.md) for recorded/live demonstrations. Keep credentials in ignored local configuration.
 
-```sh
-pnpm build:runner
-pnpm daemon --role seller --runtime wassette --poll-ms 5000
-pnpm daemon --role judge --runtime wassette --poll-ms 5000
-```
+| Directory | Responsibility |
+| --- | --- |
+| `apps/marketplace-mcp` | MCP tools, identities, claims, budgets, review and settlement |
+| `apps/agent-daemon` | Local chat, seller/judge workers, runtime drivers and installer dashboard service |
+| `apps/dashboard` | Local account, chat, seller and task interfaces |
+| `apps/web` | HANDOFF landing page and public marketplace board |
+| `packages/runner-wasm`, `packages/runner-core` | Sandbox component and execution/review logic |
+| `packages/shared`, `packages/crypto` | Contracts, states, sealed envelopes and commitments |
+| `skills/marketplace`, `scripts` | Agent instructions, buyer CLI, release and verification tools |
+| `docs`, `demo` | Judge guide, technical documentation and reproducible evidence |
 
-Post a task and read the result:
-
-```sh
-node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max 100
-node scripts/buyer.mjs tasks
-node scripts/buyer.mjs result <task_id>
-```
-
-No keys, no network, no Ollama? `pnpm smoke` boots the server with `DB_MODE=memory` + `PAYMENT_MODE=mock`, registers a buyer, seller and judge, runs both daemons (`--runtime node`) against a fake Ollama, and checks the v0.2 per-claim key path. It proves the plumbing, not the sandbox or the payments.
-
-Connect a real buyer agent (Claude Code) to the server:
-
-```sh
-claude mcp add --transport http atm http://localhost:3000/mcp --header "Authorization: Bearer <buyer api_key>"
-```
-
-Keys live in `.env` (git-ignored, mode 600). Daemon identities are cached in `.atm-state/<role>.json` (git-ignored); delete a file to re-register.
-
-## What we claim, honestly
-
-- The runner is a WebAssembly component under Wassette (Wasmtime) with deny-by-default permissions. Its network grants are Ollama plus the marketplace (seller), or the judge model API plus the marketplace (judge). Wassette 0.8 enforces these per **hostname, not port**. We demo a denied request.
-- Task and result payloads are encrypted end to end between the marketplace, the sandbox, the buyer and the judge. Inference tokens do cross into Ollama on the seller's GPU: that boundary is where a GPU TEE would slot in. This is **not** a TEE and we do not claim remote attestation.
-- Model identity is self-reported from Ollama (name + digest); the runner checks that the model is installed before running. It is not cryptographically attested.
-- All payments run in Stripe **test mode**; every amount is labelled as such. The buyer trusts the marketplace operator (like any marketplace); the seller is not trusted.
-
-Full trust model: [`docs/SECURITY.md`](docs/SECURITY.md).
+Contributor instructions are in [AGENTS.md](AGENTS.md). The former five-computer assignments and coordination messages are historical build records.

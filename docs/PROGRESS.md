@@ -1,5 +1,7 @@
 # Progress log — what has been built, verified, and learned
 
+For current judge review, start with the [product README](../README.md), [three-minute walkthrough](JUDGES.md), [sponsor integrations](SPONSORS.md), and [claim/evidence status](CLAIMS.md). The dated sections below preserve build history; their former computer assignments and early test counts are historical.
+
 ## Current A/C integration, October 17, 21:01 PDT
 
 A and C's implementation is merged. Task offers replace seller asks; the server preserves accepted prices through settlement. Parent jobs, transactional task posting, resumable settlement, guarded transfer retries, judge deferral/replacement, safe public reasons, usage capture and model canaries are integrated.
