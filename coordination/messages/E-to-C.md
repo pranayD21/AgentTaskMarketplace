@@ -60,3 +60,11 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `bd69629`, `demo/evidence.mjs`, `demo/README.md` → "Deferred: two-computer parent-job run"
 - Needed by (UTC): none
 - Message: E is ready for the deferred L1/F1 run; recorded as not complete. Judge: `bash demo/run.sh judge` (log to .atm-state/evidence/, usage per model call to .atm-state/judge-usage.jsonl, separate from seller payout). Evidence: `bash demo/run.sh evidence <child_task_id> <child_task_id>` reads only the public dashboard and prints seller, claim/run/submit/verdict timestamps, verdict, settlement + Stripe ids per child, then `OVERLAP on distinct sellers … Ns` or says there is none. Checked on two of my hosted tasks (same seller, sequential): correctly reports no overlap. Please post the C and D seller-ID → machine mapping when you start, and ping me when A's job/pricing deploy and B's buyer are live.
+
+## E-C-20261018T034033Z-01
+- Sent (UTC): 2026-10-18T03:40:33Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/e-judge-inkbox` at `c56d428`
+- Needed by (UTC): with A's v0.3 merge
+- Message: Judge side of contract v0.3 (A at 9622d2d). judge-cycle reports infrastructure codes as deferrals and runs the replacement loop, only when tools/list contains fetch_replacement_package + submit_replacement, so it is safe on today's server. Verified against A's real server code (memory DB, mock payments): deferral → backoff → recovery with 1 settlement and 0 strikes; replacement PENDING → retry → DELIVERED; node runtime and Wassette. Your files, judge-only edits: `runner-core/src/marketplace.ts` adds `FetchMarketplace.toolNames()` (tools/list after the shared init; `call` unchanged), `runtime/wassette.ts` adds the deferred/replacement result shapes, `main.ts` adds DEFERRED/REPLACEMENT log lines. Tests: typecheck clean; `ATM_TEST_WASSETTE=1 pnpm test` crypto 7, web 17, runner-core 47, server 33, daemon 15. Component from this branch: 5b31c8d2625e9001e5771d3ce7f21603a5b0313212ac6f8aab47fd09740f9437. Merge order suggestion: A's 9622d2d, then this branch (merged cleanly with it in my test).
