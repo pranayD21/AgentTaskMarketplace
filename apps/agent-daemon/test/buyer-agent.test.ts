@@ -73,3 +73,9 @@ it('stops repeated failing tool calls instead of looping for the whole deadline'
  await expect(runBuyerAgent({model:'fixture',ollamaUrl:'http://fixture',system:'',prompt:'',tools:[],signal:new AbortController().signal,deadline:Date.now()+600000,onEvent:()=>{},isComplete:()=>false,fetchImpl:fetchImpl as typeof fetch})).rejects.toThrow('Repeated tool errors');
  expect(fetchImpl).toHaveBeenCalledTimes(6);
 });
+it('repairs malformed actions, invokes a real tool adapter, then returns the explicit final answer',async()=>{
+ const invoke=vi.fn(async()=>({task_id:'task_observed'}));const events:AgentEvent[]=[];
+ const replies=['not json',JSON.stringify({action:'tool',tool:'delegate',arguments:{prompt:'Specific work'}}),JSON.stringify({action:'final',answer:'Completed using task_observed'})];
+ await runBuyerAgent({model:'plain-model',ollamaUrl:'http://fixture',system:'',prompt:'Help',tools:[{name:'delegate',description:'Delegate',parameters:{type:'object',properties:{prompt:{type:'string'}},required:['prompt']},invoke}],structuredActions:true,signal:new AbortController().signal,deadline:Date.now()+10000,isComplete:()=>false,onEvent:e=>events.push(e),fetchImpl:async(_url,init)=>{const body=JSON.parse(String(init?.body));expect(body.tools).toBeUndefined();expect(body.think).toBeUndefined();return Response.json({message:{role:'assistant',content:replies.shift()}});}});
+ expect(invoke).toHaveBeenCalledExactlyOnceWith({prompt:'Specific work'},expect.any(AbortSignal));expect(events.some(e=>e.type==='action_error')).toBe(true);expect(events.filter(e=>e.type==='model').at(-1)?.message).toMatchObject({content:'Completed using task_observed'});
+});

@@ -15,7 +15,8 @@ export async function runBuyerAgent(options: {
   tools: AgentTool[]; signal: AbortSignal; deadline: number;
   onEvent(event: AgentEvent): void; isComplete(): boolean;
   fetchImpl?: typeof fetch;
-  thinking?:boolean;stream?:boolean;
+  thinking?:boolean|string;stream?:boolean;
+  structuredActions?:boolean;
   onIdle?():Promise<ChatMessage[]|null>;
   acquireModel?(signal:AbortSignal):Promise<()=>void>;
 }) {
@@ -24,7 +25,15 @@ export async function runBuyerAgent(options: {
   ];
   const emit = (type: string, data: Record<string, unknown>) => options.onEvent({ type, at: new Date().toISOString(), ...data });
   const tools = options.tools.map(({ name, description, parameters }) => ({ type: "function", function: { name, description, parameters } }));
+  const actionSchema={oneOf:[
+    ...options.tools.map(tool=>({type:'object',properties:{action:{const:'tool'},tool:{const:tool.name},arguments:tool.parameters},required:['action','tool','arguments'],additionalProperties:false})),
+    {type:'object',properties:{action:{const:'final'},answer:{type:'string',minLength:1}},required:['action','answer'],additionalProperties:false},
+  ]};
+  if(options.structuredActions)messages[0]!.content+='\nChoose exactly one action per turn. Return JSON matching this schema: '+JSON.stringify(actionSchema)+
+    '\nTools: '+JSON.stringify(options.tools.map(t=>({name:t.name,description:t.description})))+
+    '\nExample shape for a tool: {"action":"tool","tool":"NAME_FROM_SCHEMA","arguments":{}}. For a completed answer or a necessary clarification question: {"action":"final","answer":"Your response"}. Never invent tool results. After each result, assess what remains, take another action if useful, and finish only when you can answer or clearly explain the remaining blocker. No reasoning trace is required.';
   const fetcher = options.fetchImpl ?? fetch;
+  let malformedActions=0;
   let consecutiveToolErrors=0;
   for (let turn = 0; turn < 100 && !options.isComplete(); turn++) {
     options.signal.throwIfAborted();
@@ -35,7 +44,7 @@ export async function runBuyerAgent(options: {
     const response = await fetcher(`${options.ollamaUrl.replace(/\/$/, "")}/api/chat`, {
       method: "POST", redirect: "error", signal: options.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: options.model, messages, tools, stream: options.stream??false, think: options.thinking??false,
+      body: JSON.stringify({ model: options.model, messages, ...(options.structuredActions?{format:actionSchema}:{tools}), stream: options.stream??false, ...(options.thinking===undefined?{}:{think:options.thinking}),
         options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 4096 } }),
     });
     if (!response.ok) throw new Error(`Local model HTTP ${response.status}`);
@@ -45,13 +54,27 @@ export async function runBuyerAgent(options: {
       const take=(line:string)=>{if(!line.trim())return;const chunk=JSON.parse(line);if(chunk.error)throw Error(String(chunk.error));data=chunk;
         message.content+=chunk.message?.content??'';message.thinking+=chunk.message?.thinking??'';
         if(chunk.message?.tool_calls)message.tool_calls!.push(...chunk.message.tool_calls);
-        emit('model_delta',{turn,content:message.content,thinking:message.thinking,duration_ms:Date.now()-started});};
+        if(!options.structuredActions)emit('model_delta',{turn,content:message.content,thinking:message.thinking,duration_ms:Date.now()-started});};
       for(;;){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let n;while((n=buffer.indexOf('\n'))>=0){take(buffer.slice(0,n));buffer=buffer.slice(n+1);}}
       take(buffer);data={...data,message};
     }else data=await response.json();
     } finally {release?.();}
     if (data.message?.role !== "assistant") throw new Error("Missing local assistant response");
-    messages.push(data.message);
+    const rawMessage=data.message;
+    if(options.structuredActions){
+      try{
+        const action=JSON.parse(rawMessage.content);
+        if(action.action==='final'&&typeof action.answer==='string'&&action.answer.trim())data.message={role:'assistant',content:action.answer};
+        else if(action.action==='tool'&&typeof action.tool==='string'&&action.arguments&&typeof action.arguments==='object'&&!Array.isArray(action.arguments))data.message={role:'assistant',content:'',tool_calls:[{function:{name:action.tool,arguments:action.arguments}}]};
+        else throw Error('Invalid action');
+        malformedActions=0;
+      }catch{
+        if(++malformedActions>=3)throw Error('Repeated tool errors: model could not produce a valid action.');
+        emit('action_error',{turn,error:'Invalid action format; asking the model to repair it.'});
+        messages.push({role:'user',content:'Your response was not a valid action. Return only a tool action or final answer matching the provided JSON schema.'});continue;
+      }
+    }
+    messages.push(rawMessage);
     emit("model", { turn, duration_ms: Date.now() - started, input_tokens: data.prompt_eval_count ?? null,
       output_tokens: data.eval_count ?? null, load_ms: data.load_duration === undefined ? null : data.load_duration / 1e6, message: data.message });
     const calls = data.message.tool_calls ?? [];
@@ -73,8 +96,8 @@ export async function runBuyerAgent(options: {
       emit("tool_result", { turn, name: call.function.name, result });
       consecutiveToolErrors=(result as any)?.error?consecutiveToolErrors+1:0;
       if(consecutiveToolErrors>=6)throw Error('Repeated tool errors prevented progress. Review the tool results before retrying.');
-      messages.push({ role: "tool", tool_name: call.function.name,
-        content: JSON.stringify({ result, remaining_seconds: Math.max(0, Math.floor((options.deadline - Date.now()) / 1000)) }) });
+      messages.push({ role: options.structuredActions?"user":"tool", ...(options.structuredActions?{}:{tool_name:call.function.name}),
+        content: JSON.stringify({ tool:call.function.name, result, remaining_seconds: Math.max(0, Math.floor((options.deadline - Date.now()) / 1000)) }) });
       if (options.isComplete()) break;
     }
   }
