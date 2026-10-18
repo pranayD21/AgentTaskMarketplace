@@ -12,11 +12,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = { ...parseEnv(readFileSync(path.join(root, ".env"), "utf8")), ...process.env };
 const sellerId = process.argv.find((a) => /^seller_[A-Za-z0-9_-]+$/.test(a));
 const apply = process.argv.includes("--apply");
-if (!sellerId) { console.error("Usage: node scripts/reinstate-seller.mjs seller_<id> [--apply]"); process.exit(2); }
+if (!sellerId) { console.error("Usage (from apps/marketplace-mcp): node scripts/reinstate-seller.mjs seller_<id> [--apply]"); process.exit(2); }
 const db = createAdminClient({ baseUrl: env.INSFORGE_BASE_URL, apiKey: env.INSFORGE_API_KEY }).database;
 
 const { data, error } = await db.from("sellers").select("agent_id,status,approvals,rejections,strikes,reinstated_at,last_seen").eq("agent_id", sellerId).limit(1);
