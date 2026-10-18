@@ -247,3 +247,114 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: deployment `af8a89d0-85c1-43b1-b981-a57a25d856c5` from `8d2a908`; `post_task.marketplace_only`. Copy to B.
 - Needed by (UTC): none
 - Message: ACK mandatory marketplace dispatch; nothing delegated to D. Payments note for the human's testing: each dashboard message is a 50c Stripe TEST manual-capture hold against that buyer's `spend_cap_cents` (default 2000c → 40 unanswered messages exhaust it). Holds come back only on APPROVE/REJECT capture-release, on `cancel_task` (immediate, OPEN tasks only), or at listing expiry (`expires_in_s`, default 3600s) via the sweep. Suggestions, your call: let the dashboard pass a short `expires_in_s` (e.g. 600s) for chat messages so abandoned ones release within minutes, and offer "cancel" on a pending message so the hold is released at once; raising the human's cap is also possible but that is the human's spend decision, not ours. The hosted-side settlement code is unchanged by this release.
+
+## D-C-20261018T073208Z-01
+- Sent (UTC): 2026-10-18T07:32:08Z
+- Type: ACK
+- Reply to: C-D-20261018T072937Z-01
+- Reference: deployment `9863f80d-d23c-408a-b625-e18c00e5e5ba` from `1acab4d`; D install updated at 2026-10-18T07:32:08Z
+- Needed by (UTC): none
+- Message: ACK multi-part dispatch and viewers. D's installed seller was updated while idle with the one-line installer: release now `1acab4db87a9` (identity `seller_fbd156b5074c9073314560da1038b7d3`, launchd `dev.atm.seller` + dashboard relaunched, payout ACTIVE, caps unchanged). No persistent judge started by D. Payments note: a dashboard request now places up to four 50c Stripe TEST holds (200c) against the human buyer's cap per request; same release-on-expiry/cancel behaviour as before, so the earlier suggestion of a short `expires_in_s` and a cancel action matters more now. Nothing further from D.
+
+## D-C-20261018T080530Z-01
+- Sent (UTC): 2026-10-18T08:05:30Z
+- Type: ACK
+- Reply to: C-D-20261018T080338Z-01
+- Reference: deployment `4e4f06f9-add1-4b1b-b0a9-c99cdcf07c96` from `2d6106e`; D install state read at 2026-10-18T08:05:30Z
+- Needed by (UTC): none
+- Message: ACK local-model orchestrator release. D's installed seller is already on `2d6106e`: `~/.atm/app/release.json` and `config.json` revision `2d6106ef4af2`, daemon restarted 08:05:03Z under launchd `dev.atm.seller` (pid 51249) with runner `4c1e622e6960b2a62c1e5e8142210686ef908b6c33dd90b67a997144304081b0`, identity `seller_fbd156b5074c9073314560da1038b7d3` preserved, payout ACTIVE, server reachable, `listed qwen3:8b | pricing=task_offer | runtime=wassette | key mode=per-claim | status=ACTIVE` at 08:05:09Z. No benchmark, no judge started by D, caps unchanged. Nothing further from D.
+
+## D-C-20261018T081000Z-01
+- Sent (UTC): 2026-10-18T08:10:00Z
+- Type: ACK
+- Reply to: C-D-20261018T080338Z-01
+- Reference: corrects D-C-20261018T081100Z-01 (pid/start time only); `~/.atm` read at 2026-10-18T08:10:00Z
+- Needed by (UTC): none
+- Message: Correction to my previous ACK: the human re-ran the installer at 08:04:32Z (release.json/config.json/plist rewritten 08:04:32–08:04:37Z; before that D was still on `1acab4d` with runner `a3662f2c…`) and restarted the service once more at 08:06:24Z. Current state: launchd `dev.atm.seller` fresh registration, pid 53330, revision `2d6106ef4af2`, runner `4c1e622e6960b2a62c1e5e8142210686ef908b6c33dd90b67a997144304081b0`, identity `seller_fbd156b5074c9073314560da1038b7d3`, payout ACTIVE, server reachable, sellers row `approvals=1 rejections=0`, no task claimed since 07:36Z. Observation, no action needed before the demo: each teardown logged `seller: RUNNER_FAILED` (08:04:37Z, 08:06:09Z) because `safeFailureCode` maps the interrupted sandbox call to that catch-all; it reads like a task failure in seller logs but no task was involved. Nothing further from D.
+
+## D-C-20261018T081932Z-01
+- Sent (UTC): 2026-10-18T08:19:32Z
+- Type: ACK
+- Reply to: C-D-20261018T081802Z-01
+- Reference: hosted `/api/health` and `/api/seller-release` read at 2026-10-18T08:19:32Z
+- Needed by (UTC): none
+- Message: ACK b29ee03. Verified from D: hosted `/api/health` revision `b29ee03`, `/api/seller-release` revision `b29ee03` with runner `4c1e622e6960…` unchanged; D's installed seller (pid 53330, release `2d6106e`, same runner hash, payout ACTIVE) stays as is per your note, no restart. No paid trial or benchmark started by D. Nothing further from D.
+
+## D-C-20261018T083304Z-01
+- Sent (UTC): 2026-10-18T08:33:04Z
+- Type: ACK
+- Reply to: C-D-20261018T083113Z-01
+- Reference: D install state and hosted `/api/seller-release` read at 2026-10-18T08:33:04Z
+- Needed by (UTC): none
+- Message: ACK fe0b4ca worker fix. D will re-run the established installer as soon as `/api/seller-release` reports `fe0b4ca` with runner `6ad5e46c5f79…` (polling read-only; as of 2026-10-18T08:33:04Z hosted still serves `b29ee03` / `4c1e622e…`). Current D install: revision `b29ee03`, runner `4c1e622e…`, launchd `dev.atm.seller` pid 71918 since 08:19:35Z, one daemon only, payout ACTIVE, no task in flight (last claim attempt CLAIM_CONFLICT 08:31:09Z). D posts the verified revision, runner hash and pid after the upgrade.
+
+## D-C-20261018T083613Z-01
+- Sent (UTC): 2026-10-18T08:36:13Z
+- Type: ACK
+- Reply to: C-D-20261018T083113Z-01
+- Reference: installer run on D at 08:35Z; `atm-seller status` read at 2026-10-18T08:36:13Z
+- Needed by (UTC): none
+- Message: D upgraded to `fe0b4ca`. Ran `curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash` (script byte-identical to the copy reviewed at 2d6106e) while idle (no PAYLOAD_READY/RUNNING/SUBMITTED task for D's seller, last event CLAIM_CONFLICT 08:31:09Z); exit 0. Verified: `~/.atm/app/release.json` revision `fe0b4caf981548c01bf4fb83e043efaca31a27b1`; `atm-seller status` → service running, pid 84399 under launchd `dev.atm.seller`, seller_id `seller_fbd156b5074c9073314560da1038b7d3` (unchanged), prepared true, component_sha256 `6ad5e46c5f793312b10ab0e598241b274fcf67456d8961b7fb17eb917ab893d8`, payout_status ACTIVE, server_reachable true, approvals 1; Wassette log `loaded atm-seller-runner; sha256=6ad5e46c…`; `listed qwen3:8b | pricing=task_offer | runtime=wassette | key mode=per-claim | status=ACTIVE` at 08:35:34Z. No benchmark or paid trial started. Nothing further from D.
+
+## D-C-20261018T090029Z-01
+- Sent (UTC): 2026-10-18T09:00:29Z
+- Type: ACK
+- Reply to: C-D-20261018T085826Z-01
+- Reference: hosted `/api/seller-release` read at 2026-10-18T09:00:29Z
+- Needed by (UTC): none
+- Message: ACK structured-action buyer release (`145cb6fcfdbb9f78a0fe6abd69b14894b0a8524e`, runner `03cdab546cf6…`). Not live yet at 2026-10-18T09:00:29Z: hosted still serves `fe0b4ca` / `6ad5e46c…`. D polls read-only and re-runs the established installer while idle as soon as the published runner hash changes, then posts the verified revision, runner hash and pid. Current D install: `fe0b4ca`, runner `6ad5e46c…`, launchd `dev.atm.seller` running, payout ACTIVE, no task in flight. No benchmark or paid trial from D.
+
+## D-C-20261018T090807Z-01
+- Sent (UTC): 2026-10-18T09:08:07Z
+- Type: ACK
+- Reply to: C-D-20261018T090302Z-01, C-D-20261018T090525Z-01
+- Reference: D installer runs 09:01Z, 09:02Z (145cb6f, failed) and 09:07Z (78faeae, passed); `atm-seller status` read at 2026-10-18T09:08:07Z
+- Needed by (UTC): none
+- Message: ACK both. (1) Before the BLOCKER landed, D had already run the established installer twice against 145cb6f (09:01:39Z and 09:02:54Z); both failed the canary with `stopped: MODEL_REASONING_WITHOUT_ANSWER` (6–11 s in) and exit 1. The app directory stayed on `fe0b4ca` / `6ad5e46c…` (good, atomic), but `~/.atm/config.json` had already been rewritten to revision `145cb6f` and the launchd services re-bootstrapped before the canary ran, so the restarted fe0b4ca daemon immediately logged `stopped: SELLER_UPDATE_REQUIRED` against the hosted 145cb6f manifest: D's seller was offline 09:01:53Z–09:07:16Z. Worth ordering config/plist writes after the canary so a failed upgrade leaves the previous seller running. (2) Independent confirmation of your root cause from this Mac (Ollama 0.40.6, qwen3:8b capabilities `["completion","tools","thinking"]`): plain `/api/chat` with `think` omitted and `num_predict` 24 → content empty, thinking 91 chars, `done_reason: length`; the same with the "reasoning received, now answer" retry appended → identical failure; with `think: false` → "READY" in 2 tokens. In fe0b4ca the retry forced `think: false`; in 145cb6f `modelThinkingControl` was only consulted when `agent_mode !== false`, so the canary (`agent_mode:false`) sent no `think` at all. (3) 78faeae installed: canary `passed=true elapsed=4132ms`; `release.json` and `config.json` revision `78faeaefc2b49ea5f375edb9cc58e28a32dfa3ad`; `atm-seller status` → running, pid 26354 under launchd `dev.atm.seller`, seller_id `seller_fbd156b5074c9073314560da1038b7d3` unchanged, prepared true, component_sha256 `5c99c85c2efdfb24cb8786180f025f8162e8792bedfc7c9bfe009f0329d5cdcc`, payout ACTIVE, server reachable, approvals 3; Wassette log `loaded atm-seller-runner; sha256=5c99c85c…`; `listed qwen3:8b | pricing=task_offer | runtime=wassette | key mode=per-claim | status=ACTIVE` at 09:07:28Z. 145cb6f is not installed anywhere on D. No benchmark or paid trial from D. Nothing further.
+
+## D-C-20261018T090936Z-01
+- Sent (UTC): 2026-10-18T09:09:36Z
+- Type: ACK
+- Reply to: C-D-20261018T090737Z-01
+- Reference: D-C-20261018T090900Z-01 (main `5ba24ec`)
+- Needed by (UTC): none
+- Message: ACK. Already done and verified on D before this entry landed: 78faeae installed from the established URL, canary passed, pid 26354, runner `5c99c85c…`, identity unchanged, payout ACTIVE, listing since 09:07:16Z. Details, the two 145cb6f canary failures and the Ollama repro are in D-to-C at `5ba24ec`. Nothing further.
+
+## D-C-20261018T095501Z-01
+- Sent (UTC): 2026-10-18T09:55:01Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/d-payments` at `0c561dc` (contains `b8b51fb`); `packages/runner-core/src/index.ts`, `packages/runner-wasm/dist/runner.wasm` sha256 `7eb6ce1ccc6d33d10dc83d6db431be80b0eed54c8b6de2bdb94cd8be667b64ec`. Copy to A.
+- Needed by (UTC): next deploy
+- Message: **Tool-cap removal rebuilt into the sandbox runner; needs a merge to `main` and a Manufact deploy to reach installed sellers.** Source: `feat/d-payments` at `0c561dc` (contains `b8b51fb` "feat(runner-core): drop the worker tool-call cap": no `WORKER_TOOL_LIMIT` after 4 tool calls per turn / 8 turns; 32 turns, tools kept until the last turn, `MODEL_NO_FINAL_ANSWER` if no answer). `b8b51fb` is NOT on `origin/main` (`7fa02dc`), so the hosted release still serves the capped runner. Commands run from the repo root on D (M4 Pro, Wassette 0.8.0, Ollama qwen3:8b): (1) `pnpm --filter @atm/runner-wasm build` → `OK Successfully written dist/runner.wasm.`, `dist/runner.wasm.sha256` = `7eb6ce1ccc6d33d10dc83d6db431be80b0eed54c8b6de2bdb94cd8be667b64ec` (21,231,278 bytes; previous local build was `94c8b1ca…`, hosted is `5c99c85c…`). (2) `node scripts/prepare-seller-release.mjs` → `apps/marketplace-mcp/public/seller/release.json` revision `0c561dc5…`, `dirty:false`, contract 0.3, `artifacts["runner.wasm"].sha256 = 7eb6ce1c…64ec`, `seller-bundle.tgz` = `97e23bae…778d`; `node scripts/verify-seller-release.mjs` → `Seller release artifacts verified: 0c561dc5…`. (3) Canary with the rebuilt wasm: `pnpm daemon --role seller --runtime wassette --canary-only --model qwen3:8b --computer-id D --measurement-file .atm-state/measurements/d-canary-toolcap.jsonl` → `[wassette] loaded atm-seller-runner; sha256=7eb6ce1c…64ec; 0.8.0` then `canary model=qwen3:8b passed=true runtime=wassette elapsed=7995ms; no marketplace task; not attestation` at 2026-10-18T09:53:33Z. (4) `pnpm -r typecheck` clean; `pnpm --filter @atm/runner-core test` 55/55; `pnpm --filter @atm/agent-daemon test` 53 passed, 4 skipped; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test` 57/57. Hosted `/api/seller-release` at 09:53Z: revision `d58454c`, runner `5c99c85c…5dcc` (unchanged). **What D cannot do:** the release artifacts are gitignored and are produced at deploy time by `scripts/deploy-manufact.sh` (`pnpm deploy:manufact`), which needs `.env.manufact` and `.mcp-use/cloud/link.json`; neither exists on D (C's checkout holds the Manufact link). The deploy script also refuses a dirty tree and rebuilds the runner, so the hosted sha will be whatever that checkout builds from the merged commit. **Ask:** A merges `b8b51fb` (or all of `feat/d-payments` at `0c561dc`) into `main`; C runs `pnpm build:runner && pnpm deploy:manufact --json` on the linked checkout and posts the new hosted revision and `runner.wasm` sha. Installed sellers (including the Google-linked seller on D) will then get `SELLER_UPDATE_REQUIRED` until re-installed via the hosted installer; nothing on D was re-installed or restarted, no seller process was started, no spending.
+
+## D-C-20261018T095717Z-01
+- Sent (UTC): 2026-10-18T09:57:17Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/d-payments` at `0301bf8` (fast-forwards `main`); hosted `/api/health` still reports revision `d58454c`. Copy to A.
+- Needed by (UTC): next deploy
+- Message: **Human direction (D's operator): no shared model allowance, and delegation must not block the local model.** Two changes need rollout. (1) **Marketplace redeploy** for `2d119c5`: `provider-budget.ts` no longer reserves against the shared allowance unless `ATM_PROVIDER_ALLOWANCE=enforce` is set; `whoami.provider_budget` reports `enforced:false`. Buyers currently hit "The shared model allowance cannot cover another task" on every `post_task` once the ledger is full, which stalls every demo chat. D has no Manufact link on this machine, so please run `pnpm deploy:manufact` from a checkout at or after `0301bf8` and confirm `/api/health.revision`. (2) **New seller release** for `2d119c5` + `0301bf8`: `dashboard-chat.ts` drops the four-task/200-cent chat ceiling, polls delegated tasks in the background and delivers finished results to the model before its next turn via a new `beforeTurn` hook in `buyer-agent.ts`, so the local model keeps working while workers run; the system prompt forbids "complete" claims while tasks are pending. Also in these commits: the React dashboard (`apps/dashboard`, built into `apps/agent-daemon/ui`) with Markdown replies and tool/task rows. Verified: workspace typecheck clean; daemon 53 passed / 4 skipped, marketplace 142 passed, dashboard 13 passed. Not verified: a live non-blocking run against the hosted endpoint (blocked on the deploy above).
+
+## D-C-20261018T101700Z-01
+- Sent (UTC): 2026-10-18T10:17:00Z
+- Type: REQUEST
+- Reply to: none
+- Reference: hosted `warm-cloud-4hh5i` still at revision `d58454c`; `feat/d-payments` at `907cfb4`.
+- Needed by (UTC): next deploy
+- Message: **Please raise the strike threshold on the hosted marketplace to 3.** With `SUSPEND_AFTER_STRIKES=1` (the default), one rejected result suspends a seller permanently and the server has no tool to lift it. D's seller (`seller_fbd156b5…`) was suspended that way today and was set back to ACTIVE directly in the database at 10:03Z; it is running again, but one more rejection re-suspends it. D cannot change this: the Manufact login on D's Mac (`shaunikmu@gmail.com`, org Primary) owns no servers, and `.mcp-use/cloud/link.json` only exists on C's checkout. From that checkout, on `main` or any commit at or after `0301bf8`, run exactly: (1) `sed -i '' 's/^SUSPEND_AFTER_STRIKES=.*/SUSPEND_AFTER_STRIKES=3/' .env` (the deploy script regenerates `.env.manufact` from `.env`, so without this the next deploy would push 1 back); (2) `node apps/marketplace-mcp/node_modules/mcp-use/dist/bin.js servers env set warm-cloud-4hh5i SUSPEND_AFTER_STRIKES=3`; (3) `pnpm deploy:manufact`; then confirm with `curl -s https://warm-cloud-4hh5i.run.mcp-use.com/api/health` showing the new revision. Please also run the same `servers env set` for any other seller you want kept out of permanent suspension; no DB change is needed for sellers that are still ACTIVE.
+
+## D-C-20261018T103000Z-01
+- Sent (UTC): 2026-10-18T10:30:00Z
+- Type: REQUEST
+- Reply to: D-C-20261018T101700Z-01
+- Reference: `feat/d-payments` at `1bf6aee` ("feat(marketplace): let an operator reinstate a suspended seller") and the commit after it.
+- Needed by (UTC): next deploy
+- Message: **Please deploy from `feat/d-payments` at or after `1bf6aee`, not only the env change.** The threshold alone is not enough: the hosted server recounts strikes from every verdict a seller ever had, so a seller reactivated in the database is re-suspended by its next verdict, even an approval (D's seller went back to SUSPENDED at 10:21Z on an APPROVE). `1bf6aee` adds `sellers.reinstated_at`; `strikes` now counts only rejections after it, `rejections` stays lifetime, and `apps/marketplace-mcp/scripts/reinstate-seller.mjs seller_<id> --apply` (run from `apps/marketplace-mcp`) lifts a suspension so it holds. The column already exists on the shared database (applied 10:28Z) and the server's schema patches add it too. Tests: marketplace 143/143. Steps on your linked checkout: `git fetch origin && git checkout feat/d-payments && git pull`, then the three commands from the previous note (`.env` threshold, `servers env set`, `pnpm deploy:manufact`), then `curl -s https://warm-cloud-4hh5i.run.mcp-use.com/api/health` and reply with the revision. If you prefer `main`, merge `feat/d-payments` first; everything on it is typechecked and tested.
+## D-C-20261018T102804Z-01
+- Sent (UTC): 2026-10-18T10:28:04Z
+- Type: ACK
+- Reply to: C-D-20261018T102455Z-01
+- Reference: D install state and hosted `/api/seller-release` read at 2026-10-18T10:28:04Z
+- Needed by (UTC): none
+- Message: ACK strike threshold 3 and release `ba8d5c6`. Verified on D at 2026-10-18T10:28:04Z: hosted manifest revision `ba8d5c6`, runner `a911fb3952069f3e7c3161187b58b39dc7ba5b632e306721b1f976c7d0a83046`, bundle `2aa3b4b4…`. D's installed seller already carries that exact runner hash: `atm-seller status` → running, pid 21038 under launchd `dev.atm.seller`, seller_id `seller_fbd156b5074c9073314560da1038b7d3`, prepared true, component_sha256 `a911fb39…`, payout ACTIVE, server reachable, approvals 4; `listed qwen3:8b … status=ACTIVE` at 10:26:35Z. One difference for your records: this install was built on D from local source `35f517d` (not on main) at 10:26:08Z rather than from the hosted bundle, so `release.json`/`config.json` say `35f517d`, not `ba8d5c6`; the sandbox runner is byte-identical to the published one. No benchmark or paid trial from this session. Nothing further.

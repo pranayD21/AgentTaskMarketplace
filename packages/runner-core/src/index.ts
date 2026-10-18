@@ -15,6 +15,9 @@ import {
   type Envelope,
   type KeyDescriptor,
 } from "@atm/shared";
+import { modelThinkingControl } from './model-controls.js';
+export { modelThinkingControl } from './model-controls.js';
+import { workerTools, invokeWorkerTool } from "./worker-agent.js";
 import { withDeadline } from "./deadline.js";
 import { ollamaUsage, type SellerUsage } from "./seller-measurements.js";
 export { measuredCycle, modelCanary, safeSellerUsage, type SellerUsage, type MeasuredCycleOutput, type CanaryOpts, type CanaryOutput } from "./seller-measurements.js";
@@ -40,6 +43,9 @@ export interface RunTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_public_key: KeyDescriptor;
   timeout_ms?: number;
+  cpu_threads?: number;
+  context_tokens?: number;
+  agent_mode?: boolean;
   expected_task_id?: string;
   expected_claim_id?: string;
 }
@@ -102,8 +108,8 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
 // ---------------------------------------------------------------------------
 
 async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPayload): Promise<{ text: string; tokens_out?: number; usage: SellerUsage }> {
-  const messages = [
-    { role: "system", content: "You are a worker model executing a task for another agent. Follow the instruction precisely and answer directly without preamble." },
+  const messages: any[] = [
+    { role: "system", content: "You are a worker model executing a task for another agent. Use available tools when useful, then return the requested deliverable. A reasoning trace is not required. Tools are limited to calculation, text inspection and a task-local scratchpad. Do not claim file execution or internet access. Follow the instruction precisely." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
   ];
   const started = host.now();
@@ -114,17 +120,45 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     const installed = await inventory.json() as { models?: { name: string }[] };
     if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
-    const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
-      method: "POST",
-      redirect: "error",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: opts.model_id, messages, stream: false, think: false, options: { num_predict: payload.max_tokens, temperature: 0.2 } }),
-      signal,
-    });
-    if (!res.ok) throw new Error(`OLLAMA_HTTP_${res.status}`);
-    const json = (await res.json()) as Record<string, unknown> & { message?: { content?: string }; eval_count?: number };
-    const text = (json.message?.content ?? "").trim();
-    if (host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
-    return { text, tokens_out: json.eval_count, usage: ollamaUsage(json) };
+    let capabilities:string[]=[];let thinkingControl:false|string|undefined;
+    {
+      // Canary calls also need capability discovery so Qwen does not default
+      // to thinking inside the intentionally tiny installation check.
+      const metadata=await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/show`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:opts.model_id}),signal,redirect:'error'});
+      if(metadata.ok){const info=await metadata.json() as any;if(Array.isArray(info.capabilities))capabilities=info.capabilities;thinkingControl=modelThinkingControl(info);}
+    }
+    const notes=new Map<string,string>();let totalTokens=0;let requestingAnswer=false;
+    const totals:Record<string,number>={};
+    // Tool use is bounded by the task deadline, not by a call count: the model
+    // keeps its tools until the last turn, which must produce the deliverable.
+    const MAX_TURNS=32;
+    for(let turn=0;turn<MAX_TURNS;turn++){
+      const res = await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/chat`, {
+        method:"POST",redirect:"error",headers:{"content-type":"application/json"},signal,
+        body:JSON.stringify({model:opts.model_id,messages,tools:opts.agent_mode!==false&&capabilities.includes('tools')&&turn<MAX_TURNS-1?workerTools:[],stream:false,
+          ...(thinkingControl===undefined?{}:{think:thinkingControl}),options:{num_predict:opts.agent_mode===false?payload.max_tokens:-1,temperature:0.2,
+          num_thread:opts.cpu_threads??4,num_ctx:opts.context_tokens??8192}}),
+      });
+      if(!res.ok)throw new Error(`OLLAMA_HTTP_${res.status}`);
+      const json=await res.json() as any;const message=json.message??{};
+      if(host.now()-started>=timeout)throw new Error("TASK_TIMEOUT");
+      for(const key of ['total_duration','load_duration','prompt_eval_duration','eval_duration','prompt_eval_count'])if(typeof json[key]==='number')totals[key]=(totals[key]??0)+json[key];
+      totalTokens+=Number(json.eval_count)||0;messages.push({role:'assistant',...message});
+      const calls=message.tool_calls??[];
+      if(!calls.length){
+        const text=String(message.content??'').trim();
+        if(!text){
+          if(message.thinking&&!requestingAnswer){requestingAnswer=true;messages.push({role:'user',content:'Your reasoning was received, but no final answer was returned. Now provide the requested deliverable in your answer, without further analysis.'});continue;}
+          throw Error(message.thinking?'MODEL_REASONING_WITHOUT_ANSWER':'EMPTY_MODEL_OUTPUT');
+        }
+        if(json.done_reason==='length')throw Error('MODEL_OUTPUT_TRUNCATED');
+        return {text,tokens_out:totalTokens,usage:ollamaUsage({...totals,eval_count:totalTokens})};
+      }
+      for(const call of calls){
+        let result:unknown;try{result=invokeWorkerTool(call.function.name,call.function.arguments,notes);}catch(error){result={error:(error as Error).message};}
+        messages.push({role:'tool',tool_name:call.function.name,content:JSON.stringify(result)});
+      }
+    }
+    throw Error('MODEL_NO_FINAL_ANSWER');
   }, timeout);
 }

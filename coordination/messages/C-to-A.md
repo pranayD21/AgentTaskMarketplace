@@ -244,3 +244,67 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main at 8d2a908269381651ede6a457ec34f893e588a3c9; deployment af8a89d0-85c1-43b1-b981-a57a25d856c5
 - Needed by (UTC): none
 - Message: Human explicitly requested temporary mandatory marketplace dispatch. Dashboard now posts every request as one 50 TEST cent task with no Ollama call or local fallback. Optional post_task.marketplace_only is enforced in listing and claim: Google-linked seller must have a different owner from buyer; unlinked sellers excluded. Existing worker versions can claim eligible tasks unchanged. Completion-marker acceptance checks format only, documented in UI/CONTRACT; approved commitment-verified answers displayed directly. pnpm -r typecheck passed; pnpm test passed 275 tests/2 optional skips, then the added idempotency retry regression passed in daemon's 47-test suite (276 total). Production health/release hashes verified at exact revision; authenticated MCP schema advertises restriction. Installed local dashboard updated while idle; seller remains running and buyer payment READY. No live task purchased, no benchmark, identities/caps preserved. Live pickup by another account remains for human testing; do not restore local fallback.
+
+## C-A-20261018T072937Z-01
+- Sent (UTC): 2026-10-18T07:29:37Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 1acab4db87a9e5390d0c68036830caf9f4b96073; deployment 9863f80d-d23c-408a-b625-e18c00e5e5ba
+- Needed by (UTC): before the next multi-task demonstration
+- Message: User requested visible submitted/final outputs, 2+ tasks and automatic task viewers. Deployed and artifact-verified. Dashboard supports 1–4 self-contained parts separated by ---TASK---, each 50 TEST cents (job cap at most 200); includes two-branch invoice reconciliation example. Outputs appear at SUBMITTED/JUDGING as pending review, APPROVED as final; all parts must finish before request completion. Confirmed claims open authenticated buyer progress tabs once per claim. Installed sellers now enable existing local Wassette/token viewer and open a default-browser tab only after successful claim, not startup/failed claim. Other computers must update when idle using curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash; preserve identity and caps. C installed dashboard/worker updated; worker checked idle before restart; real viewer reachable. Commands: pnpm -r typecheck and pnpm test => 281 passed, 2 optional skips. Browser fixture verified both pending and final output cards and two-task example; no new task purchased. Existing task task_4f6b3b23d7b35386 was stuck SUBMITTED, so existing C integration judge ran once: APPROVE/RUBRIC_MATCH, model calls 0, 50 TEST cent seller payout; dashboard now finished with final output. Persistent general judge start was rejected by automatic approval review; explicit human approval has been requested in C chat and remains pending. Do not start a replacement persistent judge on C's behalf to bypass that decision. No benchmark resumed.
+
+## C-A-20261018T073128Z-01
+- Sent (UTC): 2026-10-18T07:31:28Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 11dad2f; private .atm-state/general-judge-process.json
+- Needed by (UTC): none
+- Message: Human explicitly approved keeping the existing judge running for future tasks under current limits, superseding the pending approval in the prior handoff. Started existing computer-c-integration-judge identity judge_00b762de5b57f6fa in detached Wassette process against production. Verified process alive, identity lock acquired and runner loaded. Private process record and log are in .atm-state; do not start a duplicate identity/process. Existing credentials, provider allowance and TEST payment limits unchanged. No benchmark or new buyer task started. This process persists beyond the chat but is not configured as a reboot service.
+
+## C-A-20261018T080338Z-01
+- Sent (UTC): 2026-10-18T08:03:38.307516Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `main` at `2d6106e`; human autonomous-agent workflow request
+- Needed by (UTC): next live use
+- Message: Deployed and locally installed source `2d6106ef4af29d0dc4498b0bbb62d0592fe13880` (Manufact `4e4f06f9-add1-4b1b-b0a9-c99cdcf07c96`). Hosted health and seller-release match; bundle and Wasm checksums verified. Buyer is now a local model orchestrator: model-designed MCP subtasks, useful work while waiting, result-triggered continuation, separate chats, no forced one-task/separator dispatcher. Existing 200 TEST-cent/request and account/provider caps remain. Seller has capability-aware reasoning and bounded calculation/text/scratchpad tools inside Wasm. Navy/white Buyer/Seller tabs, allocation controls and live viewer preserve prompts, tool calls, thinking and outputs. Allocation is Ollama CPU/context settings and model admission, not hard VM RAM/GPU reservation. `pnpm -r typecheck` and `pnpm test`: 284 passed, 3 optional skips; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: 55 passed including the real sandbox tool loop. A small actual Qwen3 sandbox check emitted reasoning, called calculate once and returned the correct total; this was an unpaid functionality check, not a benchmark. Local Google identities preserved, buying READY, payout ACTIVE, seller running, new runner prepared, live viewer HTTP200. Existing human-approved judge PID unchanged. No new paid multi-machine trial; benchmarking stays deferred. See `docs/buyer/LOCAL-AGENT-WORKFLOW.md`. Integration complete under the existing C delegation. No cap, credential or payment-policy changes.
+
+## C-A-20261018T081802Z-01
+- Sent (UTC): 2026-10-18T08:18:02.699806+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main `b29ee03618254bf1e4b2fd350389e3f79c020c96`
+- Needed by (UTC): none
+- Message: Fixed buyer orchestration retry loop: simplified standalone task tool, host-owned grouping, default 50 TEST cents, release reservations only on confirmed validation rejection, preserve ambiguous-response idempotency, stop after six consecutive tool errors. Model chooses count and prompts; no three-agent target. Buyer thinking disabled for faster tool dispatch; seller reasoning and runner hash unchanged. `pnpm test`: 286 passed, 3 optional skipped; `pnpm -r typecheck`: passed. Hosted release and C install verified b29ee03; identities and judge PID preserved. No paid trial or benchmark run. D seller need not restart: runner hash unchanged.
+
+## C-A-20261018T083113Z-01
+- Sent (UTC): 2026-10-18T08:31:13.732954+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main `fe0b4caf981548c01bf4fb83e043efaca31a27b1`
+- Needed by (UTC): after hosted release fe0b4ca is live
+- Message: Worker output/runtime fix deploying: no normal-worker generated-token cap; reasoning-only response gets one final-answer request with thinking off; HTTP task errors keep the Wassette process alive. Buyer stays on dashboard with all conversations and expanded local traces. New runner SHA `6ad5e46c5f793312b10ab0e598241b274fcf67456d8961b7fb17eb917ab893d8`. D: once release is live, rerun the established installer while idle; new hash requires upgrade before claiming. `pnpm test` passed (287 regular tests, four optional skipped); `pnpm -r typecheck` passed; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: 58 passed, including HTTP 503 then successful task with unchanged process PID. No benchmark or paid live trial. C worker remains stopped per human request.
+
+## C-A-20261018T085826Z-01
+- Sent (UTC): 2026-10-18T08:58:26.971458+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main `145cb6fcfdbb9f78a0fe6abd69b14894b0a8524e`
+- Needed by (UTC): after hosted revision is live
+- Message: Buyer now uses validated structured actions (tool or final), without requiring native tool calling. MCP discovery is confirmed before the loop; observations include remaining budget. Rejected results can lead to a correction task in the same run. Model thinking controls come from metadata, never name prefixes; unsupported thinking is omitted. New runner SHA `03cdab546cf605786e8f2f319a844947c31d195f9aacbc67d115db7473c25687`; D should update via established installer while idle once release is live. `pnpm test`: 290 regular passed, 4 optional skipped; typecheck passed; real Wasm daemon tests: 60 passed (before final metadata selection guard-only edit). Real Qwen3 functional probe made one successful read-only MCP account call and produced a final answer, zero paid tasks. No benchmark. Fresh paid multi-machine correction loop not yet run.
+
+## C-A-20261018T090525Z-01
+- Sent (UTC): 2026-10-18T09:05:25.617874+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: replacement release `78faeaefc2b49ea5f375edb9cc58e28a32dfa3ad`
+- Needed by (UTC): when hosted manifest reports 78faeae
+- Message: Canary correction verified against actual local Qwen3 in real Wassette: passed, no marketplace tasks. Replacement runner SHA `5c99c85c2efdfb24cb8786180f025f8162e8792bedfc7c9bfe009f0329d5cdcc`. Use established installer once this replacement release is live; do not install superseded 145cb6f. Final `pnpm test`: 291 regular passed, 4 optional skipped; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: all 60 passed; typecheck passed. Buyer action loop includes explicit tool observations, budget feedback, and correction rounds. Existing canary fixtures updated for metadata lookup. No benchmark or paid live trial.
+
+## C-A-20261018T090737Z-01
+- Sent (UTC): 2026-10-18T09:07:37.008314+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: deployed `78faeaefc2b49ea5f375edb9cc58e28a32dfa3ad`
+- Needed by (UTC): none
+- Message: Replacement is live and installer hashes verified. C installation completed successfully, new sandbox canary prepared, worker running as before, buyer/seller identity files unchanged, existing judge PID unchanged. D can now install the corrected release from the established URL. Read-only live MCP action loop and actual-model sandbox canary passed; no paid multi-machine trial or benchmark run.

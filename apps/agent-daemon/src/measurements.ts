@@ -7,7 +7,7 @@ import type { RuntimeInfo } from "./runtime/types.js";
 
 export interface Attempt { kind: "task_attempt" | "model_canary"; model_id: string; task_id?: string; model_digest?: string; job_id?: string | null; part_key?: string | null; task_attempt?: number | null; offered_price_cents?: number }
 export interface AttemptResult {
-  status: "submitted" | "failed" | "passed";
+  status: "submitted" | "failed" | "passed" | "skipped";
   claim_id?: string; result_id?: string; runtime_ms?: number;
   seller_usage?: SellerUsage | null; error_code?: string;
 }

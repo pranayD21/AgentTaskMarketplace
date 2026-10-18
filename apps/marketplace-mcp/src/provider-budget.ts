@@ -22,13 +22,17 @@ async function reconcile(){
  }
  throw new MarketplaceError('PAYMENT_REQUIRED','Shared model allowance is busy. Retry the same saved task.');
 }
+// The operator removed the shared provider allowance: every payment is test money, so no
+// per-task reservation is enforced. Set ATM_PROVIDER_ALLOWANCE=enforce to restore the ledger.
+const enforced=()=>process.env.ATM_PROVIDER_ALLOWANCE==='enforce';
 export async function providerBudgetStatus(){
+ if(!enforced())return {enforced:false,available:true,remaining_microusd:null,reservation_microusd:0,label:'No provider allowance limit (test mode)'};
  if(payments().mode==='mock')return {enforced:true,available:true,remaining_microusd:5_000_000,reservation_microusd:CASE_RESERVATION_MICROUSD,label:'MOCK'};
  try{const row=await reconcile();const remaining=row.cap_microusd-Object.values(row.entries).reduce((n,e)=>n+e.booked_microusd,0);return {enforced:true,available:remaining>=CASE_RESERVATION_MICROUSD,remaining_microusd:remaining,reservation_microusd:CASE_RESERVATION_MICROUSD,label:'Shared provider allowance'};}
  catch{return {enforced:true,available:false,remaining_microusd:0,reservation_microusd:CASE_RESERVATION_MICROUSD,label:'Shared provider allowance awaiting reconciliation'};}
 }
 export async function reserveProviderBudget(buyerId:string,requestId:string){
- if(payments().mode==='mock')return;
+ if(!enforced()||payments().mode==='mock')return;
  await reconcile();
  for(let attempt=0;attempt<12;attempt++){
   const row=await ledger(),key=buyerId+':'+requestId;

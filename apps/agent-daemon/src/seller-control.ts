@@ -11,12 +11,17 @@ import { createSellerDashboard, DASHBOARD_PORT, writePrivate } from "./seller-da
 
 export const SERVICE_LABEL = "dev.atm.seller";
 export function xml(value: string) { return value.replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!); }
-export function launchAgent(root: string, node: string, marketplaceUrl: string, executablePath: string) {
+/** The seller model the human chose on the dashboard; empty means every installed model the network accepts. */
+export function chosenSellerModel(root: string): string {
+  const file = path.join(root, "model.json");
+  try { const model = JSON.parse(fs.readFileSync(file, "utf8")).seller_model; return typeof model === "string" ? model : ""; } catch { return ""; }
+}
+export function launchAgent(root: string, node: string, marketplaceUrl: string, executablePath: string, model = chosenSellerModel(root)) {
   const environment = { PATH: executablePath, HOME: os.homedir(), MARKETPLACE_URL: marketplaceUrl, OLLAMA_URL: "http://localhost:11434",
     ATM_APP_ROOT: path.join(root, "app"), ATM_STATE_DIR: path.join(root, "runtime"), ATM_STATUS_FILE: path.join(root, "status.json"), ATM_REQUIRE_RELEASE: "1", ATM_HUMAN_SELLER_REQUIRED: "1", ATM_PREPARED_FILE: path.join(root, "prepared.json") };
   const args = [node, path.join(root, "app/daemon.mjs"), "--role", "seller", "--runtime", "wassette", "--state-file", path.join(root, "seller.json"),
     "--display-name", os.hostname().slice(0, 80), "--computer-id", `host-${createHash("sha256").update(os.hostname()).digest("hex").slice(0, 12)}`,
-    "--measurement-file", path.join(root, "measurements/seller.jsonl"), "--poll-ms", "5000"];
+    "--measurement-file", path.join(root, "measurements/seller.jsonl"), "--poll-ms", "5000", ...(model ? ["--model", model] : [])];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${SERVICE_LABEL}</string><key>ProgramArguments</key><array>${args.map(a => `<string>${xml(a)}</string>`).join("")}</array><key>EnvironmentVariables</key><dict>${Object.entries(environment).map(([k,v]) => `<key>${k}</key><string>${xml(v)}</string>`).join("")}</dict><key>WorkingDirectory</key><string>${xml(root)}</string><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>30</integer><key>StandardOutPath</key><string>${xml(path.join(root,"logs/seller.log"))}</string><key>StandardErrorPath</key><string>${xml(path.join(root,"logs/seller.log"))}</string></dict></plist>\n`;
 }
 export function sellerEnvironment(root: string, app: string, marketplaceUrl: string): NodeJS.ProcessEnv {
@@ -71,9 +76,10 @@ async function status() {
   let current: any = null;
   if (state) { try { current = await callMarketplace("whoami"); } catch {} }
   const processInfo = serviceInfo();
-  return { service: processInfo.state, pid: processInfo.pid, seller_id: state?.agent_id ?? null,
+  return { viewer_url: processInfo.pid && processInfo.pid === saved.worker_pid ? saved.viewer_url : null, service: processInfo.state, pid: processInfo.pid, seller_id: state?.agent_id ?? null,
     prepared: Boolean(prepared && prepared.seller_id === state?.agent_id && prepared.runner_sha256 === manifest.artifacts["runner.wasm"].sha256),
     marketplace: config().marketplace_url, models: current?.seller?.models ?? saved.models ?? [], approvals: current?.seller?.approvals ?? null,
+    seller_status: current?.seller?.status ?? null, strikes: current?.seller?.strikes ?? null, stopped_reason: saved.stopped_reason ?? null,
     runtime: saved.runtime ?? "wassette", component_sha256: saved.wasm_sha256 ?? manifest.artifacts["runner.wasm"].sha256,
     payout_status: current?.payout?.payout_status ?? "UNAVAILABLE", payout_label: current?.payout?.payout_label,
     server_reachable: Boolean(current) };
@@ -113,6 +119,9 @@ async function startSeller() {
   const current = await status();
   if (!current.prepared) throw Error("Prepare your local model before starting.");
   if (current.payout_status !== "ACTIVE") throw Error("Complete Stripe payout setup before starting.");
+  // The launch agent carries the chosen model, so rewrite it on every start.
+  const cfg = config();
+  fs.writeFileSync(plistFor(SERVICE_LABEL), launchAgent(root, cfg.node, cfg.marketplace_url, process.env.PATH ?? "/opt/homebrew/bin:/usr/bin:/bin"), { mode: 0o600 });
   run("launchctl", ["enable", `${domain}/${SERVICE_LABEL}`]);
   startService();
   for (let i = 0; i < 40; i++) {
@@ -172,7 +181,10 @@ async function install(stage: string, marketplaceUrl: string, node: string) {
     if (!fs.existsSync(link)) { try { fs.symlinkSync(path.join(root,"bin/atm-seller"), link); } catch { console.log(`CLI: ${path.join(root,"bin/atm-seller")}`); } }
     if (!wasRunning) run("launchctl", ["disable", `${domain}/${SERVICE_LABEL}`]);
     await openDashboard();
-    if (wasRunning) await startSeller();
+    if (wasRunning) {
+      if (!(await status()).prepared) await prepare(message => console.log(message));
+      await startSeller();
+    }
     console.log("Your identity and models are kept in ~/.atm. The local dashboard resumes after login.");
     console.log("Commands: atm-seller dashboard | status | logs | stop | start | uninstall");
     if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true });

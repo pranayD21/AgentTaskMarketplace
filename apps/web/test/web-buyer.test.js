@@ -66,10 +66,19 @@ describe('human buyer bridge',()=>{
   it('validates price, model, payload and rubric before any purchase',async()=>{
     const f=await fixture();try {
       for(const input of [{...spec,price_cents:2000},{...spec,price_cents:49},{...spec,allowed_models:['unknown']},
-        {...spec,prompt:'x'.repeat(2501)},{...spec,rubric:{kind:'llm_rubric',criteria:'quality'}}]) {
+        {...spec,rubric:{kind:'llm_rubric',criteria:'quality'}}]) {
         expect((await f.call('prepare',{input})).status).toBe(400);
       }
       expect(f.posts.size).toBe(0);expect(f.calls).not.toContain('post_task');
+    } finally {await f.close();}
+  });
+  it('accepts a prompt longer than 2,500 bytes within the field limit',async()=>{
+    const f=await fixture();try {
+      const prompt='x'.repeat(3000);
+      const result=await f.call('prepare',{input:{...spec,prompt}});
+      expect(result.status).toBe(200);
+      expect(result.draft.input.prompt).toBe(prompt);
+      expect(f.posts.size).toBe(0);
     } finally {await f.close();}
   });
   it('recovers acceptance after an interrupted response and local server restart with one purchase and one reservation',async()=>{

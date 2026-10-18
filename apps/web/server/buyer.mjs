@@ -75,8 +75,6 @@ export function createBuyerBridge({endpoint, statePath, journalDir, budgetPath, 
     const parsed = Input.safeParse(input);
     if (!parsed.success) fail('INVALID_SPECIFICATIONS', 'Complete the task, model, grading and numeric requirements.');
     const data = parsed.data;
-    if (Buffer.byteLength(JSON.stringify({prompt:data.prompt,context:data.context,rubric:data.rubric}), 'utf8') > 2500)
-      fail('INPUT_TOO_LONG', 'For this bounded test, keep the task, context and grading text under 2,500 UTF-8 bytes combined.');
     if (info.pricing?.mode !== 'task_offer' || !['card','mock'].includes(info.payments?.mode))
       fail('UNSUPPORTED_MODE', 'This tester requires posted offers with card TEST or MOCK payments.');
     if (data.allowed_models.some(m => !info.models.some(v => v.model_id === m)))

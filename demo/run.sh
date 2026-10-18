@@ -18,6 +18,7 @@
 #   bash demo/run.sh pay-sim                   # MPP mode: post + 402 challenge + pay, printed step by step
 #   bash demo/run.sh server                    # fallback: local marketplace on :3000
 #   bash demo/run.sh tunnel                    # fallback: local marketplace with a public tunnel URL
+#   bash demo/run.sh ui                        # open the local dashboard (Buyer chat + Seller tab, 127.0.0.1:43118)
 #
 # MARKETPLACE_URL comes from .env (hosted: https://warm-cloud-4hh5i.run.mcp-use.com/mcp). The buyer
 # posts the price (an offer); a seller accepts it by claiming, and it stays fixed through settlement.
@@ -109,6 +110,10 @@ case "${1:-}" in
   tunnel)
     step "fallback if the hosted server is down: share the printed tunnel URL with every computer"
     pnpm dev:server --no-open --tunnel ;;
+  ui)
+    step "local dashboard: Buyer chat (local model posts subtasks) + Seller tab (live sandbox viewer)"
+    command -v atm-seller >/dev/null || { echo "atm-seller is not installed: curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash"; exit 1; }
+    atm-seller dashboard ;;
   *)
-    sed -n '2,23p' "$0"; exit 1 ;;
+    sed -n '2,24p' "$0"; exit 1 ;;
 esac

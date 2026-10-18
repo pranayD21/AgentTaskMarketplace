@@ -103,6 +103,7 @@ async function streamChat(view: LiveView, c: ChatCtx) {
   let buffer = "";
   let content = "";
   let thinking = "";
+  const toolCalls:unknown[]=[];
   let last: Record<string, unknown> = {};
   let firstTokenMs: number | null = null;
   const take = (line: string) => {
@@ -110,6 +111,7 @@ async function streamChat(view: LiveView, c: ChatCtx) {
     const msg = parseJson(line) as { message?: { content?: string; thinking?: string }; error?: string } & Record<string, unknown> | null;
     if (!msg) return;
     if (msg.error) throw new Error(String(msg.error));
+    const calls=(msg.message as any)?.tool_calls;if(Array.isArray(calls))toolCalls.push(...calls);
     const piece = msg.message?.content ?? "";
     const thought = msg.message?.thinking ?? "";
     if (piece || thought) {
@@ -129,12 +131,13 @@ async function streamChat(view: LiveView, c: ChatCtx) {
   // The final streamed chunk carries the counters; it becomes the non-streamed response.
   const message: Record<string, unknown> = { role: "assistant", content };
   if (thinking) message.thinking = thinking;
+  if(toolCalls.length)message.tool_calls=toolCalls;
   const final = { ...last, message, done: true };
   c.res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
   c.res.end(JSON.stringify(final));
   view.emit({
     t: "net", phase: "end", id: c.id, vm: c.vm, status: 200, ms: Date.now() - c.started, ok: true,
-    res: { content, eval_count: last.eval_count, prompt_eval_count: last.prompt_eval_count, eval_duration_ms: nsToMs(last.eval_duration), load_duration_ms: nsToMs(last.load_duration), first_token_ms: firstTokenMs, done_reason: last.done_reason },
+    res: { content, thinking, tool_calls:toolCalls, eval_count: last.eval_count, prompt_eval_count: last.prompt_eval_count, eval_duration_ms: nsToMs(last.eval_duration), load_duration_ms: nsToMs(last.load_duration), first_token_ms: firstTokenMs, done_reason: last.done_reason },
   });
 }
 
@@ -157,7 +160,7 @@ function describeRequest(target: TapTarget, reqPath: string, body: string): { ca
   if (target === "ollama") {
     const call = reqPath.split("?")[0] ?? reqPath;
     // The prompt is shown in full: that is the point of the tap.
-    return { call, display: json ? { model: json.model, messages: json.messages, options: json.options } : undefined };
+    return { call, display: json ? { model: json.model, messages: json.messages, tools:json.tools, think:json.think, options: json.options } : undefined };
   }
   if (!json) return { call: reqPath, display: body ? shrink(body) : undefined };
   const params = (json.params ?? {}) as Record<string, unknown>;

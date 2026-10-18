@@ -1,3 +1,4 @@
+import type { ComputeSettings } from "./compute.js";
 import { MarketplaceError, isAllowlistedModel, type ClaimPublic, type KeyDescriptor } from "@atm/shared";
 import { safeFailureCode, safeSellerUsage, type SellerUsage, type SellerRegistration } from "@atm/runner-core";
 import { Marketplace } from "./marketplace.js";
@@ -8,6 +9,7 @@ import { requireTaskPricing, selectOfferedTask, type OfferedTask } from "./task-
 
 export interface SellerOptions {
   marketplaceUrl: string; ollamaUrl: string; pollMs: number;
+  compute?: ComputeSettings;
   models?: string[]; once: boolean; taskId?: string;
   log: (...args: unknown[]) => void;
   measurements?: MeasurementRecorder;
@@ -19,13 +21,14 @@ export interface SellerOptions {
 }
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptions) {
+/** Resolves with why the loop ended: a run of `once`, registration only, or a suspension the operator must lift. */
+export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptions): Promise<"DONE" | "SELLER_SUSPENDED"> {
   const { log } = opts;
   const info = await mp.call<{ models: { model_id: string }[] }>("marketplace_info");
   requireTaskPricing(info);
   const local = await listOllamaModels(opts.ollamaUrl);
-  const wanted = opts.models?.length ? new Set(opts.models) : null;
-  const models = local.filter((m) => isAllowlistedModel(m.model_id) && (!wanted || wanted.has(m.model_id)))
+  const wanted = opts.compute?.model ? new Set([opts.compute.model]) : opts.models?.length ? new Set(opts.models) : null;
+  const models = local.filter((m) => isAllowlistedModel(m.model_id) && (!opts.compute || m.size_gb <= opts.compute.max_model_gb) && (!wanted || wanted.has(m.model_id)))
     .map((m) => ({ model_id: m.model_id, digest: m.digest }));
   if (!models.length) {
     log(`No installed allowlisted models. Local: ${local.map((m) => m.model_id).join(", ") || "none"}. Allowed: ${info.models.map((m) => m.model_id).join(", ")}`);
@@ -53,8 +56,8 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
   });
   log(`listed ${models.map((m) => m.model_id).join(", ")} | pricing=task_offer | runtime=${runtime.runtime} | key mode=${keyMode} | status=${reg.seller.status}`);
   await opts.onRegistered?.(models);
-  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); if (opts.registerOnly) throw new Error("SELLER_SUSPENDED"); return; }
-  if (opts.registerOnly) return;
+  if (reg.seller.status === "SUSPENDED") { log("SELLER_SUSPENDED: stopping"); if (opts.registerOnly) throw new Error("SELLER_SUSPENDED"); return "SELLER_SUSPENDED"; }
+  if (opts.registerOnly) return "DONE";
   if (rt.runCycle) log("Single sandbox call per task; inference capped at 180s within the 300s lease; no host lease renewal.");
   let payoutReady = false;
   let nextPayoutPoll = Date.now() + 60000;
@@ -70,7 +73,7 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
       }
       const { tasks } = await mp.call<{ tasks: OfferedTask[] }>("list_open_tasks");
       const task = selectOfferedTask(tasks, models.map((m) => m.model_id), opts.taskId);
-      if (!task) { if (opts.once) { log("No eligible open tasks"); return; } await sleep(opts.pollMs); continue; }
+      if (!task) { if (opts.once) { log("No eligible open tasks"); return "DONE"; } await sleep(opts.pollMs); continue; }
       await opts.beforeClaim?.();
       taskId = task.task_id;
       const model = task.eligible_models.find((id) => models.some((m) => m.model_id === id))!;
@@ -78,6 +81,7 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
       if (rt.runCycle) {
         log(`accepting ${taskId} offer=${task.price_cents}c model=${model} runtime=wassette`);
         const out = await rt.runCycle({
+          cpu_threads: opts.compute?.cpu_threads, context_tokens: opts.compute?.context_tokens,
           marketplace_url: opts.marketplaceUrl, ollama_url: opts.ollamaUrl, task_id: taskId, model_id: model, max_runtime_s: task.max_runtime_s, expected_price_cents: task.price_cents,
           ...(keyMode === "registered" ? { legacy_registration: registration } : {}),
         });
@@ -93,14 +97,21 @@ export async function sellerLoop(mp: Marketplace, rt: Runtime, opts: SellerOptio
         const out = await runNodeClaim(mp, rt, claim, opts, (value) => { usage = value; });
         finish?.({ status: "submitted", ...out, claim_id: claim.claim_id });
       }
-      if (opts.once) return;
+      if (opts.once) return "DONE";
     } catch (error) {
       const code = safeFailureCode(error);
+      if (code === "CLAIM_CONFLICT") {
+        finish?.({ status: "skipped" });
+        log("Another agent took the task before you. Watching for the next task.");
+        if (opts.once) return "DONE";
+        await sleep(opts.pollMs);
+        continue;
+      }
       finish?.({ status: "failed", error_code: code, seller_usage: safeSellerUsage((error as { seller_usage?: unknown })?.seller_usage) ?? usage });
       log(`seller: ${code}`);
-      if (code === "SELLER_SUSPENDED") return;
+      if (code === "SELLER_SUSPENDED") return "SELLER_SUSPENDED";
       // runCycle closes a crashed process first. Recover an active claim using metadata only.
-      if (taskId && code !== "CLAIM_CONFLICT") await recoverClaim(mp, taskId, log);
+      if (taskId) await recoverClaim(mp, taskId, log);
       if (opts.once) throw new Error(code);
       await sleep(opts.pollMs);
     }

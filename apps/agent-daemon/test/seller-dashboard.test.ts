@@ -67,7 +67,7 @@ it('completes PKCE in Node, retries the same enrollment key after a lost respons
  expect(fs.statSync(path.join(f.root,'buyer.json')).mode&0o777).toBe(0o600);
  const status=await(await f.request('/api/status')).text();
  expect(status).not.toContain(keys[0]!);expect(status).not.toContain('private-human-session');expect(status).not.toContain('private-refresh');expect(status).not.toContain('b'.repeat(43));expect(JSON.parse(status).buyer_id).toBe('buyer_fixture');
- const page=await(await f.request('/')).text();expect(page).toContain('Continue with Google');expect(page).toContain('Set up Stripe');
+ const page=await(await f.request('/')).text();expect(page).toContain('<div id="root">');expect(page).toContain('/seller.js');expect(page).toContain('/seller.css');expect(page).not.toMatch(/<script(?![^>]*src=)/);
  expect(f.actions.prepare).not.toHaveBeenCalled();expect(f.actions.start).not.toHaveBeenCalled();
 });
 it('rejects wrong or replayed OAuth callbacks before exchanging tokens',async()=>{
@@ -97,4 +97,50 @@ it('requires buying setup before starting a seller but always permits stopping',
  expect((await f.request('/api/start','POST')).status).toBe(402);expect(f.actions.start).not.toHaveBeenCalled();
  expect((await f.request('/api/stop','POST')).status).toBe(200);expect(f.actions.stop).toHaveBeenCalledOnce();
  paymentState.status='READY';expect((await f.request('/api/start','POST')).status).toBe(200);expect(f.actions.start).toHaveBeenCalledOnce();
+});
+
+it('clears a previous setup error after seller activation succeeds',async()=>{
+ const f=await fixture();
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.writeFileSync(path.join(f.root,'buyer.json'),JSON.stringify({agent_id:'buyer_fixture',api_key:'atm_sk_'+ 'b'.repeat(43),owner:{user_id:'human-fixture'},marketplace_url:'https://marketplace.example/mcp'}));
+ f.actions.start.mockRejectedValueOnce(Error('launchctl failed (1)'));
+ expect((await f.request('/api/start','POST')).status).toBe(400);
+ expect((await (await f.request('/api/status')).json()).error).toBe('Setup could not finish. Please try again.');
+ expect((await f.request('/api/start','POST')).status).toBe(200);
+ expect((await (await f.request('/api/status')).json()).error).toBeNull();
+});
+
+it('serves task output pages only to authenticated local sessions',async()=>{
+ const f=await fixture();
+ expect((await realFetch(f.origin+'/task.html?task=task_example')).status).toBe(401);
+ expect((await f.request('/task.html?task=task_example')).status).toBe(200);
+ expect(await (await f.request('/task.html')).text()).toContain('/seller.js');
+ const token=JSON.parse(fs.readFileSync(path.join(f.root,'dashboard-open.json'),'utf8')).token;
+ const redirected=await realFetch(f.origin+'/open?token='+token+'&task=task_example',{redirect:'manual'});
+ expect(redirected.headers.get('location')).toBe('/task.html?task=task_example');
+});
+
+it('stores the chosen seller model only when selling is stopped and the model is accepted',async()=>{
+ const f=await fixture();
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.mkdirSync(path.join(f.root,'app'),{recursive:true});fs.writeFileSync(path.join(f.root,'app/release.json'),JSON.stringify({allowed_models:['qwen3:8b']}));
+ const send=(model:string)=>f.request('/api/seller-model','POST',{'Content-Type':'application/json'}).catch(()=>null)&&realFetch(f.origin+'/api/seller-model',{method:'POST',redirect:'manual',headers:{Cookie:f.cookie,Origin:f.origin,'X-ATM-Request':'1','Content-Type':'application/json'},body:JSON.stringify({model})});
+ expect((await send('not-installed:1b')).status).toBe(400);
+ expect((await send('')).status).toBe(200);
+ expect(JSON.parse(fs.readFileSync(path.join(f.root,'model.json'),'utf8')).seller_model).toBe('');
+ expect((await (await f.request('/api/status')).json()).seller_model).toBe('');
+ f.actions.status.mockResolvedValue({service:'running'});
+ expect((await send('')).status).toBe(409);
+});
+it('keeps a signed-in browser across dashboard restarts without storing the raw cookie',async()=>{
+ const f=await fixture();
+ const stored=fs.readFileSync(path.join(f.root,'dashboard-sessions.json'),'utf8');
+ expect(stored).not.toContain(f.cookie.split('=')[1]);expect(fs.statSync(path.join(f.root,'dashboard-sessions.json')).mode&0o777).toBe(0o600);
+ expect((await f.request('/open?token='+f.token)).status).toBe(303);
+ const actions={status:vi.fn(async()=>({service:'stopped'})),prepare:vi.fn(async()=>{}),start:vi.fn(async()=>{}),stop:vi.fn(async()=>{}),payout:vi.fn(async()=>({}))};
+ const again=createSellerDashboard({root:f.root,marketplaceUrl:'https://marketplace.example/mcp',assets:path.resolve('ui'),actions,port:0});await again.listen();
+ cleanup.unshift(async()=>{again.server.closeAllConnections();await new Promise<void>(r=>again.server.close(()=>r()));});
+ const origin=`http://127.0.0.1:${(again.server.address() as any).port}`;
+ expect((await realFetch(origin+'/api/status',{headers:{Cookie:f.cookie}})).status).toBe(200);
+ expect((await realFetch(origin+'/api/status',{headers:{Cookie:'atm_local='+'0'.repeat(64)}})).status).toBe(401);
 });

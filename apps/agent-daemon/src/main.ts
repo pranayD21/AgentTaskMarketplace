@@ -1,3 +1,4 @@
+import { autoCompute } from "./compute.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,9 +39,10 @@ const { values: args } = parseArgs({
     "deny-ollama": { type: "boolean", default: false },
     "deny-marketplace": { type: "boolean", default: false },
     once: { type: "boolean", default: false },
-    viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" },
-    "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? "4700" },
-    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? "each" },
+    viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" || process.env.ATM_HUMAN_SELLER_REQUIRED === "1" },
+    "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "0" : "4700") },
+    // The installed seller never opens browser windows: the local dashboard embeds the live view.
+    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "never" : "each") },
     "viewer-no-tap": { type: "boolean", default: false },
   },
 });
@@ -52,7 +54,7 @@ if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.rol
 if (args["measurement-file"] && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires a computer-id of 1–64 letters, digits, dots, dashes or underscores");
 if (args["register-only"] && args.role !== "seller") throw new Error("register-only requires seller role");
 if (args["estimated-watts"] && (!args["measurement-file"] || !Number.isFinite(Number(args["estimated-watts"])) || Number(args["estimated-watts"]) <= 0)) throw new Error("estimated-watts requires a measurement file and positive watts");
-if (!["each", "first", "never"].includes(args["viewer-open"])) throw new Error("viewer-open must be each|first|never");
+if (!["each", "first", "never", "claim"].includes(args["viewer-open"])) throw new Error("viewer-open must be each|first|never|claim");
 if (!Number.isInteger(Number(args["viewer-port"])) || Number(args["viewer-port"]) < 0) throw new Error("viewer-port must be a port number (0 picks a free one)");
 const role = args.role as "seller" | "judge";
 const MARKETPLACE_URL = process.env.MARKETPLACE_URL ?? "http://localhost:3000/mcp";
@@ -117,6 +119,17 @@ async function makeRuntime(apiKey: string): Promise<Runtime> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let outcome: "DONE" | "SELLER_SUSPENDED" | undefined;
+
+/** Tell the local dashboard why this worker stopped; the next registration clears it. */
+function recordStop(code: string) {
+  const file = process.env.ATM_STATUS_FILE;
+  if (!file) return;
+  try {
+    const current = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+    fs.writeFileSync(file, JSON.stringify({ ...current, stopped_reason: code, stopped_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  } catch { /* status is advisory */ }
+}
 
 // ----------------------------------------------------------------- judge ----
 type UsageRow = { purpose: string; attempt: number; model: string; outcome: string; input_tokens: number | null; output_tokens: number | null; cache_creation_input_tokens: number | null; cache_read_input_tokens: number | null; duration_ms: number };
@@ -183,7 +196,7 @@ async function startViewer() {
   const { startLiveView } = await import("./viewer/server.js");
   const tap = !args["viewer-no-tap"];
   viewer = await startLiveView({ port: Number(args["viewer-port"]), open: args["viewer-open"] as OpenMode, role, runtime: args.runtime, marketplaceUrl: MARKETPLACE_URL, tap });
-  log(`live view: ${viewer.url} (a new window opens for each sandbox instance; --viewer-open each|first|never)`);
+  log(`live view: ${viewer.url} (--viewer-open ${args["viewer-open"]})`);
   if (!tap) return;
   const { startTap } = await import("./viewer/tap.js");
   const marketplaceTap = await startTap(viewer, "marketplace", MARKETPLACE_URL);
@@ -205,7 +218,7 @@ async function closeViewer() {
 }
 
 try {
-  if (args.viewer) await startViewer();
+  if (args.viewer && !args["canary-only"] && !args["register-only"]) await startViewer();
   log(`marketplace ${MARKETPLACE_URL}`);
   if (args["canary-only"]) {
     rt = await makeRuntime("local-canary-no-marketplace-identity");
@@ -240,8 +253,9 @@ try {
       const prepared = JSON.parse(fs.readFileSync(preparedFile, "utf8"));
       if (prepared.seller_id !== state.agent_id || prepared.runner_sha256 !== rt.info().wasm_sha256) throw new Error("MODEL_SETUP_REQUIRED");
     }
-    if (role === "seller") await sellerLoop(mp, rt, {
+    if (role === "seller") outcome = await sellerLoop(mp, rt, {
       marketplaceUrl: SANDBOX_MARKETPLACE_URL, ollamaUrl: SANDBOX_OLLAMA_URL, pollMs,
+      compute: autoCompute(),
       models: args.model, once: args.once, taskId: args["task-id"], log, canary: args.canary,
       registerOnly: args["register-only"],
       beforeClaim: process.env.ATM_REQUIRE_RELEASE === "1" ? async () => {
@@ -253,7 +267,7 @@ try {
         let payout: Record<string, unknown> = { payout_status: "UNAVAILABLE", payout_onboarding_url: null };
         try { payout = args["register-only"] ? await mp.call("get_seller_onboarding") : ((await mp.call<any>("whoami")).payout ?? payout); }
         catch { log("Payout status unavailable; existing identity is retained. Use atm-seller status to check again."); }
-        const status = { worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
+        const status = { viewer_url: viewer?.url ?? null, worker_pid: process.pid, registration_only: Boolean(args["register-only"]), seller_id: state.agent_id, display_name: state.display_name, models, ...rt!.info(), ...payout, updated_at: new Date().toISOString() };
         fs.writeFileSync(process.env.ATM_STATUS_FILE, JSON.stringify(status, null, 2), { mode: 0o600 });
         log(`payout status=${payout.payout_status}; ${payout.payout_label ?? "Stripe TEST mode"}`);
 
@@ -273,14 +287,18 @@ try {
         estimatedWatts: args["estimated-watts"] ? Number(args["estimated-watts"]) : undefined, runtime: () => rt!.info(), warn: log }) : undefined,
     });
     else await judgeLoop(rt);
+    if (outcome === "SELLER_SUSPENDED") throw new Error("SELLER_SUSPENDED");
   }
 } catch (error) {
-  log(`stopped: ${safeFailureCode(error)}`);
+  const code = safeFailureCode(error);
+  log(`stopped: ${code}`);
+  recordStop(code);
   process.exitCode = 1;
 } finally {
   await rt?.close();
   await mp.close();
   unlock?.();
-  if (viewer && !stopping) { log(`run finished; live view stays at ${viewer.url}. Press Ctrl-C to exit.`); await new Promise(() => {}); }
+  // A developer run keeps the page up to read; the installed seller exits so launchd restarts it and it recovers once the cause is gone.
+  if (viewer && !stopping && process.env.ATM_HUMAN_SELLER_REQUIRED !== "1") { log(`run finished; live view stays at ${viewer.url}. Press Ctrl-C to exit.`); await new Promise(() => {}); }
   await closeViewer();
 }

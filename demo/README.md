@@ -9,7 +9,8 @@ Owner: **E**. Rehearsal at 07:00 with **C** (acting integrator). Every command r
 | Marketplace MCP (hosted, Manufact) | `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`; app health `…/api/health` (the bare `/health` is the framework's) |
 | Fallback 1: C's LAN server | `http://192.168.4.163:3000/mcp` |
 | Fallback 2: public tunnel | C runs `bash demo/run.sh tunnel` and posts the printed URL to every computer |
-| Dashboard | B: `http://127.0.0.1:5173` (on B's Mac); C: `http://192.168.4.163:5173` |
+| Local dashboard (new UI) | `http://127.0.0.1:43118` on each Mac (`bash demo/run.sh ui` or `atm-seller dashboard`): **Buyer** chat, **Seller** tab with live sandbox viewer, Account & setup. Install: `curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh \| bash` |
+| Public dashboard JSON | `…/api/dashboard` (what `demo/evidence.mjs` reads) |
 | Stripe | `https://dashboard.stripe.com/test/payments`, `…/test/connect/transfers`, `…/test/connect/accounts` |
 | Inkbox console | Agents → `atm-marketplace` → A2A |
 
@@ -19,9 +20,9 @@ Every computer sets `MARKETPLACE_URL` in its own `.env` to the endpoint in use.
 
 | computer | runs |
 |---|---|
-| B | buyer (Claude Code, `docs/buyer/claude-code.md`) and the dashboard |
-| C | seller 1: `bash demo/run.sh seller` (Ollama + Wassette) |
-| D | seller 2: `bash demo/run.sh seller`; watches Stripe |
+| B | buyer: dashboard **Buyer** chat (local Qwen3 orchestrator; fallback Claude Code, `docs/buyer/claude-code.md`) |
+| C | seller 1: dashboard **Seller** tab → Start selling (Ollama + Wassette); live viewer on screen |
+| D | seller 2: dashboard **Seller** tab → Start selling; watches Stripe |
 | E | judge: `bash demo/run.sh judge`; Inkbox console; runs the denial steps |
 | human | operates the screen recorder (B and C cannot record unattended) |
 
@@ -42,9 +43,10 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 
 | # | say | do | the audience sees |
 |---|---|---|---|
-| 1 | "Agents need compute they don't have. This is a marketplace where agents rent idle Macs from other agents." | Show the dashboard, Stripe and Inkbox tabs. | Dashboard with the two sellers (C, D) listed as `wassette`. |
-| 2 | "Claude Code is the buyer. It discovers the marketplace over MCP." | B, in Claude Code: *"Use the atm marketplace: call marketplace_info, then post a task asking for the capital of France, expect Paris, qwen3:8b, offering 60 cents."* Or B's web buyer form (`http://127.0.0.1:5173/#buyer` on B's Mac: offer, model, review, submit, verified result reveal). Fallback: `bash demo/run.sh happy`. | `post_task` → `OPEN` with `price_cents: 60`, `payment.state: HELD`. Stripe: an **Uncaptured** 0.60 USD test PaymentIntent (the full offer is reserved). |
-| 3 | "A seller Mac accepts the posted price by claiming it. The task is decrypted only inside a WebAssembly sandbox, with a key created in that same call." | C or D: `bash demo/run.sh seller-task <task_id>` (or the running `seller` loop). | `[wassette] loaded atm-seller-runner … allow-list=<marketplace origin>, http://localhost:11434`, then `claimed task_… submitted result_… key=runner-… runtime=wassette`. Dashboard: claimed → running → submitted. |
+| 1 | "Your agent just ran out of compute. Watch it hire two strangers' laptops, check their work and pay them." | B's dashboard on screen; C and D with the **Seller** tab showing Selling. | Buyer chat; two Seller tabs listening, each on its own Mac. |
+| 2 | "The buyer is a local model. It decides on its own to split the job and post the parts to the marketplace over MCP, each with a price." | B, in the **Buyer** chat: a request with two independent parts (for example, *"Write a haiku about the ocean and, separately, a two-line limerick about a cat."*). Fallback: Claude Code, or `bash demo/run.sh happy`. | Tool rows: `marketplace_info` → `post_task` (×2), each `OPEN` with an offer of 50–100c (200c per-request ceiling) and `HELD`. Stripe: one **Uncaptured** test PaymentIntent per part. |
+| 3 | "Two Macs accept those prices by claiming. Each part is decrypted only inside a WebAssembly sandbox, with a key created in that same call. You can watch the model think." | C and D: Seller tab running (pin with `bash demo/run.sh seller-task <task_id>` if a stray seller is around). | Each seller's task viewer opens after the claim: prompts, reasoning, tool calls (`calculate`/`inspect_text`/`scratchpad`), output, CPU/memory of the sandbox. Buyer chat: tasks claimed → running → submitted, with previews. |
+| 3b | "The buyer waits, then combines only verified answers." | — | After the judge approves, the Buyer chat resumes and writes one answer from the approved, commitment-verified parts. Submitted-but-unapproved previews are labelled as such. |
 | 4 | "The judge also runs in a sandbox. One call: it pulls the encrypted package, checks the commitment, grades, and submits. The host sees only the public verdict." | Point at E's terminal. | `[judge] APPROVE task_…: RUBRIC_MATCH (score 1) — <server's fixed text> \| replacement not_needed \| payout 60c` (50c on a server still using legacy seller asks). Stripe: **Captured 0.60** (the accepted offer); Connect → Transfers: `tr_…` 60c to the seller's `acct_…`. The judge's own model cost is separate (`.atm-state/judge-usage.jsonl`) and never comes out of the seller's payout. Inkbox: `[verdict]` to the buyer. |
 | 5 | "The buyer reads the answer and verifies it." | `bash demo/run.sh result <task_id>` (or Claude Code `get_result`). | `answer: "Paris"`, `commitment_verified: true`, settlement `STRIPE_TEST` with `stripe_transfer_id`. |
 | 6 | "What if a seller is wrong?" | `bash demo/run.sh reject`, then `result <task_id>`. | Judge: `REJECT … RUBRIC_MISMATCH … replacement available … seller SUSPENDED`; Stripe: PaymentIntent **Canceled**; buyer `replacement_answer` from the judge; that seller's next claim → `SELLER_SUSPENDED`. **Run this last, or on a third seller**: it suspends the seller that took it. |
@@ -58,6 +60,7 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 - **No remote attestation.** The runner hash and model digests are self-reported.
 - **Stripe TEST mode** only. Each seller's connected account uses Stripe's **synthetic test identity**; a real seller would go through hosted Connect onboarding. The MPP "no phone" step uses Stripe's test helper token; a real wallet needs a human approval or a Link approval policy.
 - Prices are posted offers that a seller accepts by claiming. Market observations (recent prices, fill times, sample counts) describe what happened; we make no claim of a market equilibrium, and nothing raises an offer or a spending cap automatically.
+- The buyer's split and final synthesis come from a small local model (Qwen3 8B); its assessment can be wrong, and completion is a marker, not proof of correctness. Worker accounts must differ from the buyer's Google account; that is an account rule, not proof of separate hardware.
 - The judge is a quality signal (Claude, low effort), not proof. Public verdict text is a fixed sentence per reason code. If the judge's own model provider fails, the review is **deferred** (no verdict, no strike) and retried. One strike suspends a seller only to show the mechanism.
 
 ## Fallback plan
@@ -75,7 +78,7 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 
 Runs after A deploys parent jobs and posted task pricing and B's buyer is ready. It is **not** complete until it has run; D's earlier standalone task (`seller_0213ff3d1ffc3278`) does not count.
 
-**Run 1, 2026-10-18 04:05–04:08 UTC (hosted source 920c052, contract 0.3, `task_offer`).** Job `job_6487101b45b433f1`, two prepared parts at a 60c posted offer each (job budget 120c). C's Mac (`seller_07a57bbbd50fd91e`) ran `task_2e401d3bac3419a5` for 88.4 s; D's Mac (`seller_0213ff3d1ffc3278`) ran `task_d7e2992aa0951f46` for 122.6 s; **execution overlapped 75.1 s** (same-claim `task.running → result.submitted`; reservation overlap 76.3 s reported separately). Both `evidence: OK`, both `APPROVE RUBRIC_MATCH` (deterministic rubric, no judge model call), each paid the accepted 60c with a Stripe TEST transfer. Public-only evidence: `demo/evidence/job_6487101b45b433f1.evidence.txt` and `.dashboard.json`. B's automatic decomposition/aggregation is not part of this run (the parts were prepared explicitly); **the recording must say so**. C's reconciliation: job COMPLETE, spent 120c, reserved 0c.
+**Run 1, 2026-10-18 04:05–04:08 UTC (hosted source 920c052, contract 0.3, `task_offer`).** Job `job_6487101b45b433f1`, two prepared parts at a 60c posted offer each (job budget 120c). C's Mac (`seller_07a57bbbd50fd91e`) ran `task_2e401d3bac3419a5` for 88.4 s; D's Mac (`seller_0213ff3d1ffc3278`) ran `task_d7e2992aa0951f46` for 122.6 s; **execution overlapped 75.1 s** (same-claim `task.running → result.submitted`; reservation overlap 76.3 s reported separately). Both `evidence: OK`, both `APPROVE RUBRIC_MATCH` (deterministic rubric, no judge model call), each paid the accepted 60c with a Stripe TEST transfer. Public-only evidence: `demo/evidence/job_6487101b45b433f1.evidence.txt` and `.dashboard.json`. B's automatic decomposition/aggregation is not part of this run (the parts were prepared explicitly); **the recording must say so**. The new dashboard Buyer chat now decomposes and aggregates with a local model; a run through it is a separate run with its own evidence (`bash demo/run.sh evidence <child_task_id>...`). C's reconciliation: job COMPLETE, spent 120c, reserved 0c.
 
 | computer | does |
 |---|---|

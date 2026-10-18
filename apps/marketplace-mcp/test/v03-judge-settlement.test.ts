@@ -12,7 +12,7 @@ import { memoryDb } from "../src/memdb.ts";
 import { payments } from "../src/payments.ts";
 import { fetchReplacementPackage, submitReplacement } from "../src/review.ts";
 import * as svc from "../src/service.ts";
-import { finalizeSettlement, recordIntent } from "../src/settlement.ts";
+import { finalizeSettlement, recordIntent, reinstateSeller } from "../src/settlement.ts";
 import { agent, backdate, expectError, post, replacementFor, runCycle, seller, settlementRow, taskRow } from "./helpers.ts";
 
 const MARKER = "PRIVATE-MARKER-7f3a";
@@ -252,6 +252,29 @@ describe("P1: settlement survives a failure after each side effect", () => {
     await svc.submitVerdict(judge, { task_id: task.task_id, result_id: resultId, verdict: "REJECT", reason_code: "RUBRIC_MISMATCH" });
     expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 0 });
     expect((await svc.sellerReputation(s.id)).reputation).toMatchObject({ rejections: 1, strikes: 1 });
+  });
+
+  it("reinstatement holds: an earlier rejection stops counting as a strike until a new one lands", async () => {
+    const { buyer, judge, s, task, resultId } = await submittedTask();
+    await svc.submitVerdict(judge, { task_id: task.task_id, result_id: resultId, verdict: "REJECT", reason_code: "RUBRIC_MISMATCH" });
+    expect(await svc.sellerReputation(s.id)).toMatchObject({ status: "SUSPENDED", reputation: { rejections: 1, strikes: 1 } });
+
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await reinstateSeller(s.id))?.status).toBe("ACTIVE");
+    expect(await svc.sellerReputation(s.id)).toMatchObject({ status: "ACTIVE", reputation: { rejections: 1, strikes: 0 } });
+
+    // A later approval recomputes reputation and must not re-suspend.
+    await new Promise((r) => setTimeout(r, 5));
+    const next = await post(buyer);
+    const { submitted } = await runCycle(s, next.task_id);
+    await svc.submitVerdict(judge, { task_id: next.task_id, result_id: submitted.result_id, verdict: "APPROVE", reason_code: "RUBRIC_MATCH" });
+    expect(await svc.sellerReputation(s.id)).toMatchObject({ status: "ACTIVE", reputation: { approvals: 1, rejections: 1, strikes: 0 } });
+
+    // A new rejection after reinstatement is a fresh strike.
+    const again = await post(buyer);
+    const run = await runCycle(s, again.task_id);
+    await svc.submitVerdict(judge, { task_id: again.task_id, result_id: run.submitted.result_id, verdict: "REJECT", reason_code: "RUBRIC_MISMATCH" });
+    expect(await svc.sellerReputation(s.id)).toMatchObject({ status: "SUSPENDED", reputation: { rejections: 2, strikes: 1 } });
   });
 
   it("concurrent finalizers apply each effect once and only one reports finishing", async () => {

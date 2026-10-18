@@ -18,7 +18,7 @@ const PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), "page.html"
 const HISTORY_LIMIT = 20_000;
 
 export type ViewerEvent = Record<string, unknown> & { t: string };
-export type OpenMode = "each" | "first" | "never";
+export type OpenMode = "each" | "first" | "never" | "claim";
 
 export interface LiveViewOptions {
   port?: number;
@@ -30,6 +30,7 @@ export interface LiveViewOptions {
   tap?: boolean;
   /** Synthetic events from the demo script; the page labels them. */
   simulated?: boolean;
+  openTab?:(url:string)=>void;
 }
 
 interface LiveVm { pid: number | null; closed: boolean }
@@ -42,6 +43,8 @@ export class LiveView implements SandboxObserver {
   private readonly latestStats = new Map<string, ViewerEvent>();
   private readonly server: http.Server;
   private readonly opts: LiveViewOptions;
+  private readonly claimCalls=new Map<string,string>();
+  private readonly openedClaims=new Set<string>();
   private seq = 0;
   private vmCount = 0;
   private statsTimer: ReturnType<typeof setInterval> | undefined;
@@ -67,6 +70,17 @@ export class LiveView implements SandboxObserver {
   }
 
   emit(event: ViewerEvent) {
+    if(this.opts.open==='claim'&&event.t==='net'){
+      if(event.phase==='start'&&event.call==='claim_task')this.claimCalls.set(String(event.id),String(event.vm));
+      if(event.phase==='end'&&this.claimCalls.has(String(event.id))){
+        const vm=this.claimCalls.get(String(event.id));this.claimCalls.delete(String(event.id));
+        const claim=(event.res as any)?.claim;
+        if(event.ok&&claim?.claim_id&&vm&&!this.openedClaims.has(claim.claim_id)){
+          this.openedClaims.add(claim.claim_id);
+          (this.opts.openTab??openWindow)(`${this.url}/vm/${encodeURIComponent(vm)}?task=${encodeURIComponent(claim.task_id)}`);
+        }
+      }
+    }
     const e: ViewerEvent = { ...event, seq: ++this.seq, at: Date.now() };
     if (e.t === "stats") this.latestStats.set(String(e.vm), e);
     else {
@@ -122,6 +136,8 @@ export class LiveView implements SandboxObserver {
 
   // ------------------------------------------------------------- internals --
   private handle(req: http.IncomingMessage, res: http.ServerResponse) {
+    if(!/^((localhost)|(127\.0\.0\.1)):\d+$/.test(req.headers.host??"")){res.writeHead(403);res.end("Local viewer only");return;}
+    res.setHeader("Content-Security-Policy", "frame-ancestors http://127.0.0.1:43118; base-uri 'none'");
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
@@ -171,7 +187,6 @@ export function openWindow(url: string) {
   void (async () => {
     if (process.env.ATM_VIEWER_BROWSER) { await run(process.env.ATM_VIEWER_BROWSER, [url]); return; }
     if (process.platform === "darwin") {
-      if (fs.existsSync(CHROME_MAC)) { await run("open", ["-na", "Google Chrome", "--args", "--new-window", `--app=${url}`]); return; }
       await run("open", [url]);
       return;
     }

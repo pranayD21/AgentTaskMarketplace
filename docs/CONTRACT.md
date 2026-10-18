@@ -148,7 +148,7 @@ New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge);
 - Exactly-once effects:
   - Stripe calls reuse the task-scoped idempotency keys `atm:<task>:capture|cancel|transfer`.
   - Buyer balance changes carry a key (`settle:<task>`, `reserve:<task>`, `unreserve:<task>`, `paid:<task>:<payment_intent>`), recorded in `agents.balance_keys` in the same compare-and-swap write. A monotonically increasing `balance_revision` guards against a balance returning to an earlier value.
-  - Seller `approvals` / `rejections` / `strikes` are **recomputed** from final verdicts, not incremented. Infrastructure codes never count.
+  - Seller `approvals` / `rejections` / `strikes` are **recomputed** from final verdicts, not incremented. Infrastructure codes never count. `rejections` is lifetime; `strikes` counts only rejections after `sellers.reinstated_at`, which an operator sets when lifting a suspension (`apps/marketplace-mcp/scripts/reinstate-seller.mjs`). A seller is suspended when `strikes >= SUSPEND_AFTER_STRIKES` and stays suspended until reinstated.
 - Durable posting: `atm_prepare_task` creates an unclaimable task (`AWAITING_PAYMENT`, payment state `POSTING`) and reserves the buyer/job budgets in one database transaction before calling the provider. An insert or budget-write failure rolls everything back, so it cannot orphan a hold. MPP listings reserve when paid.
 - A card hold uses the stable task key `atm:<task>:hold`. Publication changes `post_state: HOLDING → READY` with a state guard. Unknown provider/database outcomes keep the task and reservation visible; housekeeping resumes the same post after two minutes. A duplicate request returns that task.
 - Cancellation competes on the same state guard, closes the pending post first, then compensates its hold. Failed compensation stays `CANCEL_PENDING` with its reservation until recovery confirms release. Slow hold responses cannot reopen a cancelled task. Unknown holds older than 23 hours require operator reconciliation instead of replay beyond the provider's key-retention window.
@@ -246,6 +246,30 @@ The dashboard appends a completion-marker instruction and uses `contains_text`
 acceptance. This verifies output format, not answer correctness. The marker is
 removed from the displayed answer, which appears only after APPROVED status and
 successful commitment verification. Existing payment readiness, account caps,
-and the shared provider allowance still apply. Requests exceeding the server's
-2500-byte prompt/context/rubric limit are rejected before posting. Network
+and the shared provider allowance still apply. Prompt, context, and grading
+text follow their individual field limits. Network
 retries use the same persisted client_request_id to avoid duplicate purchases.
+
+### Dashboard output and task viewers (2026-10-18 follow-up)
+
+A request may contain one to four self-contained tasks separated by `---TASK---`
+on its own line. Multiple tasks share an idempotent job with a 50-cent-per-task
+budget (at most 200 TEST cents). Each task retains its own idempotency key and
+output. They are posted without waiting for previous tasks to finish; available
+workers may run them concurrently. Shared provider and buyer limits still apply,
+so posting later parts can fail without cancelling already posted parts.
+
+SUBMITTED/JUDGING answers with verified commitments are now visible as pending
+review. REJECTED output is labelled rejected. Only APPROVED output is presented
+as final, and the request completes only when all tasks have approved results.
+The completion marker remains a format check, not a correctness test.
+
+Each confirmed claim opens an authenticated local task-progress tab on the buyer
+computer. Task IDs and single-use viewer tokens are validated locally; no buyer
+credentials reach the page. On installed seller workers, the existing Wassette
+live viewer is enabled and opens in the default browser after a successful claim,
+not on startup or failed claims. It shows local sandbox activity and model output;
+submission is labelled as awaiting marketplace review. The buyer's viewer shows
+remote task state/output, not remote CPU measurements. Existing remote installs
+need the updated installer to enable their seller viewer; deployment cannot
+restart or update another person's computer.

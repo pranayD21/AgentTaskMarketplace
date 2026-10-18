@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/* Design tokens. Light by default; dark follows the system preference. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.17 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --subtle: oklch(0.98 0 0);
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.87 0 0);
+  --primary: oklch(0.17 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: var(--foreground);
+  --ring: oklch(0.55 0 0);
+  --success: oklch(0.5 0.08 155);
+  --success-soft: oklch(0.96 0.02 155);
+  --warning: oklch(0.45 0 0);
+  --warning-soft: oklch(0.95 0 0);
+  --danger: oklch(0.52 0.16 25);
+  --danger-soft: oklch(0.96 0.02 25);
+  --info: oklch(0.45 0 0);
+  --info-soft: oklch(0.95 0 0);
+  --user-bubble: oklch(0.95 0 0);
+  --user-bubble-foreground: var(--foreground);
+  --chat-accent: var(--primary);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 1px oklch(0 0 0 / 0.03);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.12 0 0);
+    --foreground: oklch(0.95 0 0);
+    --card: oklch(0.17 0 0);
+    --muted: oklch(0.24 0 0);
+    --muted-foreground: oklch(0.67 0 0);
+    --subtle: oklch(0.19 0 0);
+    --border: oklch(0.27 0 0);
+    --input: oklch(0.32 0 0);
+    --primary: oklch(0.95 0 0);
+    --primary-foreground: oklch(0.14 0 0);
+    --accent: oklch(0.25 0 0);
+    --ring: oklch(0.6 0 0);
+    --success: oklch(0.75 0.08 155);
+    --success-soft: oklch(0.27 0.02 155);
+    --warning: oklch(0.72 0 0);
+    --warning-soft: oklch(0.26 0 0);
+    --danger: oklch(0.7 0.14 25);
+    --danger-soft: oklch(0.28 0.03 25);
+    --info: oklch(0.72 0 0);
+    --info-soft: oklch(0.26 0 0);
+    --user-bubble: oklch(0.26 0 0);
+    --user-bubble-foreground: oklch(0.96 0 0);
+    --chat-accent: var(--primary);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.4);
+  }
+}
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-user-bubble: var(--user-bubble);
+  --color-user-bubble-foreground: var(--user-bubble-foreground);
+  --color-chat-accent: var(--chat-accent);
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-card: var(--shadow);
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-fade-up: fade-up 0.25s ease-out both;
+  --animate-dot: dot 1.2s ease-in-out infinite;
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @keyframes fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes dot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+  body { @apply bg-background text-foreground font-sans text-[14px] leading-[1.55]; margin: 0; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  pre, code { font-family: var(--font-mono); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--foreground) 50%, var(--muted-foreground) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+}
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* Markdown in chat: quiet typography that matches the plain-text rhythm. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md table { margin: 0.6em 0; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 1.1em 0 0.4em; }
+.md h1 { font-size: 1.35em; } .md h2 { font-size: 1.2em; } .md h3 { font-size: 1.08em; } .md h4 { font-size: 1em; }
+.md ul { list-style: disc; padding-left: 1.4em; } .md ol { list-style: decimal; padding-left: 1.4em; }
+.md li { margin: 0.2em 0; } .md li > p { margin: 0; }
+.md strong { font-weight: 600; } .md em { font-style: italic; }
+.md a { text-decoration: underline; text-underline-offset: 3px; }
+.md code { font-size: 0.875em; background: var(--muted); border-radius: 5px; padding: 0.12em 0.4em; }
+.md pre { background: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 0.8em 1em; overflow-x: auto; font-size: 0.85em; line-height: 1.55; }
+.md pre code { background: none; padding: 0; font-size: inherit; }
+.md blockquote { border-left: 2px solid var(--border); padding-left: 0.9em; color: var(--muted-foreground); }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
+.md table { border-collapse: collapse; width: 100%; font-size: 0.92em; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--border); padding: 0.4em 0.7em; text-align: left; vertical-align: top; }
+.md th { background: var(--subtle); font-weight: 600; }
+.md input[type="checkbox"] { margin-right: 0.4em; }
+/* Math (MathML from KaTeX): inline stays in the text line; display blocks get breathing room. */
+.md .katex { font-size: 1.05em; }
+.md math[display="block"] { display: block; margin: 0.8em 0; overflow-x: auto; }
+.md math { font-family: "STIX Two Math", "Latin Modern Math", "Cambria Math", "Noto Sans Math", serif; }

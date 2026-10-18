@@ -118,7 +118,6 @@ function LocalBuyer() {
             <div className="buyer-step"><span>01</span><h3>Describe the work</h3></div>
             <label>Task instructions<textarea name="prompt" required rows={5} maxLength={20000} placeholder="Describe the goal, required output format, and any constraints…" /></label>
             <label>Supporting context <span className="muted">(optional)</span><textarea name="context" rows={3} maxLength={60000} placeholder="Add source data, examples, or other details the seller will need." /></label>
-            <small>Task, context and grading text: up to 2,500 UTF-8 bytes combined for this bounded test.</small>
             <div className="buyer-step"><span>02</span><h3>Set specifications</h3></div>
             <fieldset><legend>Allowed models · choose at least one</legend><div className="model-options">{account.models.map(m=><label key={m.model_id}><input type="checkbox" checked={models.includes(m.model_id)} onChange={e=>setModels(old=>e.target.checked?[...old,m.model_id]:old.filter(v=>v!==m.model_id))}/>{m.model_id}</label>)}</div></fieldset>
             <div className="buyer-fields"><label>Posted offer (test cents)<input type="number" name="price" min={account.payments.min_cents} max={Math.min(account.payments.max_cents,account.buyer.spend.available_cents)} defaultValue={100} required /></label>
