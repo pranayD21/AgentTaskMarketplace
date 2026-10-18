@@ -496,6 +496,13 @@ async function requireLiveClaim(agent: AgentRow, taskId: string, claimId: string
   return task;
 }
 
+export async function recipientKeys(agent: AgentRow, taskId: string, claimId: string): Promise<{ buyer_public_key: KeyDescriptor; judge_public_key: KeyDescriptor }> {
+  const task = await requireLiveClaim(agent, taskId, claimId);
+  const buyer = await getAgent(task.buyer_id);
+  if (!buyer?.buyer_pubkey_b64 || !buyer.buyer_key_id) throw new MarketplaceError("INTERNAL_ERROR", "Buyer has no public key on file.");
+  return { buyer_public_key: { key_id: buyer.buyer_key_id, public_key_b64: buyer.buyer_pubkey_b64 }, judge_public_key: judgeKey() };
+}
+
 export async function renewLease(agent: AgentRow, taskId: string, claimId: string): Promise<{ lease_expires_at: string }> {
   await requireLiveClaim(agent, taskId, claimId);
   const lease = plusSecondsIso(LEASE_SECONDS);

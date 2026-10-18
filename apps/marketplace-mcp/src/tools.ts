@@ -313,6 +313,20 @@ export function registerTools(server: MCPServer): void {
 
   server.tool(
     {
+      name: "get_recipient_keys",
+      description: "Seller: the buyer's and the judge's public keys for your active claim. Seal the identical canonical result bytes to each before submit_result.",
+      inputSchema: z.object({ task_id: z.string(), claim_id: z.string(), ...apiKeyField }),
+      annotations: { readOnlyHint: true },
+    },
+    async (p, ctx) =>
+      run(async () => {
+        const seller = await requireActor(ctx as ToolCtx, p, ["seller"]);
+        return svc.recipientKeys(seller, p.task_id, p.claim_id);
+      }),
+  );
+
+  server.tool(
+    {
       name: "start_task",
       description: "Seller (optional): mark your claimed task RUNNING so buyers see progress.",
       inputSchema: z.object({ task_id: z.string(), claim_id: z.string(), ...apiKeyField }),
