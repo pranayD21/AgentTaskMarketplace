@@ -85,7 +85,15 @@ export interface PaymentProvider {
   readonly label: string;
   /** Minimum amount the rail accepts, in cents. */
   readonly min_cents: number;
-  onboardBuyer(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>>;
+  /**
+   * Create the buyer's Stripe customer. With `human_onboarding` no test card
+   * is attached: the person adds their own card through buyerPaymentInfo's
+   * hosted setup link; without it (legacy buyers, fixtures) the shared test
+   * card is attached as before.
+   */
+  onboardBuyer(agent: BuyerOnboardInput): Promise<Partial<AgentRow>>;
+  /** Buyer payment status and, when asked, a hosted setup link (whoami / get_buyer_setup). */
+  buyerPayment(agent: BuyerPaymentAgent, opts?: { includeSetup?: boolean }): Promise<BuyerPaymentSetup>;
   /**
    * Create the seller's payout account. With `human_onboarding` the account is
    * created bare (no synthetic test identity, no auto-verification) and the
@@ -116,6 +124,33 @@ export interface PaymentProvider {
   payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts?: { includeLink?: boolean }): Promise<PayoutOnboarding>;
 }
 
+export interface BuyerOnboardInput {
+  id: string;
+  display_name: string;
+  /** True when the buyer agent is owned by a verified human (installer OAuth); no test card is attached. */
+  human_onboarding?: boolean;
+  /** The verified human's email, set on the Stripe customer and prefilled in hosted setup. */
+  email?: string;
+}
+export type BuyerPaymentAgent = { id: string; stripe_customer_id: string | null; stripe_payment_method_id: string | null };
+export type BuyerPaymentStatus = "READY" | "SETUP_REQUIRED" | "UNAVAILABLE" | "MOCK";
+export interface BuyerPaymentSetup {
+  /** READY = a confirmed card is saved for this exact customer and holds will succeed; SETUP_REQUIRED = the person must add one. */
+  buyer_payment_status: BuyerPaymentStatus;
+  /** Hosted Stripe Checkout (setup mode) URL, only with includeSetup and only while SETUP_REQUIRED. */
+  setup_url: string | null;
+  /** Human-readable rail label; always says TEST MODE or MOCK. */
+  payment_label: string;
+  /** Brand and last4 of the saved card, never the number. */
+  payment_method: { id: string; brand: string | null; last4: string | null } | null;
+  /**
+   * Set when reconciliation found a confirmed card for this customer that the
+   * agent row does not record yet: the service persists it as
+   * agents.stripe_payment_method_id. Never a card of another customer.
+   */
+  confirmed_payment_method_id: string | null;
+}
+
 export interface SellerOnboardInput {
   id: string;
   display_name: string;
@@ -141,17 +176,131 @@ export function createStripe(secretKey: string | undefined): Stripe {
   return new Stripe(secretKey, { appInfo: STRIPE_APP_INFO });
 }
 
-/** Buyer: Stripe Customer with the shared test card attached as default. */
-export async function onboardBuyerCustomer(stripe: Stripe, agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+/** One Stripe customer per buyer agent, ever (replayed on retry or concurrent sign-in). */
+export function customerIdempotencyKey(agentId: string): string {
+  return `atm:${agentId}:customer`;
+}
+/** Paths C serves for the human's return from Stripe-hosted card setup. */
+export const BUYER_SETUP_RETURN_PATH = "/buyer/setup-return";
+export const BUYER_SETUP_REFRESH_PATH = "/buyer/setup-refresh";
+
+/**
+ * Buyer: Stripe Customer. Legacy buyers get the shared test card attached as
+ * default; a human-owned buyer gets no card at all — the person adds their own
+ * through the hosted setup link, and only a card confirmed for this exact
+ * customer is ever recorded (see buyerPaymentSetup).
+ */
+export async function onboardBuyerCustomer(stripe: Stripe, agent: BuyerOnboardInput): Promise<Partial<AgentRow>> {
+  const human = agent.human_onboarding === true;
   const customer = await stripe.customers.create({
     name: agent.display_name,
-    description: `Buyer agent ${agent.id} (Agent Task Marketplace, test mode)`,
-    metadata: { agent_id: agent.id, app: "agent-task-marketplace" },
-  });
+    ...(human && agent.email ? { email: agent.email } : {}),
+    description: human ? `Buyer ${agent.id} (human-owned, Agent Task Marketplace, test mode)` : `Buyer agent ${agent.id} (Agent Task Marketplace, test mode)`,
+    metadata: { agent_id: agent.id, app: "agent-task-marketplace", onboarding: human ? "human" : "synthetic-test" },
+  }, { idempotencyKey: customerIdempotencyKey(agent.id) });
+  if (human) return { stripe_customer_id: customer.id, stripe_payment_method_id: null };
   // Stripe's shared test payment method; attaching clones it onto the customer.
   const pm = await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id });
   await stripe.customers.update(customer.id, { invoice_settings: { default_payment_method: pm.id } });
   return { stripe_customer_id: customer.id, stripe_payment_method_id: pm.id };
+}
+
+/** Hosted Stripe Checkout in setup mode: the person saves a card to their own customer; no charge. */
+export async function buyerSetupLink(stripe: Stripe, customerId: string, baseUrl: string): Promise<string> {
+  const base = baseUrl.replace(/\/$/, "");
+  const session = await stripe.checkout.sessions.create({
+    mode: "setup",
+    customer: customerId,
+    success_url: `${base}${BUYER_SETUP_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}${BUYER_SETUP_REFRESH_PATH}`,
+    metadata: { app: "agent-task-marketplace", purpose: "buyer-card-setup" },
+  });
+  if (!session.url) throw new Error("Stripe returned a setup session without a URL");
+  return session.url;
+}
+
+/**
+ * Direct confirmation for C's /buyer/setup-return page, which receives
+ * `session_id`. Accepts the card only if the session is complete, belongs to
+ * this exact customer, and its SetupIntent succeeded for the same customer;
+ * then makes it the default and returns its id for the agent row. Anything
+ * else returns null with a reason and attaches nothing.
+ */
+export async function confirmBuyerSetupSession(stripe: Stripe, agent: BuyerPaymentAgent, sessionId: string): Promise<{ stripe_payment_method_id: string | null; reason: string | null }> {
+  if (!agent.stripe_customer_id) return { stripe_payment_method_id: null, reason: "buyer has no Stripe customer" };
+  const customer = agent.stripe_customer_id;
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["setup_intent"] });
+  } catch (err) {
+    return { stripe_payment_method_id: null, reason: `session unreadable: ${(err as Error).message}` };
+  }
+  const sessionCustomer = typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+  if (sessionCustomer !== customer) return { stripe_payment_method_id: null, reason: "session belongs to a different customer" };
+  if (session.mode !== "setup" || session.status !== "complete") return { stripe_payment_method_id: null, reason: `session is ${session.status ?? "unknown"} (${session.mode})` };
+  const si = typeof session.setup_intent === "string" ? await stripe.setupIntents.retrieve(session.setup_intent) : session.setup_intent;
+  if (!si) return { stripe_payment_method_id: null, reason: "session has no SetupIntent" };
+  const siCustomer = typeof si.customer === "string" ? si.customer : si.customer?.id ?? null;
+  const pm = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id ?? null;
+  if (si.status !== "succeeded" || siCustomer !== customer || !pm) return { stripe_payment_method_id: null, reason: `setup ${si.status} for ${siCustomer ?? "no customer"}` };
+  try {
+    await stripe.customers.update(customer, { invoice_settings: { default_payment_method: pm } });
+  } catch (err) {
+    return { stripe_payment_method_id: null, reason: `could not set default: ${(err as Error).message}` };
+  }
+  return { stripe_payment_method_id: pm, reason: null };
+}
+
+/**
+ * Buyer payment readiness, reconciled against Stripe. Reads only, except that a
+ * card found attached to this customer is made its default. A card recorded on
+ * the agent row that belongs to a different customer is ignored, never used.
+ */
+export async function buyerPaymentSetup(stripe: Stripe, agent: BuyerPaymentAgent, baseUrl: string, opts: { includeSetup?: boolean } = {}): Promise<BuyerPaymentSetup> {
+  const label = "Stripe TEST MODE — card saved by the buyer through hosted setup; no real money";
+  const none = (status: BuyerPaymentStatus, setup_url: string | null = null): BuyerPaymentSetup => ({ buyer_payment_status: status, setup_url, payment_label: label, payment_method: null, confirmed_payment_method_id: null });
+  if (!agent.stripe_customer_id) return none("UNAVAILABLE");
+  const customer = agent.stripe_customer_id;
+  const describe = (pm: Stripe.PaymentMethod) => ({ id: pm.id, brand: pm.card?.brand ?? null, last4: pm.card?.last4 ?? null });
+  const ownerOf = (pm: Stripe.PaymentMethod) => (typeof pm.customer === "string" ? pm.customer : pm.customer?.id ?? null);
+
+  if (agent.stripe_payment_method_id) {
+    try {
+      const pm = await stripe.paymentMethods.retrieve(agent.stripe_payment_method_id);
+      if (ownerOf(pm) === customer) return { buyer_payment_status: "READY", setup_url: null, payment_label: label, payment_method: describe(pm), confirmed_payment_method_id: null };
+      console.warn(`[stripe] buyer ${agent.id}: recorded payment method ${pm.id} belongs to ${ownerOf(pm) ?? "nobody"}, not ${customer}; ignoring it`);
+    } catch (err) {
+      console.warn(`[stripe] buyer ${agent.id}: recorded payment method unreadable: ${(err as Error).message}`);
+    }
+  }
+  // Reconcile: did the person finish hosted setup? Checkout (setup mode) attaches the card to the customer.
+  const cards = await stripe.paymentMethods.list({ customer, type: "card", limit: 5 });
+  const confirmed = cards.data.find((pm) => ownerOf(pm) === customer);
+  if (confirmed) {
+    try {
+      await stripe.customers.update(customer, { invoice_settings: { default_payment_method: confirmed.id } });
+    } catch (err) {
+      console.warn(`[stripe] buyer ${agent.id}: could not set default payment method: ${(err as Error).message}`);
+    }
+    return { buyer_payment_status: "READY", setup_url: null, payment_label: label, payment_method: describe(confirmed), confirmed_payment_method_id: confirmed.id };
+  }
+  if (opts.includeSetup !== true) return none("SETUP_REQUIRED");
+  try {
+    return none("SETUP_REQUIRED", await buyerSetupLink(stripe, customer, baseUrl));
+  } catch (err) {
+    console.warn(`[stripe] buyer ${agent.id}: setup link not created: ${(err as Error).message}`);
+    return none("SETUP_REQUIRED");
+  }
+}
+
+/**
+ * The shape C exposes through authenticated whoami / get_buyer_setup. A setup
+ * link is minted only for a human-linked buyer that asks for one.
+ */
+export async function buyerPaymentInfo(agent: BuyerPaymentAgent, opts: { includeSetup?: boolean; humanLinked?: boolean } = {}): Promise<BuyerPaymentSetup> {
+  const p = payments();
+  if (p.mode === "mock") return { buyer_payment_status: "MOCK", setup_url: null, payment_label: p.label, payment_method: null, confirmed_payment_method_id: null };
+  return p.buyerPayment(agent, { includeSetup: opts.includeSetup === true && opts.humanLinked === true });
 }
 
 export type TransfersCapability = "active" | "pending" | "restricted" | "rejected" | "unsupported" | "unknown";
@@ -694,6 +843,9 @@ class MockProvider implements PaymentProvider {
   async payoutOnboarding(): Promise<PayoutOnboarding> {
     return { payout_status: "active", onboarding_url: null, blocking: [] }; // mock rail: nothing to onboard
   }
+  async buyerPayment(): Promise<BuyerPaymentSetup> {
+    return { buyer_payment_status: "MOCK", setup_url: null, payment_label: this.label, payment_method: null, confirmed_payment_method_id: null };
+  }
   async inspect(task: TaskRow): Promise<MoneyState> {
     const e = mockLedger.get(task.id);
     return {
@@ -739,8 +891,12 @@ export class StripeCardProvider implements PaymentProvider {
     this.stripe = client ?? createStripe(secretKey);
   }
 
-  onboardBuyer(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
+  onboardBuyer(agent: BuyerOnboardInput): Promise<Partial<AgentRow>> {
     return onboardBuyerCustomer(this.stripe, agent);
+  }
+
+  buyerPayment(agent: BuyerPaymentAgent, opts: { includeSetup?: boolean } = {}): Promise<BuyerPaymentSetup> {
+    return buyerPaymentSetup(this.stripe, agent, env().baseUrl, opts);
   }
 
   onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
@@ -879,7 +1035,8 @@ class RoutingProvider implements PaymentProvider {
   get mode() { return this.configured.mode; }
   get label() { return this.configured.label; }
   get min_cents() { return this.configured.min_cents; }
-  onboardBuyer(agent: { id: string; display_name: string }) { return this.configured.onboardBuyer(agent); }
+  onboardBuyer(agent: BuyerOnboardInput) { return this.configured.onboardBuyer(agent); }
+  buyerPayment(agent: BuyerPaymentAgent, opts?: { includeSetup?: boolean }) { return this.configured.buyerPayment(agent, opts); }
   onboardSeller(agent: SellerOnboardInput) { return this.configured.onboardSeller(agent); }
   hold(task: { id: string; max_price_cents: number }, buyer: AgentRow) { return this.configured.hold(task, buyer); }
   capture(task: TaskRow, seller: AgentRow | null, amountCents: number) { return this.for(task.payment_mode).capture(task, seller, amountCents); }

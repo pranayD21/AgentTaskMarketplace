@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import type { AgentRow, TaskRow } from "./db.js";
-import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, PAYOUT_ACCOUNT_RETRY_POLICY, SELLER_SETUP_REFRESH_PATH, SELLER_SETUP_RETURN_PATH, createRecipientAccount, ensureTransfersActive, inspectStripeMoney, onboardSellerAccount, onboardingLink, payoutAccountIdempotencyKey, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
+import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, BUYER_SETUP_REFRESH_PATH, BUYER_SETUP_RETURN_PATH, PAYOUT_ACCOUNT_RETRY_POLICY, SELLER_SETUP_REFRESH_PATH, SELLER_SETUP_RETURN_PATH, buyerPaymentInfo, buyerPaymentSetup, confirmBuyerSetupSession, customerIdempotencyKey, onboardBuyerCustomer, createRecipientAccount, ensureTransfersActive, inspectStripeMoney, onboardSellerAccount, onboardingLink, payoutAccountIdempotencyKey, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
 
 // ---------------------------------------------------------------- fakes
 const seller = { id: "seller_1", stripe_account_id: "acct_test" } as AgentRow;
@@ -395,5 +395,91 @@ describe("human-owned seller accounts", () => {
     // sellerPayoutOnboarding picks the human pages automatically from the account's metadata marker
     await sellerPayoutOnboarding(stripe, { id: "seller_h", stripe_account_id: "acct_new" }, "https://host.example", { includeLink: true });
     expect(links[2]!.use_case.account_onboarding.return_url).toBe(`https://host.example${SELLER_SETUP_RETURN_PATH}`);
+  });
+});
+
+// ---------------------------------------------------------------- human buyers (C-D-20261018T055000Z-01)
+describe("human-owned buyers", () => {
+  function fakeBuyerStripe(o: { cards?: { id: string; customer: string; brand?: string; last4?: string }[]; recorded?: { id: string; customer: string } } = {}) {
+    const customers: Record<string, unknown>[] = [];
+    const keys: string[] = [];
+    const attached: string[] = [];
+    const sessions: Record<string, unknown>[] = [];
+    const defaults: string[] = [];
+    const byKey = new Map<string, { id: string }>();
+    const stripe = {
+      customers: {
+        create: async (params: Record<string, unknown>, opts: { idempotencyKey: string }) => { keys.push(opts.idempotencyKey); if (byKey.has(opts.idempotencyKey)) return byKey.get(opts.idempotencyKey); customers.push(params); const c = { id: `cus_${customers.length}` }; byKey.set(opts.idempotencyKey, c); return c; },
+        update: async (_id: string, p: { invoice_settings: { default_payment_method: string } }) => { defaults.push(p.invoice_settings.default_payment_method); return {}; },
+      },
+      paymentMethods: {
+        attach: async (id: string) => { attached.push(id); return { id: "pm_visa_clone" }; },
+        retrieve: async (id: string) => { const r = o.recorded; if (!r || r.id !== id) throw new Error("No such payment method"); return { id, customer: r.customer, card: { brand: "visa", last4: "4242" } }; },
+        list: async ({ customer }: { customer: string }) => ({ data: (o.cards ?? []).filter((c) => c.customer === customer).map((c) => ({ id: c.id, customer: c.customer, card: { brand: c.brand ?? "visa", last4: c.last4 ?? "4242" } })) }),
+      },
+      checkout: { sessions: { create: async (p: Record<string, unknown>) => { sessions.push(p); return { url: "https://checkout.stripe.com/c/pay/cs_test_1" }; } } },
+    } as unknown as Stripe;
+    return { stripe, customers, keys, attached, sessions, defaults };
+  }
+  it("human onboarding creates one customer under a stable key with the email and attaches no test card", async () => {
+    const { stripe, customers, keys, attached } = fakeBuyerStripe();
+    const agent = { id: "buyer_h", display_name: "Ada", human_onboarding: true, email: "ada@example.com" };
+    const [a, b] = await Promise.all([onboardBuyerCustomer(stripe, agent), onboardBuyerCustomer(stripe, agent)]);
+    expect(a).toEqual({ stripe_customer_id: "cus_1", stripe_payment_method_id: null });
+    expect(b).toEqual(a);
+    expect(customers).toHaveLength(1);
+    expect(customers[0]).toMatchObject({ email: "ada@example.com", metadata: { onboarding: "human" } });
+    expect(attached).toHaveLength(0);
+    expect(new Set(keys)).toEqual(new Set([customerIdempotencyKey("buyer_h")]));
+  });
+  it("legacy onboarding still attaches the shared test card", async () => {
+    const { stripe, attached } = fakeBuyerStripe();
+    expect(await onboardBuyerCustomer(stripe, { id: "buyer_t", display_name: "fixture" })).toEqual({ stripe_customer_id: "cus_1", stripe_payment_method_id: "pm_visa_clone" });
+    expect(attached).toEqual(["pm_card_visa"]);
+  });
+  it("SETUP_REQUIRED until the person saves a card; the setup link is a Checkout session in setup mode on their customer", async () => {
+    const { stripe, sessions } = fakeBuyerStripe();
+    const agent = { id: "buyer_h", stripe_customer_id: "cus_1", stripe_payment_method_id: null };
+    expect(await buyerPaymentSetup(stripe, agent, "https://host.example")).toMatchObject({ buyer_payment_status: "SETUP_REQUIRED", setup_url: null });
+    expect(sessions).toHaveLength(0);
+    const withLink = await buyerPaymentSetup(stripe, agent, "https://host.example/", { includeSetup: true });
+    expect(withLink).toMatchObject({ buyer_payment_status: "SETUP_REQUIRED", setup_url: "https://checkout.stripe.com/c/pay/cs_test_1" });
+    expect(sessions[0]).toMatchObject({ mode: "setup", customer: "cus_1", success_url: `https://host.example${BUYER_SETUP_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`, cancel_url: `https://host.example${BUYER_SETUP_REFRESH_PATH}` });
+  });
+  it("confirmBuyerSetupSession accepts only a complete setup session of this customer with a succeeded SetupIntent", async () => {
+    const make = (session: Record<string, unknown>) => {
+      const defaults: string[] = [];
+      const stripe = { checkout: { sessions: { retrieve: async () => session } }, setupIntents: { retrieve: async () => { throw new Error("not used"); } }, customers: { update: async (_: string, p: { invoice_settings: { default_payment_method: string } }) => { defaults.push(p.invoice_settings.default_payment_method); return {}; } } } as unknown as Stripe;
+      return { stripe, defaults };
+    };
+    const agent = { id: "b", stripe_customer_id: "cus_1", stripe_payment_method_id: null };
+    const ok = make({ mode: "setup", status: "complete", customer: "cus_1", setup_intent: { status: "succeeded", customer: "cus_1", payment_method: "pm_new" } });
+    expect(await confirmBuyerSetupSession(ok.stripe, agent, "cs_1")).toEqual({ stripe_payment_method_id: "pm_new", reason: null });
+    expect(ok.defaults).toEqual(["pm_new"]);
+    const otherCustomer = make({ mode: "setup", status: "complete", customer: "cus_other", setup_intent: { status: "succeeded", customer: "cus_other", payment_method: "pm_x" } });
+    expect((await confirmBuyerSetupSession(otherCustomer.stripe, agent, "cs_2")).stripe_payment_method_id).toBeNull();
+    expect(otherCustomer.defaults).toHaveLength(0);
+    const incomplete = make({ mode: "setup", status: "open", customer: "cus_1", setup_intent: null });
+    expect((await confirmBuyerSetupSession(incomplete.stripe, agent, "cs_3")).stripe_payment_method_id).toBeNull();
+    const failedIntent = make({ mode: "setup", status: "complete", customer: "cus_1", setup_intent: { status: "requires_payment_method", customer: "cus_1", payment_method: null } });
+    expect((await confirmBuyerSetupSession(failedIntent.stripe, agent, "cs_4")).stripe_payment_method_id).toBeNull();
+  });
+  it("reconciliation attaches only a card confirmed for that exact customer and reports it for persistence", async () => {
+    const { stripe, defaults } = fakeBuyerStripe({ cards: [{ id: "pm_other", customer: "cus_other" }, { id: "pm_ada", customer: "cus_1", last4: "1881" }] });
+    const r = await buyerPaymentSetup(stripe, { id: "buyer_h", stripe_customer_id: "cus_1", stripe_payment_method_id: null }, "https://host.example", { includeSetup: true });
+    expect(r).toMatchObject({ buyer_payment_status: "READY", setup_url: null, confirmed_payment_method_id: "pm_ada", payment_method: { id: "pm_ada", brand: "visa", last4: "1881" } });
+    expect(defaults).toEqual(["pm_ada"]);
+  });
+  it("a recorded card that belongs to another customer is never used; a recorded card of this customer is READY without reconciliation", async () => {
+    const wrong = fakeBuyerStripe({ recorded: { id: "pm_x", customer: "cus_other" } });
+    expect(await buyerPaymentSetup(wrong.stripe, { id: "b", stripe_customer_id: "cus_1", stripe_payment_method_id: "pm_x" }, "https://h")).toMatchObject({ buyer_payment_status: "SETUP_REQUIRED", payment_method: null });
+    const right = fakeBuyerStripe({ recorded: { id: "pm_x", customer: "cus_1" } });
+    expect(await buyerPaymentSetup(right.stripe, { id: "b", stripe_customer_id: "cus_1", stripe_payment_method_id: "pm_x" }, "https://h")).toMatchObject({ buyer_payment_status: "READY", payment_method: { id: "pm_x" }, confirmed_payment_method_id: null });
+    expect(await buyerPaymentSetup(right.stripe, { id: "b", stripe_customer_id: null, stripe_payment_method_id: null }, "https://h")).toMatchObject({ buyer_payment_status: "UNAVAILABLE" });
+  });
+  it("buyerPaymentInfo maps the mock rail to MOCK and only a human-linked buyer gets a setup link", async () => {
+    const info = await buyerPaymentInfo({ id: "b", stripe_customer_id: null, stripe_payment_method_id: null }, { includeSetup: true, humanLinked: true });
+    expect(info).toMatchObject({ buyer_payment_status: "MOCK", setup_url: null });
+    expect(info.payment_label).toMatch(/MOCK/);
   });
 });

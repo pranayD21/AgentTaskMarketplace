@@ -32,6 +32,7 @@ import {
   reconcileSellerTransfer,
   sellerPayoutOnboarding,
   transferToSeller,
+  type BuyerPaymentSetup,
   type CaptureResult,
   type HoldResult,
   type MoneyState,
@@ -67,6 +68,11 @@ export class StripeMppProvider implements PaymentProvider {
   /** The buyer pays from its own wallet; the marketplace stores no card for it. */
   async onboardBuyer(): Promise<Partial<AgentRow>> {
     return {};
+  }
+
+  /** No card on file by design: the wallet pays each 402; a setup link makes no sense on this rail. */
+  async buyerPayment(): Promise<BuyerPaymentSetup> {
+    return { buyer_payment_status: "READY", setup_url: null, payment_label: `${this.label}; the buyer's wallet pays each task, no card is stored`, payment_method: null, confirmed_payment_method_id: null };
   }
 
   onboardSeller(agent: SellerOnboardInput): Promise<Partial<AgentRow>> {
