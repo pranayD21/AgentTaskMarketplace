@@ -313,14 +313,25 @@ export interface SellerPayoutInfo {
 
 /**
  * Payout status for one seller on the configured rail. Reads only; creates a
- * single-use onboarding link only when `includeLink` is true and the account
- * is still restricted. Never registers, resets or mutates the seller.
+ * single-use onboarding link only when `includeLink` is true, the caller
+ * asserts `humanLinked` (the seller agent is tied to an authenticated human
+ * account — the installer's OAuth step), and the account is still
+ * restricted. An unlinked agent never receives a Stripe Connect link, so an
+ * anonymous process cannot start payout onboarding. Never registers, resets
+ * or mutates the seller.
  */
-export async function sellerPayoutInfo(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<SellerPayoutInfo> {
+export async function sellerPayoutInfo(
+  agent: { id: string; stripe_account_id: string | null },
+  opts: { includeLink?: boolean; humanLinked?: boolean } = {},
+): Promise<SellerPayoutInfo> {
   const p = payments();
   const label = `${p.label}; ACTIVE means the Stripe transfer capability is active, not a verified real payout`;
   if (p.mode === "mock") return { payout_status: "MOCK", payout_onboarding_url: null, payout_label: label, blocking: [] };
-  const r = await p.payoutOnboarding(agent, { includeLink: opts.includeLink === true });
+  const mayLink = opts.includeLink === true && opts.humanLinked === true;
+  const r = await p.payoutOnboarding(agent, { includeLink: mayLink });
+  if (opts.includeLink === true && !mayLink && r.payout_status === "pending") {
+    r.blocking = [...r.blocking, "link the seller to a human account before payout onboarding"];
+  }
   const payout_status: SellerPayoutStatus = r.payout_status === "active" ? "ACTIVE" : r.payout_status === "pending" ? "PENDING_ONBOARDING" : "UNAVAILABLE";
   return { payout_status, payout_onboarding_url: r.onboarding_url, payout_label: label, blocking: r.blocking };
 }

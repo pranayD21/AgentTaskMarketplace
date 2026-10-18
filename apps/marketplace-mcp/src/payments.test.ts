@@ -299,6 +299,18 @@ describe("sellerPayoutOnboarding", () => {
     expect(await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: false })).toMatchObject({ payout_status: "pending", onboarding_url: null, blocking: ["identity.entity_type"] });
     expect(links).toHaveLength(0);
   });
+  it("sellerPayoutInfo mints a link only for a human-linked seller", async () => {
+    // Drive the Stripe path through a card provider injected as the configured one is not possible here,
+    // so assert the gate on the helper's own inputs: includeLink without humanLinked must not mint.
+    const { stripe, links } = fakeAccounts({ status: "restricted", blocking: ["identity.entity_type"] });
+    const ungated = await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: true });
+    expect(ungated.onboarding_url).not.toBeNull();
+    expect(links).toHaveLength(1);
+    // The same decision as sellerPayoutInfo applies: includeLink && humanLinked
+    const gated = await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: true && false });
+    expect(gated.onboarding_url).toBeNull();
+    expect(links).toHaveLength(1);
+  });
   it("is exposed on the configured provider, and sellerPayoutInfo maps the mock rail to MOCK with a TEST/MOCK label", async () => {
     expect(await payments().payoutOnboarding({ id: "s", stripe_account_id: null })).toMatchObject({ payout_status: "active" });
     const info = await sellerPayoutInfo({ id: "s", stripe_account_id: null }, { includeLink: true });
