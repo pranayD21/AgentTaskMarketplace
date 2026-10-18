@@ -84,9 +84,13 @@ In MPP mode (Stripe test preview), posting creates `AWAITING_PAYMENT` and return
 |---|---|---|
 | `get-public-key` | – | JSON `KeyDescriptor` |
 | `run-task` | `seller-envelope` (JSON Envelope), `opts` (JSON `{ollama_url, model_id, buyer_public_key, judge_public_key, timeout_ms?}`) | JSON `RunTaskOutput` or throws string |
-| `judge-task` | `task-envelope`, `result-envelope`, `opts` (JSON `{buyer_public_key, judge_model?, anthropic_url?}`) | JSON `JudgeTaskOutput` or throws string |
+| `judge-task` | `task-envelope`, `result-envelope`, `opts` (JSON `{buyer_public_key, commitment_sha256?, judge_model?, anthropic_url?}`) | JSON `JudgeTaskOutput` or throws string; REJECT `COMMITMENT_MISMATCH` when `commitment_sha256` differs from the decrypted bytes |
+| `run-cycle` (v0.2, C) | `opts` (JSON `{marketplace_url, ollama_url, task_id, model_id, max_runtime_s, legacy_registration?}`) | JSON `{task_id, claim_id, result_id, runtime_ms, tokens_out?, key_id}`; on failure after the claim it calls `release_task` with a code-only reason and throws a code |
+| `judge-cycle` (v0.2, E) | `opts` (JSON `{marketplace_url, judge_model?, anthropic_url?}`) | JSON `{idle:true}` or `{idle:false, task_id, result_id, verdict, reason_code, reason_public, score?, seller_status, seller_payout_cents, settlement_note}` |
 
-Secrets inside the sandbox come from `wasi:config/store` (`ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`), supplied by Wassette's env permission. Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
+`run-cycle` and `judge-cycle` call the marketplace from inside the sandbox with the same MCP streamable-HTTP tools as any agent (`packages/runner-core/src/marketplace.ts`). Errors cross the sandbox boundary as codes only.
+
+Secrets inside the sandbox come from `wasi:config/store`, supplied by Wassette's env permission: seller `AGENT_API_KEY`; judge `AGENT_API_KEY`, `ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`. Network grants are full origins; Wassette 0.8 enforces scheme + hostname, not port (SECURITY.md). Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
 
 ## 7. v0.2 changes — ADOPTED (server side on `main`, see `docs/PROGRESS.md`)
 
@@ -96,7 +100,7 @@ Needed for the sandbox fix: Wassette gives every component call a fresh instance
 2. **Adopted.** `register_seller`: `runner_pubkey_b64` / `runner_key_id` are optional (validated the same way when sent). A seller with no registered key must present a per-claim key; `claim_task` without one → `INVALID_STATE` with a `next_action` naming `runner_pubkey_b64`. Sellers that register a key and claim without one (v0.1 daemons, `--runtime node`) keep working unchanged.
 3. **Adopted.** The `claim_task` response adds `runner_key_id`, `runner_key_source` and `buyer_public_key` + `judge_public_key` (same values as `get_recipient_keys`, which stays for v0.1 clients), so the sandbox needs no second round trip.
 4. **Adopted.** `SellerPublic.runner.public_key` falls back to the seller's latest per-claim key when no key is registered; `runner.key_source` says which (`registered` / `per-claim` / `none`). Stored as `sellers.last_claim_key_id` / `last_claim_pubkey_b64`.
-5. **Component side (C, E — not part of the server contract):** exports `run-cycle(opts)` and `judge-cycle(opts)` perform claim → decrypt → run → submit (resp. fetch → judge → submit) inside one instance, calling the marketplace over wasi:http with the agent key from the env grant, and return a JSON summary `{task_id, claim_id, result_id?, verdict?, runtime_ms}`. The WIT change is C's and E's to agree; tell A when it lands so §6 can be updated.
+5. **Landed (C `4cc4fb7`, E `b2f550e`/`5a56963`, on `main` since `bc05530`):** component exports `run-cycle(opts)` and `judge-cycle(opts)` do claim → decrypt → run → submit (resp. fetch → judge → submit) inside one instance. Their shapes are in §6.
 
 Schema: the four new columns are `add column if not exists` lines at the end of `db/schema.sql`; the server also applies them itself on its first tool call (`src/db.ts` `ensureSchema`), so no manual migration is needed. `scripts/db-migrate.sh` still works.
 

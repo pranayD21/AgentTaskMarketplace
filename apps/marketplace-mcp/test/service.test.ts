@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, keypairFromSecretB64, openJson, toB64 } from "@atm/crypto";
 import { createRunner, type RunnerHost } from "@atm/runner-core";
 import { MAX_PRICE_CENTS, MarketplaceError, type ClaimPublicV02, type KeyDescriptor, type SellerPayload } from "@atm/shared";
-import { db, unwrap, type AgentRow, type TaskRow } from "../src/db.ts";
+import { adjustBuyerBalance, db, unwrap, type AgentRow, type TaskRow } from "../src/db.ts";
 import { payments } from "../src/payments.ts";
 import * as svc from "../src/service.ts";
 
@@ -318,6 +318,33 @@ describe("expiry and hardening", () => {
     const task = await post(buyer);
     const row = { ...await taskRow(task.task_id), payment_mode: "card" as const };
     expect(() => payments().capture(row, null, 60)).toThrow(/cannot settle card/);
+  });
+
+  it("concurrent posts cannot jointly exceed the spend cap", async () => {
+    const { agent: buyer } = await svc.registerAgent({ kind: "buyer", display_name: "capped", spend_cap_cents: 150 });
+    const postOne = () => svc.postTask(buyer, { prompt: "x", allowed_models: ["qwen3:8b"], max_price_cents: 100, rubric: { kind: "contains_text", expected_text: "x" } });
+    const outcomes = await Promise.allSettled([postOne(), postOne()]);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    const lost = outcomes.find((o) => o.status === "rejected") as PromiseRejectedResult;
+    expect((lost.reason as MarketplaceError).code).toBe("SPEND_CAP_EXCEEDED");
+    expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(100);
+  });
+
+  it("a failed hold gives the reservation back", async () => {
+    const buyer = await agent("buyer");
+    const spy = vi.spyOn(payments(), "hold").mockRejectedValueOnce(new MarketplaceError("PAYMENT_FAILED", "card declined"));
+    try {
+      await expectError(svc.postTask(buyer, { prompt: "x", allowed_models: ["qwen3:8b"], max_price_cents: 100, rubric: { kind: "contains_text", expected_text: "x" } }), "PAYMENT_FAILED");
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(0);
+  });
+
+  it("concurrent balance changes are not lost", async () => {
+    const buyer = await agent("buyer");
+    await Promise.all(Array.from({ length: 5 }, () => adjustBuyerBalance(buyer.id, { reserved: 10 })));
+    expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(50);
   });
 
   it("bounds max_price_cents", async () => {

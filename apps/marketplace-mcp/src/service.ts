@@ -42,7 +42,7 @@ import {
   type VerdictReasonCode,
 } from "@atm/shared";
 import { hashApiKey } from "./auth.js";
-import { countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
+import { adjustBuyerBalance, countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
@@ -279,20 +279,6 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
   return toSellerPublic(rows[0]!, agent);
 }
 
-async function adjustBuyerBalance(buyerId: string, delta: { reserved?: number; spent?: number }): Promise<void> {
-  const buyer = await getAgent(buyerId);
-  if (!buyer) return;
-  unwrap(
-    await db()
-      .from("agents")
-      .update({
-        reserved_cents: Math.max(0, buyer.reserved_cents + (delta.reserved ?? 0)),
-        spent_cents: Math.max(0, buyer.spent_cents + (delta.spent ?? 0)),
-      })
-      .eq("id", buyerId),
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Buyer: post / list / read / cancel
 // ---------------------------------------------------------------------------
@@ -321,20 +307,33 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
       next_action: `Re-post with ${min} <= max_price_cents <= ${MAX_PRICE_CENTS}.`,
     });
   }
-  const projected = buyer.reserved_cents + buyer.spent_cents + input.max_price_cents;
-  if (projected > buyer.spend_cap_cents) {
+  // Reserve against the cap atomically before any money moves, so concurrent
+  // posts from one buyer cannot jointly exceed what the human approved.
+  const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true });
+  if (reservation.refused) {
+    const b = reservation.buyer!;
+    const projected = b.reserved_cents + b.spent_cents + input.max_price_cents;
     throw new MarketplaceError(
       "SPEND_CAP_EXCEEDED",
-      `This would bring reserved+spent to ${projected}c, above your cap of ${buyer.spend_cap_cents}c (reserved ${buyer.reserved_cents}c, spent ${buyer.spent_cents}c).`,
+      `This would bring reserved+spent to ${projected}c, above your cap of ${b.spend_cap_cents}c (reserved ${b.reserved_cents}c, spent ${b.spent_cents}c).`,
       { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
+  const unreserve = () => adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents });
 
   const id = newId("task");
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
   const plaintext: ServerPlaintext = { prompt: input.prompt, context: input.context, rubric: input.rubric, max_tokens };
-  const hold = await payments().hold({ id, max_price_cents: input.max_price_cents }, buyer);
+  let hold: Awaited<ReturnType<ReturnType<typeof payments>["hold"]>>;
+  try {
+    hold = await payments().hold({ id, max_price_cents: input.max_price_cents }, buyer);
+  } catch (err) {
+    await unreserve();
+    throw err;
+  }
+  // Only a placed hold keeps the reservation; an unpaid (mpp) task reserves when it is paid.
+  if (hold.payment_state !== "HELD" && hold.payment_state !== "MOCK") await unreserve();
 
   const row = {
     id,
@@ -354,9 +353,6 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
   };
   const inserted = unwrap(await db().from("tasks").insert(row).select()) as TaskRow[];
   const task = inserted[0]!;
-  if (hold.payment_state === "HELD" || hold.payment_state === "MOCK") {
-    await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents });
-  }
   await logEvent("task.posted", {
     task_id: id,
     agent_id: buyer.id,

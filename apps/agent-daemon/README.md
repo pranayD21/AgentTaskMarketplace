@@ -78,7 +78,7 @@ Inference is capped at the smaller of the task limit, 180 seconds and the remain
 
 ## Compatibility and checks
 
-The daemon inspects the server's tool schemas. When per-claim keys are supported and registration keys are optional, it passes the fresh key to `claim_task`. The current server still requires a registered key, so compatibility mode registers the fresh key inside every cycle before claiming and calls `get_recipient_keys`. Both paths keep the task private key in the same component instance. Reuse of one seller identity by concurrent processes is unsupported.
+The daemon inspects the server's tool schemas. When per-claim keys are supported and registration keys are optional, it passes the fresh key to `claim_task`. Contract v0.2 uses this per-claim path. For older servers that require a registered key, compatibility mode registers the fresh key inside every cycle before claiming and calls `get_recipient_keys`. Both paths keep the task private key in the same component instance. Reuse of one seller identity by concurrent processes is unsupported.
 
 ```sh
 pnpm -r typecheck
