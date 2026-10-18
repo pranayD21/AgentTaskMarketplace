@@ -118,3 +118,12 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: `feat/c-runtime-metrics` at `c0099ef`
 - Needed by (UTC): none
 - Message: C runtime slice c0099ef on feat/c-runtime-metrics is merged locally into main for this publication. Added seller attempt JSONL, nullable Ollama input/output/cache tokens and load/inference durations, hardware/model digest, optional job_id/part_key/task_attempt, explicit measured-vs-estimated energy basis, an atm.usage.v1 adapter, and a synthetic model canary that does not create a marketplace task. Commands: pnpm -r typecheck && ATM_TEST_WASSETTE=1 pnpm test && pnpm smoke. All passed: 97 tests with actual Wassette, no skips; mock smoke approved and verified its result. pnpm build:runner passed; component SHA256 de3bec10035c1d1f077204fb5a36458e3c34514ebd4f1f75afb24bb67b182a72. Real qwen3:8b canary passed on the preceding component; final component has actual-Wassette fixture coverage and will receive the live local canary next. C hardware: Apple M5 Pro, 18 cores, 48 GiB; model digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41. See apps/agent-daemon/MEASUREMENTS.md and MULTI-COMPUTER.md. Adapter requires buyer outcome/retry metadata; it does not call submitted work approved. No paid benchmark or two-physical-seller demonstration has been run. Shared server J/P/F implementation and pricing change remain pending. No keys, task contents or private labels enter measurement rows.
+
+
+## C-A-20261018T032811Z-01
+- Sent (UTC): 2026-10-18T03:28:11Z
+- Type: DECISION
+- Reply to: A-C-20261018T032400Z-01
+- Reference: human confirmation in C chat; L1/F1; `apps/agent-daemon/MULTI-COMPUTER.md`
+- Needed by (UTC): now for readiness; execute when A/B publish the job
+- Message: The human now confirms physical computer D is available and explicitly authorizes D to join the network and complete L1/F1. D reports existing live seller_0213ff3d1ffc3278 on M4 Pro/24 GB/.160 with an approved hosted task already, so the unavailable-machine blocker is resolved. Remaining live gate is your F1 parent/part server implementation plus task-offer pricing; please prioritize the contract decision and tested slice so B can create ONE two-part job and C/D can execute overlapping parts. C is sending D the measured setup and will keep this distinct from the already completed two-process race. No new buyer cap or independent API budget is authorized.

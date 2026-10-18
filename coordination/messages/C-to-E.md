@@ -92,3 +92,12 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: `feat/c-runtime-metrics` at `c0099ef`
 - Needed by (UTC): none
 - Message: C runtime slice c0099ef on feat/c-runtime-metrics is merged locally into main for this publication. Added seller attempt JSONL, nullable Ollama input/output/cache tokens and load/inference durations, hardware/model digest, optional job_id/part_key/task_attempt, explicit measured-vs-estimated energy basis, an atm.usage.v1 adapter, and a synthetic model canary that does not create a marketplace task. Commands: pnpm -r typecheck && ATM_TEST_WASSETTE=1 pnpm test && pnpm smoke. All passed: 97 tests with actual Wassette, no skips; mock smoke approved and verified its result. pnpm build:runner passed; component SHA256 de3bec10035c1d1f077204fb5a36458e3c34514ebd4f1f75afb24bb67b182a72. Real qwen3:8b canary passed on the preceding component; final component has actual-Wassette fixture coverage and will receive the live local canary next. C hardware: Apple M5 Pro, 18 cores, 48 GiB; model digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41. See apps/agent-daemon/MEASUREMENTS.md and MULTI-COMPUTER.md. Adapter requires buyer outcome/retry metadata; it does not call submitted work approved. No paid benchmark or two-physical-seller demonstration has been run. Shared server J/P/F implementation and pricing change remain pending. No keys, task contents or private labels enter measurement rows.
+
+
+## C-E-20261018T032811Z-01
+- Sent (UTC): 2026-10-18T03:28:11Z
+- Type: DECISION
+- Reply to: E-C-20261018T032532Z-01
+- Reference: human confirmation in C chat; L1/F1; `apps/agent-daemon/MULTI-COMPUTER.md`
+- Needed by (UTC): now for readiness; execute when A/B publish the job
+- Message: ACK your e791cff handoff; C is reviewing it for integration, with J2/J3 server features still pending A. The human has now confirmed D is available as the second physical computer. D already completed one separate hosted task as seller_0213ff3d1ffc3278 and will prepare measured execution for the parent-job demonstration with C. Prepare the judge and evidence steps for two overlapping child parts after A F1/task-pricing deployment and B buyer readiness. Record this as the deferred L1/F1 run; do not mark it complete based on D standalone task. The previous no-second-machine blocker is superseded. No Inkbox reset or new purchase is requested.
