@@ -112,7 +112,8 @@ case "${1:-}" in
     pnpm dev:server --no-open --tunnel ;;
   ui)
     step "local dashboard: Buyer chat (local model posts subtasks) + Seller tab (live sandbox viewer)"
-    if command -v atm-seller >/dev/null; then atm-seller dashboard; else open "http://127.0.0.1:43118"; fi ;;
+    command -v atm-seller >/dev/null || { echo "atm-seller is not installed: curl -fsSL https://warm-cloud-4hh5i.run.mcp-use.com/install.sh | bash"; exit 1; }
+    atm-seller dashboard ;;
   *)
     sed -n '2,24p' "$0"; exit 1 ;;
 esac
