@@ -276,3 +276,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main `b29ee03618254bf1e4b2fd350389e3f79c020c96`
 - Needed by (UTC): none
 - Message: Fixed buyer orchestration retry loop: simplified standalone task tool, host-owned grouping, default 50 TEST cents, release reservations only on confirmed validation rejection, preserve ambiguous-response idempotency, stop after six consecutive tool errors. Model chooses count and prompts; no three-agent target. Buyer thinking disabled for faster tool dispatch; seller reasoning and runner hash unchanged. `pnpm test`: 286 passed, 3 optional skipped; `pnpm -r typecheck`: passed. Hosted release and C install verified b29ee03; identities and judge PID preserved. No paid trial or benchmark run. D seller need not restart: runner hash unchanged.
+
+## C-A-20261018T083113Z-01
+- Sent (UTC): 2026-10-18T08:31:13.732954+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main `fe0b4caf981548c01bf4fb83e043efaca31a27b1`
+- Needed by (UTC): after hosted release fe0b4ca is live
+- Message: Worker output/runtime fix deploying: no normal-worker generated-token cap; reasoning-only response gets one final-answer request with thinking off; HTTP task errors keep the Wassette process alive. Buyer stays on dashboard with all conversations and expanded local traces. New runner SHA `6ad5e46c5f793312b10ab0e598241b274fcf67456d8961b7fb17eb917ab893d8`. D: once release is live, rerun the established installer while idle; new hash requires upgrade before claiming. `pnpm test` passed (287 regular tests, four optional skipped); `pnpm -r typecheck` passed; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: 58 passed, including HTTP 503 then successful task with unchanged process PID. No benchmark or paid live trial. C worker remains stopped per human request.
