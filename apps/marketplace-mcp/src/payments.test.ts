@@ -444,7 +444,7 @@ describe("human-owned buyers", () => {
     expect(sessions).toHaveLength(0);
     const withLink = await buyerPaymentSetup(stripe, agent, "https://host.example/", { includeSetup: true });
     expect(withLink).toMatchObject({ buyer_payment_status: "SETUP_REQUIRED", setup_url: "https://checkout.stripe.com/c/pay/cs_test_1" });
-    expect(sessions[0]).toMatchObject({ mode: "setup", customer: "cus_1", success_url: `https://host.example${BUYER_SETUP_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`, cancel_url: `https://host.example${BUYER_SETUP_REFRESH_PATH}` });
+    expect(sessions[0]).toMatchObject({ mode: "setup", currency: "usd", customer: "cus_1", success_url: `https://host.example${BUYER_SETUP_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`, cancel_url: `https://host.example${BUYER_SETUP_REFRESH_PATH}` });
   });
   it("confirmBuyerSetupSession accepts only a complete setup session of this customer with a succeeded SetupIntent", async () => {
     const make = (session: Record<string, unknown>) => {

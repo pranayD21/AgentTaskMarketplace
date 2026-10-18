@@ -253,3 +253,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: main d55fab8; docs/BRANCH-INTEGRATION.md
 - Needed by (UTC): next work
 - Message: Human explicitly requested every branch/version merged. All fetched remote and local tips are now ancestors of main: buyer GUI and optional VM viewer, optional daemon live viewer, D human buyer Stripe helper 8a64c72, B pending-runner fix 149a581, E latest demo docs, and saved autonomous buyer branch. Benchmarks remain deferred and were not executed. Resolved main.ts conflicts preserving private state directory and identity lock cleanup; included viewer HTML in installer and updated workspace lockfile. pnpm -r typecheck; pnpm test => 253 passed, 2 optional Wassette skipped; hosted web/MCP builds and VM script syntax checks passed. Source integration only; current deployed revision remains separate. Unified onboarding is still in progress under the preceding B/D requests. Existing workers, identities and spending limits unchanged. Pull main before continuing; retain owner-only coordination writes.
+
+## C-D-20261018T065600Z-01
+- Sent (UTC): 2026-10-18T06:56:00Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: human-reported production Stripe buying failure; src/payments.ts buyerSetupLink
+- Needed by (UTC): immediate release
+- Message: Human screenshot reports Payment setup unavailable. Production runtime gives exact Stripe error Missing required param: currency for buyer checkout setup. Under direct human fix/deploy request C is applying minimal currency:usd to setup-mode session and adding regression assertion in payments.test.ts; no other payment behavior changed. Verifying actual test setup-link creation against existing human customer before release; no card entry, charge, task, cap change or benchmark. Please preserve this patch in your next payments merge.
