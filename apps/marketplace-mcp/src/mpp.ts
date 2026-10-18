@@ -22,16 +22,22 @@ import { generate as generateOpenApi } from "mppx/discovery";
 import { Mppx, stripe as mppStripe } from "mppx/server";
 import { sha256Hex, utf8 } from "@atm/crypto";
 import { MarketplaceError, isPast, nowIso } from "@atm/shared";
-import { adjustBuyerBalance, db, logEvent, one, unwrap, type AgentRow, type TaskRow } from "./db.js";
+import { adjustBuyerBalance, adjustJobBudget, db, logEvent, one, unwrap, type AgentRow, type TaskRow } from "./db.js";
 import { env } from "./env.js";
 import {
+  compensateStripeHold,
   createStripe,
+  inspectStripeMoney,
   onboardSellerAccount,
+  reconcileSellerTransfer,
   transferToSeller,
   type CaptureResult,
   type HoldResult,
+  type MoneyState,
   type PaymentProvider,
   type ReleaseResult,
+  type RetryTransferOptions,
+  type TransferOutcome,
 } from "./payments.js";
 
 /** Task payment state once the MPP charge succeeded (money is captured, not merely authorised). */
@@ -77,7 +83,7 @@ export class StripeMppProvider implements PaymentProvider {
 
   async capture(task: TaskRow, seller: AgentRow | null, amountCents: number): Promise<CaptureResult> {
     if (!task.stripe_payment_intent_id) {
-      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, note: "no PaymentIntent on task (never paid); nothing captured" };
+      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, owed_cents: amountCents, transferred_cents: 0, transfer_state: "NOT_APPLICABLE", transfer_retry_safe_to_advance: false, note: "no PaymentIntent on task (never paid); nothing captured" };
     }
     const pi = await this.stripe.paymentIntents.retrieve(task.stripe_payment_intent_id);
     const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id ?? null;
@@ -93,7 +99,38 @@ export class StripeMppProvider implements PaymentProvider {
     }
     const transfer = await transferToSeller(this.stripe, task, seller, amountCents, chargeId);
     note += `; ${transfer.note}`;
-    return { payment_state: "CAPTURED", stripe_capture_id: chargeId, stripe_transfer_id: transfer.transfer_id, note };
+    return {
+      payment_state: "CAPTURED",
+      stripe_capture_id: chargeId,
+      stripe_transfer_id: transfer.transfer_id,
+      owed_cents: amountCents,
+      transferred_cents: transfer.amount_cents,
+      transfer_state: transfer.state,
+      pending_reason: transfer.pending_reason,
+      transfer_retry_safe_to_advance: transfer.retry_safe_to_advance,
+      note,
+    };
+  }
+
+  /** An AWAITING_PAYMENT task holds no money; a paid one is refunded in full. */
+  async compensateHold(task: { id: string; max_price_cents: number }, hold: HoldResult, reason: string): Promise<ReleaseResult> {
+    if (!hold.stripe_payment_intent_id) return { payment_state: "RELEASED", note: `nothing to undo: task was never paid (${reason})` };
+    return compensateStripeHold(this.stripe, task, hold, reason);
+  }
+
+  async retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts: RetryTransferOptions = {}): Promise<TransferOutcome> {
+    let chargeId: string | null = null;
+    if (task.stripe_payment_intent_id) {
+      try {
+        const pi = await this.stripe.paymentIntents.retrieve(task.stripe_payment_intent_id);
+        chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id ?? null;
+      } catch { /* transfer without source_transaction */ }
+    }
+    return reconcileSellerTransfer(this.stripe, task, seller, amountCents, chargeId, opts);
+  }
+
+  inspect(task: TaskRow): Promise<MoneyState> {
+    return inspectStripeMoney(this.stripe, task);
   }
 
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {
@@ -297,11 +334,45 @@ function forgetChallenge(taskId: string): void {
  * move this into service.ts as `markTaskPaid`.
  */
 export async function markTaskPaid(task: TaskRow, paymentIntentId: string): Promise<TaskRow> {
-  const reserved = await adjustBuyerBalance(task.buyer_id, { reserved: task.max_price_cents }, { enforceCap: true });
+  const max = task.max_price_cents;
+  // Keys are per payment attempt, not per task: a task-level key would be
+  // consumed by a failed-and-compensated attempt, so a later payment (or a
+  // replay of the refunded one) could open the task with no live reservation,
+  // and a losing concurrent payment could undo the winner's reservation.
+  const key = `paid:${task.id}:${paymentIntentId}`;
+  const undoKey = `unpaid:${task.id}:${paymentIntentId}`;
+
+  // Replay of the payment that already opened this task: nothing to do.
+  const before = await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1));
+  if (!before) throw new MarketplaceError("NOT_FOUND", `Task ${task.id} not found.`);
+  if (before.stripe_payment_intent_id === paymentIntentId && before.status !== "AWAITING_PAYMENT") return before;
+
+  // Reserve the full offer against the buyer cap and, for a job part, the job
+  // budget. `applied` tells us whether THIS call changed a ledger; only what we
+  // applied is ever compensated. A key already consumed together with its undo
+  // key means this payment attempt was refunded: it cannot open the task.
+  const reserved = await adjustBuyerBalance(task.buyer_id, { reserved: max }, { enforceCap: true, key });
   if (!reserved.buyer || reserved.refused) {
     throw new MarketplaceError("SPEND_CAP_EXCEEDED", "The buyer has insufficient remaining budget for this payment.", {
       next_action: "Check whoami and release unwanted holds before paying another task.",
     });
+  }
+  if (!reserved.applied && (reserved.buyer.balance_keys ?? []).includes(undoKey)) {
+    throw new MarketplaceError("INVALID_STATE", `Payment ${paymentIntentId} for ${task.id} was already refunded; it cannot open the task.`, {
+      next_action: "Pay the task again; a new payment gets a new reservation.",
+    });
+  }
+  const buyerApplied = reserved.applied;
+  let jobApplied = false;
+  if (task.job_id) {
+    const jr = await adjustJobBudget(task.job_id, { reserved: max }, { enforceCap: true, key });
+    if (!jr.job || jr.refused) {
+      if (buyerApplied) await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
+      throw new MarketplaceError("JOB_BUDGET_EXCEEDED", `Paying this part would exceed the job's budget${jr.job ? ` of ${jr.job.budget_cents}c (reserved ${jr.job.reserved_cents}c, spent ${jr.job.spent_cents}c)` : ""}.`, {
+        next_action: "Create a job with a larger budget, or wait for other parts to settle; the payment is refunded.",
+      });
+    }
+    jobApplied = jr.applied;
   }
   let rows: TaskRow[];
   try {
@@ -316,12 +387,14 @@ export async function markTaskPaid(task: TaskRow, paymentIntentId: string): Prom
       });
     }
   } catch (err) {
-    await adjustBuyerBalance(task.buyer_id, { reserved: -task.max_price_cents });
-    // An identical payment retried concurrently must not refund the winning payment.
+    // This payment lost (another payment opened the task, or it was cancelled):
+    // give back only the reservation this call made; the winner's stays.
     const current = await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1));
-    if (current?.stripe_payment_intent_id === paymentIntentId) return current;
+    if (current?.stripe_payment_intent_id === paymentIntentId && current.status !== "AWAITING_PAYMENT") return current;
+    if (buyerApplied) await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
+    if (jobApplied && task.job_id) await adjustJobBudget(task.job_id, { reserved: -max }, { key: undoKey });
     throw err;
   }
-  await logEvent("task.paid", { task_id: task.id, agent_id: task.buyer_id, meta: { amount_cents: task.max_price_cents, rail: "stripe-mpp-test", payment_intent: paymentIntentId } });
+  await logEvent("task.paid", { task_id: task.id, agent_id: task.buyer_id, meta: { amount_cents: max, rail: "stripe-mpp-test", payment_intent: paymentIntentId, job_id: task.job_id ?? null } });
   return rows[0]!;
 }

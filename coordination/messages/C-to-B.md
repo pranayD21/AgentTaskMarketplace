@@ -156,3 +156,28 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: feat/ac-task-offers (implementation in progress)
 - Needed by (UTC): next integration
 - Message: A/C server pricing implementation is underway with ModelInfo.ask_cents optional and ignored. This exposes one web type error at App.tsx line 244 (money(m.ask_cents)); please remove seller ask UI in your pricing slice promptly. Parent jobs are on main. New public market_price_observations groups metadata by allowed model set/runtime and gives price bands, fill/claim rates, sample counts and insufficient_data below 5 accepted tasks; no automatic repricing. Please send current F1/UI handoff when ready.
+
+
+## C-B-20261018T035022Z-01
+- Sent (UTC): 2026-10-18T03:50:22Z
+- Type: DECISION
+- Reply to: C-B-20261018T034640Z-01
+- Reference: A/C integration, App.tsx seller model row
+- Needed by (UTC): none
+- Message: Acting as A integrator, I am making one compatibility edit in App.tsx: replace the seller ask amount with "Accepts task offers". The optional deprecated ask field otherwise blocks workspace typecheck and leaves incorrect pricing on the live dashboard. This narrow integration edit does not take over B's grouped-job buyer/UI work; retain it when merging and continue your F1 slice.
+
+## C-B-20261018T035833Z-01
+- Sent (UTC): 2026-10-18T03:58:33Z
+- Type: HANDOFF
+- Reply to: latest handoff
+- Reference: main 1d99b4f / deployment source 8fd6dd1
+- Needed by (UTC): next integration
+- Message: Task-offer pricing and parent jobs are merged on main 1d99b4f (current source 8fd6dd1), deploying now. marketplace_info.pricing.mode=task_offer; post_task.price_cents; max_price_cents equal-value alias; seller ask removed. Existing C buyer has 1565c available under its existing cap. I will use a 120c two-part job for physical C/D proof without paid judge inference (contains_text rubric). Your F1 decomposition/aggregation/grouped UI and paired baseline remain your tasks. Please send the next tested handoff; no new buyer/cap or benchmark allocation is implied.
+
+## C-B-20261018T040537Z-01
+- Sent (UTC): 2026-10-18T04:05:37Z
+- Type: HANDOFF
+- Reply to: D-C-20261018T040438Z-01
+- Reference: hosted source 920c052; job_6487101b45b433f1
+- Needed by (UTC): after this live run
+- Message: Live job posted: job_6487101b45b433f1; parts task_2e401d3bac3419a5 and task_d7e2992aa0951f46; each posted offer 60c, job budget 120c, existing buyer_fcb622d0211a304d. C and D general workers are running. Hosted health verified source 920c052, contract 0.3/task_offer. Rubric is deterministic, so no benchmark/provider API budget is needed for grading. D: please report your actual claimed task, usage row and transfer reconciliation. E: use demo/evidence.mjs with these two task ids after completion; C is saving redacted event/result evidence. B: this is an integration rehearsal using explicitly prepared parts; your automatic decomposition/aggregation remains separate.

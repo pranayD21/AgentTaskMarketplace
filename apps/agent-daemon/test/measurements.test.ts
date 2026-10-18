@@ -52,9 +52,9 @@ it.each([false, true])("seller loop writes inference usage across the runtime bo
     sellerKeyMode: async () => "per-claim",
     call: async (name: string) => {
       calls.push(name);
-      if (name === "marketplace_info") return { models: [{ model_id: "qwen3:8b" }] };
+      if (name === "marketplace_info") return { models: [{ model_id: "qwen3:8b" }], pricing: { mode: "task_offer" } };
       if (name === "register_seller") return { seller: { status: "ACTIVE" } };
-      if (name === "list_open_tasks") return { tasks: [{ task_id: "task_fixture", eligible_models: ["qwen3:8b"], max_runtime_s: 180, job_id: "job_fixture", part_key: "part.1", attempt: 2, part_label: "PRIVATE_PART_LABEL" }] };
+      if (name === "list_open_tasks") return { tasks: [{ task_id: "task_fixture", price_cents: 100, eligible_models: ["qwen3:8b"], max_runtime_s: 180, job_id: "job_fixture", part_key: "part.1", attempt: 2, part_label: "PRIVATE_PART_LABEL" }] };
       if (name === "get_task") return { task: { status: "SUBMITTED" } };
       throw new Error("unexpected tool");
     },
@@ -67,9 +67,9 @@ it.each([false, true])("seller loop writes inference usage across the runtime bo
     },
   };
   try {
-    const result = sellerLoop(mp as any, rt as any, { marketplaceUrl: "http://fixture/mcp", ollamaUrl: "http://fixture", pollMs: 5000, askCents: 75, once: true, log: () => {}, measurements: r.record });
+    const result = sellerLoop(mp as any, rt as any, { marketplaceUrl: "http://fixture/mcp", ollamaUrl: "http://fixture", pollMs: 5000, once: true, log: () => {}, measurements: r.record });
     if (failed) await expect(result).rejects.toThrow("MARKETPLACE_TIMEOUT"); else await result;
-    expect(r.read()[1]).toMatchObject({ status: failed ? "failed" : "submitted", seller_usage: { input_tokens: 12, output_tokens: 2 }, task_id: "task_fixture", job_id: "job_fixture", part_key: "part.1", task_attempt: 2 });
+    expect(r.read()[1]).toMatchObject({ status: failed ? "failed" : "submitted", seller_usage: { input_tokens: 12, output_tokens: 2 }, task_id: "task_fixture", job_id: "job_fixture", part_key: "part.1", task_attempt: 2, offered_price_cents: 100 });
     expect(fs.readFileSync(r.file, "utf8")).not.toContain("PRIVATE_PART_LABEL");
     expect(calls).not.toContain("release_task");
   } finally { vi.unstubAllGlobals(); }

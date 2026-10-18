@@ -1,5 +1,16 @@
 # Progress log — what has been built, verified, and learned
 
+## Current A/C integration, October 17, 21:01 PDT
+
+A and C's implementation is merged. Task offers replace seller asks; the server preserves accepted prices through settlement. Parent jobs, transactional task posting, resumable settlement, guarded transfer retries, judge deferral/replacement, safe public reasons, usage capture and model canaries are integrated.
+
+The final combined workspace check passed: typecheck and **201 tests**, including actual Wassette (crypto 7, web 17, runner-core 49, server 106, daemon 22). The task-offer smoke run approved both parts at 100c, verified commitments and ended with reserved 0c/spent 200c in MOCK mode. The real Insforge posting/budget transaction test passed and removed its synthetic fixtures without payment calls.
+
+Server source `920c052` is deployed; `/api/health` verified contract 0.3 and task-offer pricing at 04:04:05 UTC. C’s existing seller and judge workers are running on the updated Wassette component. Physical C/D execution will be recorded only after both machines finish. B's automatic decomposition/aggregation and grouped UI, the complete paired cost comparison, E's final recording and the Inkbox free-tier live check remain open. X1 confidential inference remains a design, not a delivered privacy guarantee.
+
+The sections below retain earlier implementation history; use this current section and the completion audit for status.
+
+
 ## Current completion audit (2026-10-17, 20:05 PDT)
 
 The [completion audit](COMPLETION-AUDIT.md) supersedes older open-item lists below. Fresh typecheck, 79 tests and smoke passed on `82d0aa2`; hosted health and the LAN dashboard returned HTTP 200. Fake-provider probes reproduced judge outage becoming rejection, a missing replacement on commitment mismatch, and private model text being copied to a public reason. Payment crash/hold recovery and Inkbox restart continuity also need targeted verification and fixes. Job splitting/aggregation, a full physical multi-computer job, benchmark/cost comparison and final rehearsal are still open. Each computer's brief now names its follow-up work and completion evidence. B's incoming PR #3 at `39eaa4e` adds recovery guidance and current evaluation docs; B reports 82 branch tests, and C's review/integration is still pending. No implementation was changed by this audit.

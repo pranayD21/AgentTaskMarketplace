@@ -193,7 +193,7 @@ describe("claim_task with a per-claim runner key (contract v0.2)", () => {
 // ---------------------------------------------------------------------------
 
 describe("full cycle", () => {
-  it("APPROVE: buyer reads a commitment-verified answer and is charged the seller's price", async () => {
+  it("APPROVE: buyer reads a commitment-verified answer and is charged the posted offer", async () => {
     const buyer = await agent("buyer");
     const judge = await agent("judge");
     const s = await seller({ ask: 75 });
@@ -207,11 +207,11 @@ describe("full cycle", () => {
     expect(row.payload_enc_seller).toBeNull();
 
     const v = await judgeOnce(judge);
-    expect(v).toMatchObject({ idempotent: false, task: { status: "APPROVED" }, verdict: { verdict: "APPROVE", reason_code: "RUBRIC_MATCH" }, settlement: { kind: "MOCK", seller_payout_cents: 75, buyer_refund_cents: 25 } });
+    expect(v).toMatchObject({ idempotent: false, task: { status: "APPROVED" }, verdict: { verdict: "APPROVE", reason_code: "RUBRIC_MATCH" }, settlement: { kind: "MOCK", seller_payout_cents: 100, buyer_refund_cents: 0 } });
 
     const result = await svc.getResultForBuyer((await svc.getAgent(buyer.id))!, task.task_id);
     expect(result.result).toMatchObject({ answer: "Lima", commitment_verified: true });
-    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 75 });
+    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 100 });
     expect((await svc.sellerReputation(s.id)).reputation.approvals).toBe(1);
 
     // submit_verdict is idempotent per task
@@ -238,7 +238,7 @@ describe("full cycle", () => {
       expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 100, spent_cents: 0 });
       const retry = await svc.submitVerdict(judge, input);
       expect(retry.task.status).toBe("APPROVED");
-      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 60 });
+      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 100 });
       await svc.submitVerdict(judge, input);
       expect(capture).toHaveBeenCalledTimes(2);
     } finally { capture.mockRestore(); }
@@ -344,7 +344,7 @@ describe("expiry and hardening", () => {
 
   it("a failed hold gives the reservation back", async () => {
     const buyer = await agent("buyer");
-    const spy = vi.spyOn(payments(), "hold").mockRejectedValueOnce(new MarketplaceError("PAYMENT_FAILED", "card declined"));
+    const spy = vi.spyOn(payments(), "hold").mockRejectedValueOnce(Object.assign(new MarketplaceError("PAYMENT_FAILED", "card declined"), { hold_outcome: "not_created" }));
     try {
       await expectError(svc.postTask(buyer, { prompt: "x", allowed_models: ["qwen3:8b"], max_price_cents: 100, rubric: { kind: "contains_text", expected_text: "x" } }), "PAYMENT_FAILED");
     } finally {

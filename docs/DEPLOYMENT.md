@@ -26,7 +26,7 @@ curl -fsS https://YOUR-SERVER.run.mcp-use.com/api/health
 MARKETPLACE_URL=https://YOUR-SERVER.run.mcp-use.com/mcp node scripts/buyer.mjs info
 ```
 
-Use the endpoint returned by the deployment, then repeat the health and MCP discovery checks from a second computer. `/health` is the framework health response in production. `/api/health` should report contract `0.2`, `Insforge Postgres`, the intended payment mode, and the public `base_url`. Also call `marketplace_info` to exercise MCP discovery. Keep credentials in private configuration; never paste a buyer key into a coordination message.
+Use the endpoint returned by the deployment, then repeat the health and MCP discovery checks from a second computer. `/health` is the framework health response in production. `/api/health` should report contract `0.3`, `pricing: task_offer`, `Insforge Postgres`, the intended payment mode, the public `base_url`, and the uploaded source revision. `prepare-manufact-env.mjs` sets `ATM_BUILD_REVISION` from Git; compare it with `/api/health.revision` before a rehearsal. Also call `marketplace_info` to exercise MCP discovery. Keep credentials in private configuration; never paste a buyer key into a coordination message.
 
 ## Current team endpoint
 
@@ -34,9 +34,9 @@ Use the endpoint returned by the deployment, then repeat the health and MCP disc
 - Public task metadata: https://warm-cloud-4hh5i.run.mcp-use.com/api/dashboard
 - Manufact server ID: `1cb4bcbc-3f2a-4ae3-8d7b-6c86aaa5624a`
 - First successful deployment: `4df23d0c-9188-449e-9033-256c3b2fff2b`, 2026-10-18 02:37 UTC.
-- Current deployment: `eaba52dd-79b3-4853-8988-2ba57132b53d`, running since 02:48:52 UTC. It includes `/api/health` and D's pinned MPP challenge follow-up. Application health passed at 02:51 UTC: contract 0.2, card mode, Insforge Postgres and the correct hosted origin. B independently verified hosted discovery and health from its computer.
+- Current deployment: `00ff5e85-9e13-427d-8cc4-05064270bf63`, running since 2026-10-18 04:03:33 UTC. Application health verified at 04:04:05 UTC: contract `0.3`, `pricing: task_offer`, card TEST mode, Insforge Postgres, correct hosted origin and source revision `920c0525fb7f688b2c0699db83fac853d779e32b`. This includes A/C task pricing, parent jobs, durable posting, recovery, usage and D’s per-payment reservation fix.
 
-The CLI-returned deployment was superseded by a webhook deployment of the same uploaded commit. If its status is `stopped`, inspect `servers get` for the newest deployment before treating the release as failed. Remote `marketplace_info` and `/api/dashboard` passed, and Armature discovered all 21 tools. C's seller and judge use this endpoint with 5000 ms polling.
+The CLI-returned deployment was superseded by a webhook deployment of the same uploaded commit. If its status is `stopped`, inspect `servers get` for the newest deployment before treating the release as failed. The earlier v0.2 Armature run discovered 21 tools; it was not rerun as a v0.3 evaluation. C's seller and judge use this endpoint with 5000 ms polling.
 
 ## Connect local workers
 

@@ -147,13 +147,16 @@ New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge);
 - Retrying `submit_verdict` for a task with a recorded decision follows that decision, whatever the new call says. The response is `{idempotent: true, resumed: <bool>}`. Housekeeping (`expire_stale`, and every sweep) resumes unfinished settlements older than 2 minutes.
 - Exactly-once effects:
   - Stripe calls reuse the task-scoped idempotency keys `atm:<task>:capture|cancel|transfer`.
-  - Buyer balance changes carry a key (`settle:<task>`, `reserve:<task>`, `unreserve:<task>`, `paid:<task>`), recorded in `agents.balance_keys` in the same compare-and-swap write.
+  - Buyer balance changes carry a key (`settle:<task>`, `reserve:<task>`, `unreserve:<task>`, `paid:<task>:<payment_intent>`), recorded in `agents.balance_keys` in the same compare-and-swap write. A monotonically increasing `balance_revision` guards against a balance returning to an earlier value.
   - Seller `approvals` / `rejections` / `strikes` are **recomputed** from final verdicts, not incremented. Infrastructure codes never count.
-- Hold compensation: if `post_task` fails after placing a hold, the server cancels the hold and returns the reservation before reporting the error.
+- Durable posting: `atm_prepare_task` creates an unclaimable task (`AWAITING_PAYMENT`, payment state `POSTING`) and reserves the buyer/job budgets in one database transaction before calling the provider. An insert or budget-write failure rolls everything back, so it cannot orphan a hold. MPP listings reserve when paid.
+- A card hold uses the stable task key `atm:<task>:hold`. Publication changes `post_state: HOLDING → READY` with a state guard. Unknown provider/database outcomes keep the task and reservation visible; housekeeping resumes the same post after two minutes. A duplicate request returns that task.
+- Cancellation competes on the same state guard, closes the pending post first, then compensates its hold. Failed compensation stays `CANCEL_PENDING` with its reservation until recovery confirms release. Slow hold responses cannot reopen a cancelled task. Unknown holds older than 23 hours require operator reconciliation instead of replay beyond the provider's key-retention window.
 - Seller transfers (P2):
   - The settlement adds `payout_owed_cents`, `payout_transferred_cents`, `transfer_state` (`NOT_APPLICABLE` | `PENDING` | `TRANSFERRED`), `transfer_attempts` and `transfer_retry_at`.
   - `PENDING` means the money is captured but not yet transferred. **Do not label it paid.**
-  - The sweep retries `PENDING` transfers with the 8.2 backoff through the optional provider method `retryTransfer(task, seller, amountCents) → {transfer_id: string | null, note}`. **D implements it** in `payments.ts`, reusing `atm:<task>:transfer`.
+  - The sweep takes a persisted five-minute lease with an ownership token before calling D's `retryTransfer(task, seller, amountCents, {attempt, known_transfer_id})`. Expired leases and unknown outcomes reuse the same payment key; stale workers cannot overwrite the new lease owner's result. Only a definitive provider rejection (`retry_safe_to_advance`) permits a fresh key attempt. Retry counts and payment-key attempts are separate.
+  - Transfer amount, destination, currency and task group must match. `MISMATCH` sets `transfer_manual_review` and stops automatic retries. Unknown keys older than 23 hours also require reconciliation. `payout_transferred_cents` records the provider's confirmed amount.
   - An APPROVE whose transfer is pending is still `finalized_at` (the buyer side is complete). Only the transfer columns keep changing.
 
 ## 10. Jobs and parts (F1)
@@ -171,7 +174,7 @@ New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge);
 - Idempotent posting (also the fix for an ambiguous post, V1):
   - A `post_task` repeating a `client_request_id`, or a `job_id` + `part_key` whose latest attempt is not `REJECTED` / `EXPIRED` / `CANCELLED`, returns the existing task with `idempotent: true`. It places no new hold.
   - Re-posting a `part_key` whose latest attempt failed creates a new attempt (`attempt` = n+1). The new attempt counts against the job budget.
-- Budget: a part reserves `max_price_cents` against **both** the buyer cap and the job budget (`jobs.reserved_cents + jobs.spent_cents + max ≤ budget_cents`), with the same compare-and-swap. Over budget → `JOB_BUDGET_EXCEEDED` (409) with `next_action`.
+- Budget: a part reserves `max_price_cents` against **both** the buyer cap and the job budget (`jobs.reserved_cents + jobs.spent_cents + max ≤ budget_cents`), in the same transaction that creates the pending task. Over budget → `JOB_BUDGET_EXCEEDED` (409) with `next_action`.
 - `get_job(job_id)` (buyer) → `{job, parts: (TaskPublic & {part_key, part_label, attempt})[], progress}`. `progress` = `{parts, approved, rejected, in_progress, open, failed_latest}` over the latest attempt of each `part_key`. `job.status` is derived:
   - `EMPTY`: no parts yet.
   - `IN_PROGRESS`: some part's latest attempt is not terminal.
@@ -198,7 +201,7 @@ Every quantity that was not measured is **`null`, never 0**. `cost_usd` is a res
 `tasks.inkbox_thread_owner` (the handle whose A2A context is `inkbox_context_id`) and `tasks.inkbox_buyer_context_id` persist what `inkbox.ts` held in memory. `inkbox.notify` receives and returns them, so a server restart between claim and verdict keeps both threads. E wires `inkbox.ts`; A adds the columns and passes them through.
 
 
-## 13. Task offers (adopted; deployment pending)
+## 13. Task offers (deployed, October 18 at 04:04 UTC)
 
 The human assigned A and C work to C on October 17. This decision replaces seller ask pricing.
 
@@ -208,3 +211,5 @@ The human assigned A and C work to C on October 17. This decision replaces selle
 - `TaskPublic.price_cents` is populated before claim. Legacy unclaimed rows with a null price use their stored `max_price_cents`. Claims already accepted keep their stored price. Releasing a task preserves its offer. An approved task pays the accepted offer; a rejection releases the hold.
 - `ClaimPublic.price_cents` is the price accepted by the claim. C's `expected_price_cents` is a local runtime check against this field, never a new MCP argument.
 - Market observations group comparable model sets and runtime limits and include bounded sample counts, recent accepted prices, fill times and claim/expiry rates. Small samples are labelled insufficient. They are descriptive, do not establish an equilibrium and do not raise an offer or spending cap automatically.
+
+Retry-key retention follows [Stripe idempotent requests](https://docs.stripe.com/api/idempotent_requests), checked October 17: v1 keys may be pruned after 24 hours; concurrent request conflicts and parameter mismatches cannot establish that an earlier operation failed. The service keeps the same key for those outcomes.

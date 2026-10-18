@@ -6,6 +6,20 @@ const opts: RunCycleOpts = { marketplace_url: "http://marketplace/mcp", ollama_u
 const host = (fetch: typeof globalThis.fetch, key = "test-seller"): RunnerHost => ({ fetch, now: () => Date.now(), getSecret: async () => key });
 
 describe("seller cycle", () => {
+  it("checks the advertised offer before inference and releases a changed-price claim", async () => {
+    const server = fixture();
+    await expect(runCycle(host(server.fetch), { ...opts, expected_price_cents: 100 })).rejects.toThrow("TASK_PRICE_CHANGED");
+    expect(server.summary().state).toBe("OPEN");
+    expect(server.calls).not.toContain("ollama");
+    expect(server.calls).not.toContain("start_task");
+    expect(await runCycle(host(server.fetch), { ...opts, expected_price_cents: 60 })).toMatchObject({ price_cents: 60, result_id: "result_fixture" });
+  });
+
+  it("rejects an invalid expected price before creating a claim", async () => {
+    const server = fixture();
+    await expect(runCycle(host(server.fetch), { ...opts, expected_price_cents: -10 })).rejects.toThrow("INVALID_TASK_PRICE");
+    expect(server.calls).toHaveLength(0);
+  });
   it.each([false, true])("claims, decrypts and submits with a fresh in-call key; SSE=%s", async (sse) => {
     const server = fixture({ sse });
     const first = await runCycle(host(server.fetch), opts);

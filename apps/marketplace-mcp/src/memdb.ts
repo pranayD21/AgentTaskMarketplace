@@ -169,6 +169,11 @@ class Query implements PromiseLike<DbResult> {
     return this;
   }
 
+  /** Execute synchronously for the memory implementation of a DB transaction. */
+  run(): DbResult {
+    try { return this.execute(); } catch (err) { return { data: null, error: err as DbError }; }
+  }
+
   then<A = DbResult, B = never>(onfulfilled?: ((v: DbResult) => A | PromiseLike<A>) | null, onrejected?: ((e: unknown) => B | PromiseLike<B>) | null): PromiseLike<A | B> {
     // Runs synchronously at await time, so each statement is atomic like one SQL statement.
     let result: DbResult;
@@ -278,6 +283,30 @@ export class MemoryDb {
     if (!table) throw new Error(`memdb: unknown table ${name}`);
     return new Query(table, (op) => this.takeFault(name, op));
   }
+  /** Mirrors atm_prepare_task in one synchronous transaction, with rollback on faults. */
+  prepareTask(row: Row): DbResult {
+    const snapshot = new Map([...this.tables].map(([name, t]) => [name, clone(t.rows)]));
+    const run = (q: Query) => { const r = q.run(); if (r.error) throw r.error; return r.data as Row[]; };
+    try {
+      const b = run(this.from("agents").select("*").eq("id", row.buyer_id))[0];
+      const j = row.job_id ? run(this.from("jobs").select("*").eq("id", row.job_id))[0] : undefined;
+      const amount = row.max_price_cents as number;
+      if (!b || b.kind !== "buyer" || (row.job_id && (!j || j.buyer_id !== b.id))) return { data: { error: "NOT_FOUND" }, error: null };
+      if (Number(b.reserved_cents) + Number(b.spent_cents) + amount > Number(b.spend_cap_cents)) return { data: { error: "SPEND_CAP_EXCEEDED" }, error: null };
+      if (j && Number(j.reserved_cents) + Number(j.spent_cents) + amount > Number(j.budget_cents)) return { data: { error: "JOB_BUDGET_EXCEEDED" }, error: null };
+      const t = run(this.from("tasks").insert(row).select())[0]!;
+      if (row.payment_mode !== "mpp") {
+        for (const [table, counter] of [["agents", b], ["jobs", j]] as const) if (counter) {
+          run(this.from(table).update({ reserved_cents: Number(counter.reserved_cents) + amount, balance_keys: [...(counter.balance_keys as string[] ?? []), `reserve:${row.id}`], balance_revision: Number(counter.balance_revision ?? 0) + 1 }).eq("id", counter.id));
+        }
+      }
+      return { data: { task: t }, error: null };
+    } catch (error) {
+      for (const [name, rows] of snapshot) this.tables.get(name)!.rows = rows;
+      return { data: null, error: error as DbError };
+    }
+  }
+
   /** Tests: make the next `times` statements of this kind fail as if the database were unreachable. */
   injectFault(table: string, op: Fault["op"], times = 1): void {
     this.faults.push({ table, op, remaining: times });

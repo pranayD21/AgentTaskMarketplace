@@ -119,12 +119,13 @@ async function main() {
   const pub = await new Client().init();
   const info = await pub.ok("marketplace_info");
   console.log(`  marketplace_info: contract ${info.contract_version}, ${info.models.length} models, storage: ${info.storage}`);
+  if (info.pricing?.mode !== "task_offer") fail("posted-price capability missing");
   const reg = async (kind: string, extra: Record<string, unknown> = {}) => pub.ok("register_agent", { kind, display_name: `smoke-${kind}`, ...extra });
   const buyerReg = await reg("buyer", { spend_cap_cents: 1000 });
   const sellerReg = await reg("seller");
   const judgeReg = await reg("judge", { judge_secret: judgeSecret });
   const buyer = await new Client(buyerReg.api_key).init();
-  const post = async () => (await buyer.ok("post_task", { prompt: "What is the capital of Peru? One word.", allowed_models: ["qwen3:8b"], max_price_cents: 100, rubric: { kind: "contains_text", expected_text: ANSWER } })).task.task_id as string;
+  const post = async () => (await buyer.ok("post_task", { prompt: "What is the capital of Peru? One word.", allowed_models: ["qwen3:8b"], price_cents: 100, rubric: { kind: "contains_text", expected_text: ANSWER } })).task.task_id as string;
 
   // ---- 1. v0.1 path through the real daemons (registered key) -------------
   step("v0.1 path: seller + judge daemons (--runtime node, labelled UNSANDBOXED)");
@@ -137,13 +138,14 @@ async function main() {
   console.log(judgeOut.split("\n").filter((l) => /\[judge\] (APPROVE|REJECT)/.test(l)).map((l) => `  ${l}`).join("\n"));
   const r1 = await buyer.ok("get_result", { task_id: t1 });
   if (r1.task.status !== "APPROVED" || r1.result?.commitment_verified !== true || r1.result?.answer !== ANSWER) fail(`unexpected result for ${t1}: ${JSON.stringify({ status: r1.task.status, result: r1.result })}`);
+  if (r1.settlement.seller_payout_cents !== 100 || r1.task.price_cents !== 100) fail("posted offer changed at settlement");
   console.log(`  get_result: ${r1.task.status}, commitment_verified=${r1.result.commitment_verified}, settlement ${r1.settlement.kind} payout ${r1.settlement.seller_payout_cents}c refund ${r1.settlement.buyer_refund_cents}c`);
 
   // ---- 2. v0.2 per-claim key through the tool layer ------------------------
   step("v0.2 path: seller registered without a key, per-claim key on claim_task");
   const s2Reg = await reg("seller");
   const s2 = await new Client(s2Reg.api_key).init();
-  const listed = await s2.ok("register_seller", { models: [{ model_id: "qwen3:8b", ask_cents: 60 }], runtime: "wassette" });
+  const listed = await s2.ok("register_seller", { models: [{ model_id: "qwen3:8b" }], runtime: "wassette" });
   console.log(`  register_seller without key → runner.key_source=${listed.seller.runner.key_source}`);
   const t2 = await post();
   const noKey = await s2.tool("claim_task", { task_id: t2, model_id: "qwen3:8b" });
@@ -173,6 +175,7 @@ async function main() {
   console.log(`  get_result: ${r2.task.status}, commitment_verified=${r2.result.commitment_verified}; seller runner key ${rep.runner.public_key.key_id} (${rep.runner.key_source})`);
 
   const whoami = await buyer.ok("whoami");
+  if (whoami.spend.reserved_cents !== 0 || whoami.spend.spent_cents !== 200) fail("offer accounting did not reconcile");
   console.log(`\n✔ smoke passed — buyer spend: reserved ${whoami.spend.reserved_cents}c, spent ${whoami.spend.spent_cents}c of ${whoami.spend.cap_cents}c (MOCK)`);
 }
 

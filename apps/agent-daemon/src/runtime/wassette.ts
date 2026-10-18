@@ -66,11 +66,16 @@ const JudgeUsageRow = z.object({
 const JudgeCycleResult = z.union([
   z.object({ idle: z.literal(true) }),
   z.object({
-    idle: z.literal(false), deferred: z.literal(true), task_id: z.string(), result_id: z.string(),
-    failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,80}$/), usage: z.array(JudgeUsageRow),
+    idle: z.literal(false), kind: z.literal("deferred"), deferred: z.literal(true), task_id: z.string(), result_id: z.string(),
+    failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,80}$/), reported_code: z.string().nullable(),
+    review: z.object({ status: z.string(), attempts: z.number(), retry_at: z.string().nullable() }).nullable(), usage: z.array(JudgeUsageRow),
   }),
   z.object({
-    idle: z.literal(false), deferred: z.literal(false), task_id: z.string(), result_id: z.string(), verdict: z.enum(["APPROVE", "REJECT"]),
+    idle: z.literal(false), kind: z.literal("replacement"), deferred: z.literal(false), task_id: z.string(), result_id: z.string(),
+    outcome: z.enum(["delivered", "retry"]), failure_code: z.string().nullable(), replacement_status: z.string().nullable(), usage: z.array(JudgeUsageRow),
+  }),
+  z.object({
+    idle: z.literal(false), kind: z.literal("verdict"), deferred: z.literal(false), task_id: z.string(), result_id: z.string(), verdict: z.enum(["APPROVE", "REJECT"]),
     reason_code: z.string(), reason_public: z.string(), score: z.number().optional(),
     replacement_status: z.enum(["not_needed", "available", "unavailable"]), replacement_failure_code: z.string().nullable(),
     seller_status: z.string().nullable(), seller_payout_cents: z.number().nullable(), settlement_note: z.string().nullable(),
@@ -80,7 +85,7 @@ const JudgeCycleResult = z.union([
 
 const CycleOutput = z.object({
   task_id: z.string(), claim_id: z.string(), result_id: z.string(), runtime_ms: z.number().nonnegative(),
-  tokens_out: z.number().nonnegative().optional(), key_id: z.string(),
+  tokens_out: z.number().nonnegative().optional(), key_id: z.string(), price_cents: z.number().int().positive(),
   seller_usage: z.unknown().transform(safeSellerUsage).optional(),
 });
 

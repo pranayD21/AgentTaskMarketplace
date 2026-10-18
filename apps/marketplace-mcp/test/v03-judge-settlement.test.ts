@@ -118,10 +118,10 @@ describe("J2: judge infrastructure failures defer the review", () => {
       expect(await fetchFor(judge, task.task_id)).not.toBeNull();
 
       const final = await svc.submitVerdict(judge, { task_id: task.task_id, result_id: resultId, verdict: "APPROVE", reason_code: "RUBRIC_MATCH" });
-      expect(final).toMatchObject({ deferred: false, task: { status: "APPROVED", review: { status: "FINAL" } }, settlement: { seller_payout_cents: 60 } });
+      expect(final).toMatchObject({ deferred: false, task: { status: "APPROVED", review: { status: "FINAL" } }, settlement: { seller_payout_cents: 100 } });
       expect(capture).toHaveBeenCalledTimes(1);
       expect(await svc.sellerReputation(s.id)).toMatchObject({ status: "ACTIVE", reputation: { approvals: 1, strikes: 0 } });
-      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 60 });
+      expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 100 });
     });
   }
 
@@ -208,14 +208,13 @@ describe("J3: replacement answers have an explicit, recoverable status", () => {
 // ---------------------------------------------------------------------------
 
 describe("P1: settlement survives a failure after each side effect", () => {
-  it("post_task: a failed insert after the hold cancels the hold and returns the reservation", async () => {
+  it("post_task: a failed durable insert creates no hold or reservation", async () => {
     const buyer = await agent("buyer");
     const release = vi.spyOn(payments(), "release");
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     memoryDb().injectFault("tasks", "insert");
     await expectError(post(buyer), "INTERNAL_ERROR");
-    expect(release).toHaveBeenCalledTimes(1);
-    expect(release.mock.calls[0]![1]).toBe("task could not be stored");
+    expect(release).not.toHaveBeenCalled();
     expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 0 });
     expect(await post(buyer)).toMatchObject({ status: "OPEN" }); // the buyer can post again
   });
@@ -231,7 +230,7 @@ describe("P1: settlement survives a failure after each side effect", () => {
     const retry = await svc.submitVerdict(judge, { task_id: task.task_id, result_id: resultId, verdict: "REJECT", reason_code: "RUBRIC_MISMATCH" });
     expect(retry).toMatchObject({ idempotent: true, resumed: true, task: { status: "APPROVED" }, verdict: { verdict: "APPROVE" } });
     expect(capture).toHaveBeenCalledTimes(1);
-    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 60 });
+    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 100 });
     expect((await svc.sellerReputation(s.id)).reputation).toMatchObject({ approvals: 1, rejections: 0, strikes: 0 });
   });
 
@@ -257,13 +256,13 @@ describe("P1: settlement survives a failure after each side effect", () => {
 
   it("concurrent finalizers apply each effect once and only one reports finishing", async () => {
     const { buyer, judge, s, task, resultId } = await submittedTask();
-    await recordIntent(await taskRow(task.task_id), { outcome: "APPROVE", seller_payout_cents: 60, result_id: resultId, reason_code: "RUBRIC_MATCH", judge_id: judge.id });
+    await recordIntent(await taskRow(task.task_id), { outcome: "APPROVE", seller_payout_cents: 100, result_id: resultId, reason_code: "RUBRIC_MATCH", judge_id: judge.id });
     const results = await Promise.all([finalizeSettlement(task.task_id), finalizeSettlement(task.task_id), finalizeSettlement(task.task_id)]);
     expect(results.filter((r) => r.finishedNow)).toHaveLength(1);
-    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 60 });
+    expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 0, spent_cents: 100 });
     expect((await svc.sellerReputation(s.id)).reputation.approvals).toBe(1);
     const verdicts = unwrap(await db().from("verdicts").select("id").eq("task_id", task.task_id)) as unknown[];
-    expect(verdicts.length).toBeGreaterThanOrEqual(1);
+    expect(verdicts).toHaveLength(1);
   });
 
   it("cancel: a provider outage leaves the listing closed and the release recorded for retry", async () => {
@@ -305,9 +304,10 @@ describe("P2: a captured payment whose transfer failed is retried until it compl
     const { judge, task, resultId } = await submittedTask();
     await svc.submitVerdict(judge, { task_id: task.task_id, result_id: resultId, verdict: "APPROVE", reason_code: "RUBRIC_MATCH" });
     // Simulate a card capture whose transfer was refused (mock rails never transfer).
-    unwrap(await db().from("settlements").update({ transfer_state: "PENDING", payout_owed_cents: 60, payout_transferred_cents: 0 }).eq("task_id", task.task_id));
-    const provider = payments() as ReturnType<typeof payments> & { retryTransfer?: unknown };
-    const retryTransfer = vi.fn().mockResolvedValueOnce({ transfer_id: null, note: "not onboarded" }).mockResolvedValueOnce({ transfer_id: "tr_test_1", note: "transferred" });
+    unwrap(await db().from("settlements").update({ transfer_state: "PENDING", payout_owed_cents: 100, payout_transferred_cents: 0 }).eq("task_id", task.task_id));
+    const provider = payments();
+    const originalRetry = provider.retryTransfer;
+    const retryTransfer = vi.fn().mockResolvedValueOnce({ transfer_id: null, state: "PENDING", amount_cents: 0, retry_safe_to_advance: true, pending_reason: "PENDING_ONBOARDING", note: "not onboarded" }).mockResolvedValueOnce({ transfer_id: "tr_test_1", state: "TRANSFERRED", amount_cents: 100, note: "transferred" });
     provider.retryTransfer = retryTransfer;
     try {
       await svc.expireStale();
@@ -316,13 +316,13 @@ describe("P2: a captured payment whose transfer failed is retried until it compl
       expect(retryTransfer).toHaveBeenCalledTimes(1);
       await backdate("settlements", { col: "task_id", val: task.task_id }, "transfer_retry_at");
       await svc.expireStale();
-      expect(await settlementRow(task.task_id)).toMatchObject({ transfer_state: "TRANSFERRED", stripe_transfer_id: "tr_test_1", payout_transferred_cents: 60 });
+      expect(await settlementRow(task.task_id)).toMatchObject({ transfer_state: "TRANSFERRED", stripe_transfer_id: "tr_test_1", payout_transferred_cents: 100 });
       await backdate("settlements", { col: "task_id", val: task.task_id }, "transfer_retry_at");
       await svc.expireStale();
       expect(retryTransfer).toHaveBeenCalledTimes(2);
-      expect(retryTransfer.mock.calls[0]![2]).toBe(60);
+      expect(retryTransfer.mock.calls[0]![2]).toBe(100);
     } finally {
-      delete provider.retryTransfer;
+      provider.retryTransfer = originalRetry;
     }
   });
 });

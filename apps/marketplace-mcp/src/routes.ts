@@ -13,7 +13,7 @@ export function registerRoutes(server: MCPServer): void {
   // mcp-use start owns /health in production; keep an application-specific path.
   for (const route of ["/health", "/api/health"]) {
     server.get(route, (c) =>
-      c.json({ ok: true, service: "agent-task-marketplace", contract: CONTRACT_VERSION, payments: payments().mode, db: dbLabel(), base_url: env().baseUrl, time: new Date().toISOString() }),
+      c.json({ ok: true, service: "agent-task-marketplace", contract: CONTRACT_VERSION, pricing: "task_offer", revision: env().ATM_BUILD_REVISION ?? null, payments: payments().mode, db: dbLabel(), base_url: env().baseUrl, time: new Date().toISOString() }),
     );
   }
   server.get("/api/dashboard", async (c) => {

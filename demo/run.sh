@@ -4,10 +4,13 @@
 #
 #   bash demo/run.sh check                     # preflight: env, ollama, wassette, runner.wasm, app health
 #   bash demo/run.sh inkbox                    # list Inkbox identities (read-only; never resets shared ones)
+#   bash demo/run.sh pricing                   # marketplace_info.pricing.mode (task_offer = posted offers)
 #   bash demo/run.sh seller                    # seller daemon (SELLER_RUNTIME=wassette|node, default wassette)
-#   bash demo/run.sh judge                     # judge daemon inside Wassette (judge-cycle)
-#   bash demo/run.sh happy                     # buyer posts a 55c task that should be APPROVED
-#   bash demo/run.sh reject                    # buyer posts a 55c task the small model will fail → REJECT
+#   bash demo/run.sh seller-task <task_id>     # seller claims exactly this task at its posted offer, once
+#   bash demo/run.sh judge                     # judge daemon inside Wassette (judge-cycle); log saved under .atm-state/evidence/
+#   bash demo/run.sh evidence <task_id>...     # public-only timeline, verdicts, settlements, cross-seller overlap
+#   bash demo/run.sh happy                     # buyer posts a task at a 60c offer that should be APPROVED
+#   bash demo/run.sh reject                    # buyer posts a task at a 60c offer the small model will fail → REJECT
 #   bash demo/run.sh result <task_id>          # buyer reads the answer (commitment_verified, replacement_answer)
 #   bash demo/run.sh denied                    # judge with the marketplace grant removed → Wassette blocks it
 #   bash demo/run.sh denied-seller <task_id>   # seller with the Ollama grant removed; the task is released
@@ -16,19 +19,38 @@
 #   bash demo/run.sh server                    # fallback: local marketplace on :3000
 #   bash demo/run.sh tunnel                    # fallback: local marketplace with a public tunnel URL
 #
-# MARKETPLACE_URL comes from .env (hosted: https://warm-cloud-4hh5i.run.mcp-use.com/mcp). Demo tasks
-# cost 55c and the seller asks 50c, so other computers' sellers (asking 75c) cannot take them.
+# MARKETPLACE_URL comes from .env (hosted: https://warm-cloud-4hh5i.run.mcp-use.com/mcp). The buyer
+# posts the price (an offer); a seller accepts it by claiming, and it stays fixed through settlement.
+# To keep demo tasks on the right machine, pin sellers with seller-task <task_id>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f .env ] || { echo "missing .env (run: pnpm setup:env)"; exit 1; }
 set -a; . ./.env; set +a
 : "${MARKETPLACE_URL:=https://warm-cloud-4hh5i.run.mcp-use.com/mcp}"
 export MARKETPLACE_URL
-MAX_CENTS="${DEMO_MAX_CENTS:-55}"
-ASK_CENTS="${DEMO_ASK_CENTS:-50}"
+OFFER_CENTS="${DEMO_OFFER_CENTS:-60}"
+# Only for servers that predate task offers: a seller ask the offer covers. Ignored under task_offer.
+LEGACY_ASK_CENTS="${DEMO_LEGACY_ASK_CENTS:-50}"
 POLL_MS="${DEMO_POLL_MS:-5000}"
 
 step() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
+
+# marketplace_info.pricing.mode over MCP (no auth); prints "unknown" when absent (pre-offer servers).
+pricing_mode() {
+  node -e '
+    const url = process.env.MARKETPLACE_URL;
+    const h = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+    const rpc = async (method, params, sid) => { const r = await fetch(url, { method: "POST", headers: sid ? { ...h, "mcp-session-id": sid } : h, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }); const t = await r.text(); const line = t.split("\n").find((l) => l.startsWith("data:")); return { sid: r.headers.get("mcp-session-id"), json: JSON.parse(line ? line.slice(5) : t) }; };
+    (async () => {
+      const init = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "demo", version: "1" } });
+      const res = await rpc("tools/call", { name: "marketplace_info", arguments: {} }, init.sid);
+      const info = JSON.parse(res.json.result?.content?.[0]?.text ?? "{}");
+      console.log(info.pricing?.mode ?? "unknown");
+    })().catch(() => console.log("unknown"));'
+}
+seller_price_args() {
+  if [ "$(pricing_mode)" = "task_offer" ]; then echo ""; else echo "--ask-cents $LEGACY_ASK_CENTS"; fi
+}
 
 case "${1:-}" in
   check)
@@ -46,16 +68,27 @@ case "${1:-}" in
   inkbox)
     step "Inkbox identities (read-only). Free tier = 3: atm-marketplace + one buyer + one seller."
     node demo/inkbox-reset.mjs ;;
+  pricing)
+    echo "pricing.mode: $(pricing_mode)  (task_offer: buyers post offers; anything else: legacy seller asks, demo uses ${LEGACY_ASK_CENTS}c)" ;;
   seller)
-    pnpm daemon --role seller --runtime "${SELLER_RUNTIME:-wassette}" --ask-cents "$ASK_CENTS" --poll-ms "$POLL_MS" ;;
+    # shellcheck disable=SC2046
+    pnpm daemon --role seller --runtime "${SELLER_RUNTIME:-wassette}" $(seller_price_args) --poll-ms "$POLL_MS" ;;
+  seller-task)
+    # shellcheck disable=SC2046
+    pnpm daemon --role seller --runtime "${SELLER_RUNTIME:-wassette}" $(seller_price_args) --task-id "${2:?task_id}" --once ;;
   judge)
-    pnpm daemon --role judge --runtime wassette --poll-ms "$POLL_MS" ;;
+    mkdir -p .atm-state/evidence
+    log=".atm-state/evidence/judge-$(date -u +%Y%m%dT%H%M%SZ).log"
+    echo "judge log: $log (public metadata only); usage: .atm-state/judge-usage.jsonl"
+    pnpm daemon --role judge --runtime wassette --poll-ms "$POLL_MS" 2>&1 | tee "$log" ;;
+  evidence)
+    node demo/evidence.mjs "${@:2}" ;;
   happy)
-    step "buyer posts: capital of France, rubric contains 'Paris', ${MAX_CENTS}c (hold appears in Stripe)"
-    node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max "$MAX_CENTS" ;;
+    step "buyer posts: capital of France, rubric contains 'Paris', offer ${OFFER_CENTS}c (hold appears in Stripe)"
+    node scripts/buyer.mjs post "What is the capital of France? Answer in one word." --expect Paris --max "$OFFER_CENTS" ;;
   reject)
-    step "buyer posts: 2+2 with a deliberately wrong expected token, ${MAX_CENTS}c → judge REJECTs"
-    node scripts/buyer.mjs post "What is 2+2? Answer with a digit only." --expect five --max "$MAX_CENTS" ;;
+    step "buyer posts: 2+2 with a deliberately wrong expected token, offer ${OFFER_CENTS}c → judge REJECTs"
+    node scripts/buyer.mjs post "What is 2+2? Answer with a digit only." --expect five --max "$OFFER_CENTS" ;;
   result)
     node scripts/buyer.mjs result "${2:?task_id}" ;;
   denied)
@@ -63,7 +96,8 @@ case "${1:-}" in
     pnpm daemon --role judge --runtime wassette --deny-marketplace --once ;;
   denied-seller)
     step "seller sandbox WITHOUT the Ollama grant (Wassette matches hostnames, so the marketplace must not be localhost)"
-    pnpm daemon --role seller --runtime wassette --deny-ollama --ask-cents "$ASK_CENTS" --task-id "${2:?task_id (post one with: run.sh happy)}" --once ;;
+    # shellcheck disable=SC2046
+    pnpm daemon --role seller --runtime wassette --deny-ollama $(seller_price_args) --task-id "${2:?task_id (post one with: run.sh happy)}" --once ;;
   pay)
     step "MPP (preview): pay the task's HTTP 402 payment link with a Stripe TEST shared payment token, no phone"
     node docs/payments/pay-task.mjs "${2:?payment_link from post_task in PAYMENT_MODE=mpp}" ;;
@@ -76,5 +110,5 @@ case "${1:-}" in
     step "fallback if the hosted server is down: share the printed tunnel URL with every computer"
     pnpm dev:server --no-open --tunnel ;;
   *)
-    sed -n '2,19p' "$0"; exit 1 ;;
+    sed -n '2,23p' "$0"; exit 1 ;;
 esac

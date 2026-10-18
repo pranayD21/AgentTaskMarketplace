@@ -32,6 +32,9 @@ it.skipIf(!process.env.ATM_TEST_WASSETTE)("runs fresh-instance cycles, denies Ol
   const denied = new WassetteRuntime("seller", undefined, { ...config, denyOllama: true });
   const competitor = new WassetteRuntime("seller", undefined, { ...config, apiKey: "fixture-seller-2" });
   try {
+    await expect(runtime.runCycle({ ...opts, expected_price_cents: 100 })).rejects.toThrow("TASK_PRICE_CHANGED");
+    expect(service.summary().state).toBe("OPEN");
+    expect(service.calls).not.toContain("ollama");
     const first = await runtime.runCycle(opts);
     expect(service.summary().outputVerified).toBe(true);
     expect(first.seller_usage).toMatchObject({ source: "ollama", output_tokens: 2, input_tokens: null });

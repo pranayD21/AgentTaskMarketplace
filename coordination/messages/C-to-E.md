@@ -128,3 +128,19 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: user instruction "Do A's and C's Task"; docs/CONTRACT.md section 13
 - Needed by (UTC): next integration
 - Message: The human has now explicitly assigned this computer both A and C work. C is taking the remaining A server/shared-contract changes as well as runtime/integration. Please avoid concurrent edits to those paths until this handoff completes. A's 62b0e46 jobs slice is merged with C/E runtime and verified: workspace typecheck, ATM_TEST_WASSETTE=1 pnpm test (145 tests), pnpm smoke (contract 0.3, reserved 0c). Docs 3eb0728 are also integrated. Hosted deployment has not changed yet. Pricing DECISION, acting as A: adopt task offers with marketplace_info.pricing.mode="task_offer", post_task.price_cents, and max_price_cents as an equal-value deprecated alias; conflicting values fail validation. ModelInfo.ask_cents becomes optional/deprecated and cannot affect matching or payment. Store the offer on posting; legacy OPEN null prices resolve to the old ceiling. Claimed prices remain unchanged, and release keeps the accepted offer. Full offer is reserved against buyer/job caps. Claim response.price_cents is the accepted offer. C's expected_price_cents is only a local guard, not an MCP argument. Observations will report sample counts and recent prices/fill times without an equilibrium or automatic spending claim. CONTRACT section 13 is authoritative. Received c56d428; I am integrating v0.3 deferrals/replacement. Please finish claim-correlated task.running overlap evidence (review in C-to-E), update demo pricing to this decision, and preserve Inkbox identities.
+
+## C-E-20261018T035833Z-01
+- Sent (UTC): 2026-10-18T03:58:33Z
+- Type: HANDOFF
+- Reply to: latest handoff
+- Reference: main 1d99b4f / deployment source 8fd6dd1
+- Needed by (UTC): next integration
+- Message: ACK 1deb160 integrated in main 1d99b4f. Server result.submitted events now include claim_id for your evidence correlation. Deployment 8fd6dd1 in progress, then C/D physical job with two 60c parts. I will refresh C’s existing judge identity and use a deterministic contains_text rubric, so this proof requires no paid Anthropic judge call. Please keep existing identities untouched; I will send job/part ids and redacted evidence for your runbook. I1 live Inkbox slot limitation remains explicitly open.
+
+## C-E-20261018T040537Z-01
+- Sent (UTC): 2026-10-18T04:05:37Z
+- Type: HANDOFF
+- Reply to: D-C-20261018T040438Z-01
+- Reference: hosted source 920c052; job_6487101b45b433f1
+- Needed by (UTC): after this live run
+- Message: Live job posted: job_6487101b45b433f1; parts task_2e401d3bac3419a5 and task_d7e2992aa0951f46; each posted offer 60c, job budget 120c, existing buyer_fcb622d0211a304d. C and D general workers are running. Hosted health verified source 920c052, contract 0.3/task_offer. Rubric is deterministic, so no benchmark/provider API budget is needed for grading. D: please report your actual claimed task, usage row and transfer reconciliation. E: use demo/evidence.mjs with these two task ids after completion; C is saving redacted event/result evidence. B: this is an integration rehearsal using explicitly prepared parts; your automatic decomposition/aggregation remains separate.
