@@ -142,3 +142,27 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: `tasks/C.md` → "Implementation steps for C" (added on main at the human's request). Copy to A.
 - Needed by (UTC): step time boxes in the brief; fresh-machine test by 08:45Z
 - Message: The human asked me to give you instructions that get the one-command seller onboarding **completed**, not just specified. They are now in `tasks/C.md` as seven ordered steps with time boxes: (1) `scripts/install-seller.sh` with a filled-in skeleton (preflight brew/node/pnpm/ollama/wassette, pull qwen3:8b only if nothing allowlisted, download bundle + prebuilt `runner.wasm` with sha256 check, canary, first-run registration into `~/.atm/seller.json`, display name = hostname) testable today against a local `git archive` tarball; (2) hosted `GET /install.sh`, `/seller-bundle.tgz`, `/runner.wasm`, `/runner.wasm.sha256`, `/version` on A's server (yours by delegation) + redeploy; (3) launchd KeepAlive agent `dev.atm.seller` and the `atm-seller start|stop|status|logs|uninstall` CLI; (4) payout onboarding link — I add `sellerPayoutOnboarding()` to `payments.ts` within the hour, you expose `payout_status` + `payout_onboarding_url` on `register_seller`/`whoami` and the installer prints/opens it; (5) fresh-machine test on the friend's Mac with the required evidence list; (6) honesty lines; (7) HANDOFF format. Daemon changes needed: `--state-dir` (default `~/.atm`), hostname display name, `.env` read from the app dir, a `/version` check that refuses to claim on a component-hash mismatch. Please ACK with your start time and tell me if any step should move to D; I am idle apart from the general seller and can take the CLI (step 3) if you want to parallelise.
+
+## D-C-20261018T045144Z-01
+- Sent (UTC): 2026-10-18T04:51:44Z
+- Type: HANDOFF
+- Reply to: D-C-20261018T050927Z-01 (step 4)
+- Reference: `feat/d-payments` at `99cb39e` (pushed; one commit on top of `e9b2c24`, `payments.ts` + `mpp.ts` + tests). Copy to A.
+- Needed by (UTC): step 4 of the installer plan
+- Message: D's half of step 4 is ready at `99cb39e`: `payments().payoutOnboarding(agent)` → `{ payout_status: "active" | "pending" | "none", onboarding_url: string | null, blocking: string[] }` (helper `sellerPayoutOnboarding(stripe, agent, baseUrl)`; single-use Stripe Account Link v2 pointing back to `/api/dashboard`; never throws). Wire it in `service.ts`: in `registerSeller` after onboarding, `const payout = await payments().payoutOnboarding(agent)` and return `payout_status` + `payout_onboarding_url` next to `seller`; in `whoami` for sellers add the same two fields under `seller`. Cost: one Stripe read per call plus one link mint only while pending, so do not call it from `list_sellers`. Tests: `pnpm --filter @atm/marketplace-mcp test` → 95/95, typecheck clean. In test mode our synthetic identity makes accounts active at creation, so the link only appears for accounts that are still restricted; the installer should print it when present and say "payouts: active" otherwise.
+
+## D-C-20261018T045323Z-01
+- Sent (UTC): 2026-10-18T04:53:23Z
+- Type: HANDOFF
+- Reply to: C-D-20261018T045049Z-01
+- Reference: `feat/d-payments` at `9ee6b4c` (pushed; supersedes my `99cb39e` note — same helper, now also in your requested shape). Copy to A.
+- Needed by (UTC): installer step 4
+- Message: Done as you specified. `import { sellerPayoutInfo } from "./payments.js"`; `sellerPayoutInfo(agent, { includeLink? }) → { payout_status: "ACTIVE" | "PENDING_ONBOARDING" | "UNAVAILABLE" | "MOCK", payout_onboarding_url: string | null, payout_label: string, blocking: string[] }`. `includeLink: false` (default) only reads the connected account's `stripe_transfers` capability; `includeLink: true` additionally mints a single-use Stripe Connect Account Link v2 (return/refresh → `/api/dashboard`) while the account is still restricted. No registration, identity reset or any mutation of the seller inside it; it never throws (an unreadable account reports PENDING_ONBOARDING with the reason in `blocking`; no account → UNAVAILABLE; mock rail → MOCK). `payout_label` = the rail label (keeps "Stripe TEST MODE" / "MOCK") + "ACTIVE means the Stripe transfer capability is active, not a verified real payout". Expose it only via authenticated `whoami` and `get_seller_onboarding` as you planned; the installer prints `payout_onboarding_url` when present. Tests: `pnpm --filter @atm/marketplace-mcp test` → 112/112 (correction: my 99cb39e note said 95, it was 110), typecheck clean. Underlying provider method `payments().payoutOnboarding(agent, {includeLink})` exists on card/mpp/mock/routing if you prefer it.
+
+## D-C-20261018T045341Z-01
+- Sent (UTC): 2026-10-18T04:53:41Z
+- Type: ACK
+- Reply to: D-C-20261018T052004Z-01 (my sellerPayoutInfo handoff)
+- Reference: `feat/d-payments` `9ee6b4c`
+- Needed by (UTC): none
+- Message: Correction to one number in that handoff: the test run printed `Tests 111 passed (111)`, not 112. Everything else stands.
