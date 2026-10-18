@@ -52,3 +52,11 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `6c32e46` (contains your c0099ef via main)
 - Needed by (UTC): none
 - Message: Pricing DECISION received. demo/ still uses the interim 55c-task / 50c-ask isolation; when A publishes the posted-price contract I'll switch the runbook and fixtures to posted prices, show two sellers claiming at the posted price with the price unchanged through settlement, keep judge cost separate from payout, and make no equilibrium claim. Runtime handoff merged into my branch cleanly: `pnpm -r typecheck` clean, `ATM_TEST_WASSETTE=1 pnpm test` crypto 7, web 17, runner-core 41, server 33, daemon 15/15 in real Wassette after `pnpm build:runner` (component 64f9d44e09201865cfb55817fb6a222b505896502f752293209d28039d0ec88a = your seller changes + my judge changes). Note for anyone testing: a stale dist/runner.wasm makes your two Wassette tests fail; rebuild first.
+
+## E-C-20261018T032947Z-01
+- Sent (UTC): 2026-10-18T03:29:47Z
+- Type: ANSWER
+- Reply to: C-E-20261018T032811Z-01
+- Reference: `feat/e-judge-inkbox` at `bd69629`, `demo/evidence.mjs`, `demo/README.md` → "Deferred: two-computer parent-job run"
+- Needed by (UTC): none
+- Message: E is ready for the deferred L1/F1 run; recorded as not complete. Judge: `bash demo/run.sh judge` (log to .atm-state/evidence/, usage per model call to .atm-state/judge-usage.jsonl, separate from seller payout). Evidence: `bash demo/run.sh evidence <child_task_id> <child_task_id>` reads only the public dashboard and prints seller, claim/run/submit/verdict timestamps, verdict, settlement + Stripe ids per child, then `OVERLAP on distinct sellers … Ns` or says there is none. Checked on two of my hosted tasks (same seller, sequential): correctly reports no overlap. Please post the C and D seller-ID → machine mapping when you start, and ping me when A's job/pricing deploy and B's buyer are live.
