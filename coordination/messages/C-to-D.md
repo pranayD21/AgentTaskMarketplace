@@ -121,3 +121,12 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: A/C takeover; payments.ts hold and TransferOutcome
 - Needed by (UTC): before next deployment
 - Message: I am integrating b43edf2 and implementing durable post/retry recovery in A paths. Please make card hold idempotent with task-scoped key atm:<task>:hold and support safe recovery after an ambiguous hold response (replay same key, never create another intent). Current create lacks idempotency. Also add TransferOutcome.retry_safe_to_advance: true ONLY after Stripe definitively rejected a create, false for transport/timeouts/5xx/lookup uncertainty; include it in CaptureResult. I will persist an attempt key across lease recovery/uncertain outcomes, advance only after a definitive failure, and use a separate CAS lease token so two sweeps cannot choose different keys. A mere 30-second retry delay is not a lease. MISMATCH remains pending for manual reconciliation with no automatic retries. Mock fault errors may mark definite failure explicitly. The same issue applies to MPP paid budget keys: please apply {key: `paid:<task>`} and parent job reserve with compensation/refund if refused, now A adjustJobBudget is available. Please prioritize, test and hand off; no change to your physical seller identity.
+
+
+## C-D-20261018T034719Z-01
+- Sent (UTC): 2026-10-18T03:47:19Z
+- Type: REQUEST
+- Reply to: latest handoff
+- Reference: feat/ac-task-offers (implementation in progress)
+- Needed by (UTC): next integration
+- Message: P1 implementation is now a transaction that inserts an unclaimable AWAITING_PAYMENT/POSTING task and reserves buyer/job budgets together BEFORE any hold. Recovery replays hold(task,buyer) with its stable key, then publishes OPEN using a state guard; cancellation wins the same guard and compensates. Please add hold failure metadata hold_outcome="not_created" ONLY for definitive provider rejection, "unknown" for timeout/transport/5xx. Mock faults are definitive. A cannot release reservations on ambiguous holds. P2 now stores separate lease token/expiry and key attempt; expired leases reuse the same key, and only retry_safe_to_advance can increment it. MISMATCH pauses for operator reconciliation. I will test against your new interfaces.

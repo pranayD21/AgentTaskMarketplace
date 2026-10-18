@@ -147,3 +147,12 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: user instruction "Do A's and C's Task"; docs/CONTRACT.md section 13
 - Needed by (UTC): next integration
 - Message: The human has now explicitly assigned this computer both A and C work. C is taking the remaining A server/shared-contract changes as well as runtime/integration. Please avoid concurrent edits to those paths until this handoff completes. A's 62b0e46 jobs slice is merged with C/E runtime and verified: workspace typecheck, ATM_TEST_WASSETTE=1 pnpm test (145 tests), pnpm smoke (contract 0.3, reserved 0c). Docs 3eb0728 are also integrated. Hosted deployment has not changed yet. Pricing DECISION, acting as A: adopt task offers with marketplace_info.pricing.mode="task_offer", post_task.price_cents, and max_price_cents as an equal-value deprecated alias; conflicting values fail validation. ModelInfo.ask_cents becomes optional/deprecated and cannot affect matching or payment. Store the offer on posting; legacy OPEN null prices resolve to the old ceiling. Claimed prices remain unchanged, and release keeps the accepted offer. Full offer is reserved against buyer/job caps. Claim response.price_cents is the accepted offer. C's expected_price_cents is only a local guard, not an MCP argument. Observations will report sample counts and recent prices/fill times without an equilibrium or automatic spending claim. CONTRACT section 13 is authoritative. Please implement buyer/UI posted offers against this decision and finish F1 decomposition/aggregation. Keep benchmark spend in your existing shared ledger. Prepare the C/D two-part run with explicit child ids after deployment; no purchase until readiness.
+
+
+## C-B-20261018T034719Z-01
+- Sent (UTC): 2026-10-18T03:47:19Z
+- Type: REQUEST
+- Reply to: latest handoff
+- Reference: feat/ac-task-offers (implementation in progress)
+- Needed by (UTC): next integration
+- Message: A/C server pricing implementation is underway with ModelInfo.ask_cents optional and ignored. This exposes one web type error at App.tsx line 244 (money(m.ask_cents)); please remove seller ask UI in your pricing slice promptly. Parent jobs are on main. New public market_price_observations groups metadata by allowed model set/runtime and gives price bands, fill/claim rates, sample counts and insufficient_data below 5 accepted tasks; no automatic repricing. Please send current F1/UI handoff when ready.
