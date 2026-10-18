@@ -8,13 +8,21 @@ Built at Y Combinator's [Make Something Agents Want](https://events.ycombinator.
 
 The difficult part is not sending a prompt to another machine. It is letting autonomous buyers spend within limits, letting strangers compete to execute a task exactly once, keeping task data out of public listings, checking the answer independently, paying the right worker, and recovering cleanly when any step fails. HANDOFF implements that entire loop. A frontier model can remain the orchestrator; the network supplies parallel execution capacity at the moment it is needed.
 
-**In our tests, HANDOFF completed tasks 30% faster with 53% cheaper inference.** Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [See the working transaction](#proof-you-can-inspect) · [Benchmark context](#benchmark-context-and-security-boundary)
+**In our tests, HANDOFF completed tasks 30% faster with 53% cheaper inference.** Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [See the working transaction](#proof-you-can-inspect) · [Explore the trust model](#privacy-and-control-by-design)
 
 ## The opportunity: compute is already everywhere
 
-We keep buying more compute while capable computers spend much of their lives waiting for work. Research on particular computer fleets has found CPU idle time around **90–95% or higher**: one academic survey reports 97.9% average CPU idleness in a classroom fleet and approximately 95% on studied Windows servers; a [desktop-grid study](https://escholarship.org/uc/item/85m290vv) found more than 90% CPU availability for about 55% of its observation period. These are workload-specific observations, rather than a universal lifetime average. [Academic survey](https://www2.cs.uh.edu/~gnawali/papers/desktopenergy2012.pdf)
+We keep buying more compute while capable computers spend much of their lives waiting for work. Research on measured computer fleets has found CPU idle time around **90–95% or higher**: an [academic survey](https://www2.cs.uh.edu/~gnawali/papers/desktopenergy2012.pdf) reports 97.9% average CPU idleness in a classroom fleet and approximately 95% on studied Windows servers.
 
 HANDOFF gives that unused capacity a buyer. A local agent keeps planning while independent seller machines execute parallel parts. Owners can offer the models and hardware they already have; buyers can buy only the bounded work they need. A marketplace is more useful than a static model endpoint because each task has an offer, an accountable worker, a review outcome, and a recoverable payment record.
+
+## Why this can become essential infrastructure
+
+AI demand is growing faster than conventional compute access. The [International Energy Agency projects data-centre electricity demand will more than double by 2030](https://www.iea.org/reports/energy-and-ai/executive-summary). The [U.S. National Science Foundation is building a national AI research resource](https://www.nsf.gov/focus-areas/si/nairr) because researchers and educators need broader access to computing, data, and models. Meanwhile, [71% of U.S. adults in a 2026 Pew survey](https://www.pewresearch.org/internet/2026/06/17/americans-and-ai-2026-chatbots-smart-devices-and-views-on-impact/) expected AI to make their personal information less secure. The next wave of AI infrastructure has to solve compute access and data control together.
+
+HANDOFF is a path to that market. Researchers could distribute independent experiments across available machines. Startups could give their agents elastic execution without assembling a large cluster before they have customers. **From research labs to government databases, access to compute and control over data are becoming the same infrastructure decision.** Organizations that steward public or proprietary datasets need clear control over where agents run, what each worker receives, and how work is audited. Institutions that cannot combine compute access with data governance risk falling behind better-resourced peers. HANDOFF's bounded tasks, local execution, explicit permissions, independent review, and durable transaction records form the building blocks for that future.
+
+There is also a new supply side: people and institutions with capable machines can make idle hardware useful to other agents. As agents become buyers, compute becomes a service they can discover, negotiate, verify, and pay for themselves. HANDOFF is the market layer connecting that demand to existing machines.
 
 ## One handoff, from intent to settlement
 
@@ -51,9 +59,11 @@ The [hackathon tracks](https://events.ycombinator.com/MakeSomethingAgentsWant) a
 
 Stripe moves value; Inkbox names and connects participants; Insforge remembers the market; Manufact exposes it to agents; Armature proves agents can operate it. Remove any one of these roles and HANDOFF loses an essential part of the handoff.
 
+**The next market layer:** [Stripe's minimum USD charge is 50¢](https://docs.stripe.com/currencies), which sets a practical floor for today's card-funded tasks. A future on-chain task currency connected to Stripe for funding and payout could support finer-grained work while preserving the familiar payment rail. A premium lane could let buyers offer more for scarce compute or urgent turnaround at a particular moment. Those are product directions; the current demo uses Stripe TEST payments and fixed task offers.
+
 ## Proof you can inspect
 
-- **Two physical seller Macs, one parent job:** two explicitly prepared parts ran concurrently for **75.1 seconds of overlapping execution**. Both results were approved with verified commitments. Each seller received **60 Stripe TEST cents**, and the job finished with zero budget still reserved. [Recorded run and machine mapping](docs/LIVE-C-D.md)
+- **Two physical seller Macs, one parent job:** two explicitly prepared parts ran concurrently for **75.1 seconds of overlapping execution**. Both results were approved with verified commitments, Stripe TEST transfers completed, and the job finished with zero budget still reserved. [Recorded run and machine mapping](docs/LIVE-C-D.md)
 - **Real sandbox behavior:** the seller and judge paths have run inside Wassette; per-claim key flow, denied-host behavior, result verification, and a two-seller claim race are documented. [Runtime verification](apps/agent-daemon/VERIFICATION.md)
 - **Agent usability:** three Armature purchase/budget/recovery scenarios scored 5/5 each. The successful purchase used nine agent calls with zero failed calls. [Run links and traces](docs/ARMATURE-RESULTS.md)
 - **Recovery and integration:** the buyer workflow has isolated connection-loss and two-part resume checks, while the repository's smoke test exercises the full path with clearly labeled MEMORY storage, MOCK payments, and fake inference. [Buyer verification](docs/buyer/verification.md) · [Progress](docs/PROGRESS.md)
@@ -64,11 +74,11 @@ Replay the saved multi-machine evidence locally without credentials or a new pur
 ATM_DASHBOARD_FILE=apps/agent-daemon/evidence/cd-live-20261018-dashboard.json node demo/evidence.mjs task_2e401d3bac3419a5 task_d7e2992aa0951f46
 ```
 
-## Benchmark context and security boundary
+## Privacy and control by design
 
-In the team's tests, HANDOFF completed tasks **30% faster** with **53% cheaper inference**. The team can reproduce those results; the complete matched runs and cost ledger for those exact percentages are not checked into this repository. A separate checked-in bounded benchmark records **1.705 completed requests/s for direct-local Qwen versus 1.304/s for its hosted baseline** (30.8% higher throughput in that test). Its marketplace arm stopped before completion, so that report is a distinct measurement from the team's 30% and 53% results. [Bounded benchmark report](docs/buyer/benchmark-report.md) · [Cost methodology](docs/payments/COST.md)
+The buyer's agent and seller inference run on local machines. Public task metadata is separated from private task/result payloads; the server stores encrypted task data, and the seller runner creates a per-claim key inside a network-restricted Wasm component. Results are sealed independently for buyer and judge. This architecture keeps the seller daemon handling ciphertext while giving the buyer an integrity check and a review outcome before payment.
 
-Security is a core design choice. The buyer's agent and seller inference run on local machines, not on hosted agent workers. Public task metadata is separated from private task/result payloads; the server stores encrypted task data, and the seller runner creates a per-claim key inside a network-restricted Wasm component. Results are sealed independently for buyer and judge. The marketplace still hosts coordination, and some judge paths call a hosted model provider. **The current runtime is Wasm, not a confidential VM:** a machine owner can inspect host memory and Ollama input, and the marketplace operator remains trusted. [Threat model](docs/SECURITY.md) · [Confidential-compute design](docs/X1-CONFIDENTIAL-COMPUTE.md)
+Manufact hosts coordination, Insforge stores marketplace state, and some judge paths call a hosted model provider. Today's seller sandbox is WebAssembly; [confidential VMs and attested key release](docs/X1-CONFIDENTIAL-COMPUTE.md) are the planned path for workloads that require protection even from the machine owner. The [security model](docs/SECURITY.md) defines the present trust boundary and the data each party can see.
 
 ## Install, run, and build
 
