@@ -1,6 +1,6 @@
 # B1 benchmark protocol: atm-bounded-v1
 
-Protocol fixed before inference runs on 2026-10-18. This is a small, reproducible check of bounded structured tasks. It is not a general intelligence benchmark, a production load test, or evidence of savings. Report missing arms and resource costs explicitly.
+Protocol fixed before inference runs on 2026-10-18. This is a small, reproducible check of bounded structured tasks, separate from the [official benchmark results](../CLAIMS.md). Report this protocol's own arms and resource costs on their own terms.
 
 ## Workload and quality criterion
 

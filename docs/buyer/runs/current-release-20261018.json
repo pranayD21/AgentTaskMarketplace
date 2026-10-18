@@ -203,6 +203,22 @@
       "claims_verified_by_b": false,
       "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
       "paid_calls_by_this_followup": 0
+    },
+    "official_claim_followup": {
+      "checked_at": "2026-10-18T16:51:17.485Z",
+      "source_commit": "31003e57a72d485d514ded809274669f119c55e0",
+      "claim_document": "docs/CLAIMS.md",
+      "claim_record": "docs/benchmark-claims.jsonl",
+      "record_type": "official_benchmark_claim",
+      "project_asserted_validation": "officially tested",
+      "task_completion_faster_percent": 30.8,
+      "inference_cheaper_percent": 53.2,
+      "raw_run_artifact": false,
+      "new_matched_run_or_cost_artifacts_in_commits": false,
+      "independently_verified_by_b": false,
+      "raw_bounded_run_artifacts_modified": false,
+      "benchmarks_resumed": false,
+      "production_judge_usage_received": false
     }
   },
   "repository_cleanup_followup": {

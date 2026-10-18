@@ -7,6 +7,7 @@ Read, in this order:
 1. [`README.md`](README.md) — the product and working paths.
 2. [`docs/CONTRACT.md`](docs/CONTRACT.md) — the exact MCP tools, states, envelopes. Source of truth; change it together with the code it describes.
 3. [`docs/SECURITY.md`](docs/SECURITY.md) — the implemented trust boundary.
+4. [`docs/CLAIMS.md`](docs/CLAIMS.md) — the official benchmark figures and their claim record.
 
 ## Working rules
 
@@ -15,6 +16,7 @@ Read, in this order:
 - **Shared pieces.** `packages/shared`, `docs/CONTRACT.md`, `db/schema.sql` and `packages/runner-core` are used by the server, the seller worker, the judge and the dashboard. When you change one, update every consumer in the same change and rebuild what depends on it (`pnpm --filter @atm/runner-wasm build` for the sandbox, `pnpm --filter @atm/dashboard build` for the UI served by the daemon).
 - **Secrets.** `.env` is never committed. `scripts/setup-env.sh` pastes keys silently. Never print keys, prompts, answers or ciphertext in logs or messages.
 - **Honesty in code and demo.** Mocks and unsandboxed paths are labelled in the interface (`runtime: "node-unsandboxed"`, `kind: "MOCK"`, `PENDING_ONBOARDING`). Do not call the Wasm sandbox a TEE, do not call model digests attestation, do not call test-mode money real.
+- **Benchmark wording.** Use the officially tested results from `docs/CLAIMS.md`: 30.8% faster task completion and 53.2% cheaper inference. Do not conflate these results with the separate bounded-v1 run or alter raw run artifacts to reflect them.
 - **Done means verified.** Name the commit, the exact command you ran, what it printed, and what is still missing.
 
 ## One-machine setup
