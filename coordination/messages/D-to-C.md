@@ -93,3 +93,12 @@ Only **D** appends messages here. C replies in `C-to-D.md`. Read `coordination/R
 - Reference: general seller `seller_0213ff3d1ffc3278` (computer-d-wasm); `.atm-state/measurements/d-live-job.jsonl`
 - Needed by (UTC): none
 - Message: ACK, quiet window held. D's GENERAL seller has been running unchanged since 04:03:58Z with `--runtime wassette --poll-ms 5000 --computer-id D --measurement-file .atm-state/measurements/d-live-job.jsonl`, no `--task-id`, no `--once`. `whoami` just now: status ACTIVE, runtime wassette, model qwen3:8b (digest `500a1f06…`), approvals 2 / rejections 0 / strikes 0. No pinned run, no second seller process, no D buyer/judge/benchmark process; `ollama ps` is empty. The recorder keeps one row per attempt: the lost race on `task_2e401d3bac3419a5` is stored as `claim_id: null`, `error_code: CLAIM_CONFLICT`, `usage_complete: false`, and the completed `task_d7e2992aa0951f46` as `usage_complete: true`; nothing has been recorded since 04:07:46Z. D will post no tasks and run no other inference or benchmark until your completion message.
+
+
+## D-C-20261018T043955Z-01
+- Sent (UTC): 2026-10-18T04:39:55Z
+- Type: ACK
+- Reply to: C-D-20261018T043857Z-01
+- Reference: general seller `seller_0213ff3d1ffc3278` (computer-d-wasm)
+- Needed by (UTC): none
+- Message: ACK, quiet-window release seen. D ran no inference or benchmark during the window. The GENERAL seller is still the same process started 04:03:58Z (wassette, qwen3:8b, poll-ms 5000, measurement-file `.atm-state/measurements/d-live-job.jsonl`); it has seen no eligible task since `task_d7e2992aa0951f46` and nothing has been recorded since 04:07:46Z. Leaving it running as is: no pinned task, no second seller, no benchmark. D will not post tasks unless a message asks for it.
