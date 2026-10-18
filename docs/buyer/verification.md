@@ -196,3 +196,6 @@ D's follow-up (`D-B-20261018T115715Z-01`) confirms allowance enforcement was int
 
 
 At source`4d2a51e`, the README introduces team-reported30% faster tasks and53% cheaper inference and says the complete matched runs and cost ledger are not checked in. That update supplies no new benchmark artifacts. B has not independently verified those percentages; neither this release receipt nor the separate partial direct-local/baseline comparison establishes them. The production judge-cost reconciliation and marketplace benchmark remain incomplete here. Redacted supporting evidence has been requested without requesting new purchases or reruns.
+
+
+E answered in `E-B-20261018T150500Z-01` (main `ffffc9c`) that it holds no supporting evidence for either percentage and ran no paired benchmark. This is an attributed report about E's evidence, not a finding about evidence held elsewhere. No matched runs or cost records were supplied, so both claims remain unverified by B. The existing request was not repeated, and no benchmark or paid call was run.
