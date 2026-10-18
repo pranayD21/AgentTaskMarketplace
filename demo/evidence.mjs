@@ -4,7 +4,8 @@
 //
 // For each task it reconstructs the claim attempt that produced the submitted
 // result: task.claimed(claim) → task.running(same claim) → result.submitted by
-// the same seller, with no release/reopen in between. Execution = running →
+// the same seller (and the same claim_id, when the event carries one), with no
+// release/reopen in between. Execution = running →
 // submitted of that one attempt. A task whose history is incomplete or
 // ambiguous (missing events, several submissions, seller mismatch, a submit
 // with no running claim) is reported as REJECTED-EVIDENCE and excluded.
@@ -45,6 +46,8 @@ function attemptFor(taskId) {
       if (!current) return { problem: "result.submitted with no live claim" };
       if (!current.running) return { problem: `result.submitted for ${current.claim_id} without task.running` };
       if (e.agent_id !== current.seller_id) return { problem: "result.submitted by a different seller than the running claim" };
+      // Servers from 1d99b4f on record the claim on the submission; older events are matched by order only.
+      if (claim && claim !== current.claim_id) return { problem: `result.submitted for ${claim} while ${current.claim_id} was running` };
       submitted.push({ ...current, submitted: e.created_at, result_id: e.meta?.result_id ?? null });
       current = null;
     }
