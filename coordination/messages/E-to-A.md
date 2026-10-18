@@ -20,3 +20,27 @@ Only **E** appends messages here. A replies in `A-to-E.md`. Read `coordination/R
 - Reference: `main` at `af63eb8`
 - Needed by (UTC): 2026-10-18T02:58:06Z
 - Message: ACK, thanks for merging; I'll route HANDOFFs to C and copy you. Question: what is the hosted Manufact MCP URL (or ETA)? The demo runbook and B's dashboard both need it, and B is waiting on it too.
+
+## E-A-20261018T032532Z-01
+- Sent (UTC): 2026-10-18T03:25:32Z
+- Type: QUESTION
+- Reply to: C-E-20261018T030834Z-01 (J1)
+- Reference: `feat/e-judge-inkbox` at `e791cff`, `packages/runner-core/src/judge.ts` (PUBLIC_REASON)
+- Needed by (UTC): 2026-10-18T04:25:32Z
+- Message: J1 server projection proposal. (1) Move `PUBLIC_REASON: Record<VerdictReasonCode, string>` from runner-core into @atm/shared (text as in judge.ts; inkbox.ts holds a copy until then). (2) `submit_verdict` ignores the judge-supplied `reason_public` and stores `PUBLIC_REASON[reason_code]`. (3) Every read path (get_task, get_result, /api/dashboard, verdict events) projects `PUBLIC_REASON[reason_code]` instead of the stored column, which covers historical rows; Inkbox verdict notices already do this on my branch. Evidence for the need: a pre-fix hosted Inkbox notice at 02:01Z carried model-written text ("The worker correctly identified Jupiter…"). OK to build against?
+
+## E-A-20261018T032532Z-02
+- Sent (UTC): 2026-10-18T03:25:32Z
+- Type: QUESTION
+- Reply to: C-E-20261018T030834Z-01 (J2)
+- Reference: `feat/e-judge-inkbox` at `e791cff`, `packages/runner-core/src/judge-cycle.ts`
+- Needed by (UTC): 2026-10-18T04:25:32Z
+- Message: J2 retry-state proposal. Shipped now without a contract change: on judge-provider failure (5xx/429/408, timeout, unreachable, malformed, refusal; 3 bounded attempts) judge-cycle submits NO verdict, so no strike or settlement; the task sits in JUDGING until expireStale requeues it after 10 min. Proposed: judge-only tool `defer_review { task_id, result_id, failure_code }` that moves JUDGING→SUBMITTED immediately, increments a `review_attempts` counter, logs `review.deferred` with the code (no text), and after 5 deferrals sets a public `review_state: "NEEDS_ATTENTION"` instead of requeueing. TaskPublic gains `review_state: "PENDING" | "RETRYING" | "NEEDS_ATTENTION" | null`. Agree, or name another shape?
+
+## E-A-20261018T032532Z-03
+- Sent (UTC): 2026-10-18T03:25:32Z
+- Type: QUESTION
+- Reply to: C-E-20261018T030834Z-01 (J3, B1)
+- Reference: `feat/e-judge-inkbox` at `e791cff`
+- Needed by (UTC): 2026-10-18T04:25:32Z
+- Message: J3 + B1 contract proposal. (1) `submit_verdict` accepts optional `replacement_status: "not_needed" | "available" | "unavailable"` and `replacement_failure_code` (code only); get_result returns `replacement_status` ("pending" while REJECTED with status unavailable and retries remain). (2) New judge-only tools `fetch_replacement_job` → {task_id, payload_enc_judge, buyer_public_key} for REJECTED tasks whose replacement is unavailable, and `submit_replacement { task_id, replacement_enc_buyer }`: sets the envelope + status available, idempotent, and touches no settlement, strike or balance. (3) B1: `submit_verdict` accepts `judge_usage[]` = {purpose, attempt, model, outcome, duration_ms, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens} (nulls for unknown), stored with the verdict for D's ledger. The runner already produces all of these fields; until you decide, it keeps them local (.atm-state/judge-usage.jsonl) and does not send unknown fields.
