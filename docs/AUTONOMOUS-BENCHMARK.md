@@ -1,5 +1,11 @@
 # Autonomous local buyer benchmark
 
+## Status: deferred by the user
+
+At 2026-10-18 04:38 UTC, the user asked to stop benchmarking and save it for later. The benchmark process was terminated; general seller and judge workers were left running. Neither `autonomous-v1` nor `autonomous-v2` posted marketplace tasks, and there is no completed valid comparison or speedup result. Version 1's invalid-pilot trace and version 2's interrupted local run remain in the ignored run directory, with `INVALID.json` and `STOPPED.json` respectively.
+
+The implementation and fixed protocol are saved on `feat/c-autonomous-buyer`. Resume only after a new user request. Use a fresh run ID and fresh conversations for both arms, verify worker availability and existing spending limits again, and preserve the interrupted runs. The previous timing quiet window has ended; this does not authorize another benchmark.
+
 ## What this tests
 
 C's local Qwen3 8B model receives one request: implement a utility module with eight specified functions. It chooses every tool call. In the network arm, the available tools include the hosted marketplace's MCP tools. The model can inspect the marketplace, choose task boundaries and prices, post work, continue writing code locally, retrieve results and submit the module. No prompt names computer D or assigns it a function.
