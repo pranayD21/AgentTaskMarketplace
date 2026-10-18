@@ -24,11 +24,11 @@ export class Marketplace {
     return client;
   }
 
-  async call<T = Record<string, unknown>>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  async call<T = Record<string, unknown>>(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
     const client = await this.connect();
     let res;
     try {
-      res = await client.callTool({ name, arguments: args });
+      res = await client.callTool({ name, arguments: args }, undefined, { signal });
     } catch (err) {
       await client.close().catch(() => {});
       this.client = null; // reconnect next time
@@ -51,6 +51,8 @@ export class Marketplace {
     return claim?.inputSchema.properties?.runner_pubkey_b64 && claim.inputSchema.properties.runner_key_id &&
       !register?.inputSchema.required?.includes("runner_pubkey_b64") ? "per-claim" : "registered";
   }
+
+  async listTools() { return (await (await this.connect()).listTools()).tools; }
 
   async close() { await this.client?.close().catch(() => {}); this.client = null; }
 }

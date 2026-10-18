@@ -1,0 +1,34 @@
+[
+  {
+    "task_id": "HumanEval/0",
+    "canonical_solution": "    for idx, elem in enumerate(numbers):\n        for idx2, elem2 in enumerate(numbers):\n            if idx != idx2:\n                distance = abs(elem - elem2)\n                if distance < threshold:\n                    return True\n\n    return False\n"
+  },
+  {
+    "task_id": "HumanEval/12",
+    "canonical_solution": "    if not strings:\n        return None\n\n    maxlen = max(len(x) for x in strings)\n    for s in strings:\n        if len(s) == maxlen:\n            return s\n"
+  },
+  {
+    "task_id": "HumanEval/20",
+    "canonical_solution": "    closest_pair = None\n    distance = None\n\n    for idx, elem in enumerate(numbers):\n        for idx2, elem2 in enumerate(numbers):\n            if idx != idx2:\n                if distance is None:\n                    distance = abs(elem - elem2)\n                    closest_pair = tuple(sorted([elem, elem2]))\n                else:\n                    new_distance = abs(elem - elem2)\n                    if new_distance < distance:\n                        distance = new_distance\n                        closest_pair = tuple(sorted([elem, elem2]))\n\n    return closest_pair\n"
+  },
+  {
+    "task_id": "HumanEval/32",
+    "canonical_solution": "    begin, end = -1., 1.\n    while poly(xs, begin) * poly(xs, end) > 0:\n        begin *= 2.0\n        end *= 2.0\n    while end - begin > 1e-10:\n        center = (begin + end) / 2.0\n        if poly(xs, center) * poly(xs, begin) > 0:\n            begin = center\n        else:\n            end = center\n    return begin\n"
+  },
+  {
+    "task_id": "HumanEval/40",
+    "canonical_solution": "    for i in range(len(l)):\n        for j in range(i + 1, len(l)):\n            for k in range(j + 1, len(l)):\n                if l[i] + l[j] + l[k] == 0:\n                    return True\n    return False\n"
+  },
+  {
+    "task_id": "HumanEval/53",
+    "canonical_solution": "    return x + y\n"
+  },
+  {
+    "task_id": "HumanEval/57",
+    "canonical_solution": "    if l == sorted(l) or l == sorted(l, reverse=True):\n        return True\n    return False\n"
+  },
+  {
+    "task_id": "HumanEval/63",
+    "canonical_solution": "    if n == 0:\n        return 0\n    if n == 1:\n        return 0\n    if n == 2:\n        return 1\n    return fibfib(n - 1) + fibfib(n - 2) + fibfib(n - 3)\n"
+  }
+]
