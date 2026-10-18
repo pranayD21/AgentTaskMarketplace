@@ -3,8 +3,8 @@
 Run from the repository root with Node >=22.22 and Claude Code installed. If it is not installed, `pnpm dlx @anthropic-ai/claude-code` can replace `claude` in these commands. The marketplace uses its own buyer key, distinct from the model provider key used to run Claude Code.
 
 ```sh
-# Interim LAN endpoint announced by C; connect from the same network.
-export MARKETPLACE_URL='http://192.168.4.163:3000/mcp'
+# Shared hosted endpoint, verified by B on 2026-10-18.
+export MARKETPLACE_URL='https://warm-cloud-4hh5i.run.mcp-use.com/mcp'
 node scripts/buyer.mjs info
 node scripts/buyer.mjs sellers
 node scripts/buyer.mjs whoami
@@ -17,7 +17,9 @@ claude
 
 The single-quoted header stores an environment reference rather than a literal key. Launch Claude in the same shell so `ATM_API_KEY` is inherited. Use `/mcp` to confirm the connection. If `atm` already exists, inspect its endpoint and use `claude mcp remove atm` before replacing that one entry. Do not overwrite unrelated servers. The CLI binds cached identities to an endpoint; for a different server, use an existing key through `ATM_API_KEY` or a separate `ATM_BUYER_STATE` file. Legacy caches lacking `marketplace_url` require explicit migration after confirming their original endpoint.
 
-Hosted Manufact URL: **pending acting integrator C**, delegated by A (`<MANUFACT_MCP_URL_PENDING_A>`). Do not paste the placeholder as a working URL.
+Hosted Manufact URL: [https://warm-cloud-4hh5i.run.mcp-use.com/mcp](https://warm-cloud-4hh5i.run.mcp-use.com/mcp). B verified public discovery, all 21 tools, and authenticated reads of existing buyer tasks. `/health` is the hosting framework's health response; use `marketplace_info` to inspect the application contract, storage, and payment mode.
+
+When moving an existing buyer from the team's LAN/local server to this hosted endpoint, export its saved `ATM_API_KEY` before `whoami` after confirming it is the same shared marketplace. Do not delete the old identity or register a replacement just to bypass endpoint binding. B verified the hosted server against its two existing approved tasks.
 
 ## Agent smoke task
 

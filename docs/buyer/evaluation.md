@@ -1,6 +1,8 @@
 # Buyer agent evaluation cases
 
-Use the real hosted MCP URL once acting integrator C publishes it (A delegated deployment at main `e050649`). Armature's [evaluation product](https://armature.tech/) accepts remote MCP workflows; sign in at [Armature](https://app.armature.tech/) using the team's human account. C's interim MCP endpoint `http://192.168.4.163:3000/mcp` is reachable from B; it requires the same LAN and is not a public hosted endpoint. Armature setup remains blocked until a team account session and an endpoint reachable by its evaluator exist. B has asked C to arrange access or perform the evaluation with the team account; incorporate redacted evidence instead of duplicating purchases if C performs it. Do not treat this case file as a completed Armature run.
+The hosted MCP endpoint is [https://warm-cloud-4hh5i.run.mcp-use.com/mcp](https://warm-cloud-4hh5i.run.mcp-use.com/mcp). B verified contract 0.2, all 21 tools, Insforge Postgres, Stripe test card mode, and authenticated reads of the existing approved buyer tasks. Public hosting is ready.
+
+Armature's [evaluation product](https://armature.tech/) accepts remote MCP workflows. C reports that the human's Armature session connected to the hosted endpoint and discovered all 21 tools (`C-B-20261018T023856Z-01`). C is preparing the capped synthetic evaluation and will send redacted evidence to B. Until its case outcomes are available, do not treat this case file or a successful connection as a completed Armature run. B will incorporate C's results rather than duplicate purchases.
 
 Use a dedicated buyer with an authorized small test cap. Keep credentials in private configuration and save only redacted tool sequences, task IDs, states, timings, and findings. The [contract](../CONTRACT.md) determines assertions; [verification](verification.md) records actual runs.
 
