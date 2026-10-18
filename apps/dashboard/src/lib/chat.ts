@@ -14,7 +14,7 @@ export const TOOL_LABELS: Record<string, string> = {
   mcp_list_sellers: "Looking for available workers", mcp_create_job: "Creating a shared job",
   mcp_post_task: "Posting a task for the network", mcp_get_task: "Checking task progress",
   mcp_get_result: "Reading task results", mcp_get_job: "Checking the shared job",
-  local_capacity: "Inspecting local compute", wait_for_subagents: "Waiting for network workers", wait: "Waiting for workers",
+  local_capacity: "Inspecting local compute", check_delegated_tasks: "Checking delegated tasks", wait_for_subagents: "Waiting for network workers", wait: "Waiting for workers",
 };
 export const toolLabel = (name: string | undefined) => TOOL_LABELS[name ?? ""] ?? String(name ?? "Agent action").replaceAll("_", " ");
 
