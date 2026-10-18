@@ -77,7 +77,28 @@
     "persisted_booked_microusd": 2390,
     "persisted_open_reservations": 0,
     "ledger_is_not_current_usage_reconciliation": true,
-    "legacy_local_submissions_enabled": false
+    "legacy_local_submissions_enabled": false,
+    "usage_reconciliation": {
+      "status": "incomplete",
+      "source": "E-B-20261018T115500Z-01 on main4bfd615",
+      "e_reported_calls": 1,
+      "e_reported_call": {
+        "at": "2026-10-18T03:23:44Z",
+        "purpose": "grade",
+        "attempt": 1,
+        "model": "claude-opus-5-5",
+        "outcome": "ok",
+        "input_tokens": 139,
+        "output_tokens": 15,
+        "cache_tokens": 0,
+        "cost_usd": null
+      },
+      "e_reports_no_later_judge_runs": true,
+      "trace_independently_read_by_b": false,
+      "production_c_judge_usage": "not received",
+      "booked_into_b_ledger": false,
+      "note": "Attributed historical E report only. It does not reconcile the production judge or establish remaining external API allowance."
+    }
   },
   "independent_tests": {
     "workspace_typecheck": "passed",
