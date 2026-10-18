@@ -1,8 +1,11 @@
 import { z } from "zod";
 
 const AppEnvSchema = z.object({
-  INSFORGE_BASE_URL: z.string().url(),
-  INSFORGE_API_KEY: z.string().min(10),
+  // memory = in-process tables built from db/schema.sql: tests and offline
+  // development only, lost on restart, labelled in /health and marketplace_info.
+  DB_MODE: z.enum(["insforge", "memory"]).default("insforge"),
+  INSFORGE_BASE_URL: z.string().url().optional(),
+  INSFORGE_API_KEY: z.string().min(10).optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PROFILE_ID: z.string().optional(),
   PAYMENT_MODE: z.enum(["card", "mpp", "mock"]).default("card"),
@@ -29,6 +32,9 @@ export function env(): AppEnv {
     throw new Error(`invalid environment: ${problems}`);
   }
   const e = parsed.data;
+  if (e.DB_MODE === "insforge" && (!e.INSFORGE_BASE_URL || !e.INSFORGE_API_KEY)) {
+    throw new Error("INSFORGE_BASE_URL and INSFORGE_API_KEY are required unless DB_MODE=memory");
+  }
   if (e.PAYMENT_MODE !== "mock" && !e.STRIPE_SECRET_KEY) {
     throw new Error("STRIPE_SECRET_KEY is required unless PAYMENT_MODE=mock");
   }

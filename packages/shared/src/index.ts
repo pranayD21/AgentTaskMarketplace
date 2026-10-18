@@ -28,6 +28,10 @@ export const TERMINAL_STATUSES: readonly TaskStatus[] = ["APPROVED", "REJECTED",
 export const LEASE_SECONDS = 300;
 export const DEFAULT_MAX_RUNTIME_SECONDS = 180;
 export const DEFAULT_LISTING_TTL_SECONDS = 60 * 60;
+/** Upper bound on a task's max_price_cents (US cents, test mode). */
+export const MAX_PRICE_CENTS = 100_000;
+/** Version of docs/CONTRACT.md this package implements. */
+export const CONTRACT_VERSION = "0.2" as const;
 
 export const AgentKind = z.enum(["buyer", "seller", "judge"]);
 export type AgentKind = z.infer<typeof AgentKind>;
@@ -198,13 +202,23 @@ export const TaskPublic = z.object({
 });
 export type TaskPublic = z.infer<typeof TaskPublic>;
 
+/**
+ * Where a claim's seller envelope key came from: a key presented with this
+ * claim_task call (generated inside that sandbox instance), or the key stored
+ * by register_seller.
+ */
+export const RunnerKeySource = z.enum(["per-claim", "registered"]);
+export type RunnerKeySource = z.infer<typeof RunnerKeySource>;
+
 export const SellerPublic = z.object({
   seller_id: z.string(),
   display_name: z.string(),
   status: SellerStatus,
   models: z.array(ModelInfo),
   runner: z.object({
+    /** Registered key, else the key of the seller's latest per-claim key, else key_id "none" with an empty key. */
     public_key: KeyDescriptor,
+    key_source: z.enum(["registered", "per-claim", "none"]),
     wasm_sha256: z.string().nullable(),
     runtime: z.enum(["wassette", "node-unsandboxed"]),
     wassette_version: z.string().nullable(),
@@ -228,8 +242,18 @@ export const ClaimPublic = z.object({
   lease_expires_at: z.string(),
   seller_envelope: Envelope,
   max_runtime_s: z.number().int(),
+  // v0.2 fields. A v0.2 server always sends them; they are optional here only
+  // so clients built from this package still parse a v0.1 server's claims.
+  /** Key the seller envelope is sealed to. */
+  runner_key_id: z.string().optional(),
+  runner_key_source: RunnerKeySource.optional(),
+  /** Seal the result to these two keys (same values as get_recipient_keys). */
+  buyer_public_key: KeyDescriptor.optional(),
+  judge_public_key: KeyDescriptor.optional(),
 });
 export type ClaimPublic = z.infer<typeof ClaimPublic>;
+/** What a v0.2 server returns from claim_task. */
+export type ClaimPublicV02 = ClaimPublic & Required<Pick<ClaimPublic, "runner_key_id" | "runner_key_source" | "buyer_public_key" | "judge_public_key">>;
 
 // ---------------------------------------------------------------------------
 // Errors

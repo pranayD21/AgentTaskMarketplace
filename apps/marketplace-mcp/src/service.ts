@@ -9,6 +9,7 @@ import {
   keyIdFor,
   keypairFromSecretB64,
   open,
+  publicKeyFromB64,
   sealJson,
   toB64,
 } from "@atm/crypto";
@@ -18,6 +19,7 @@ import {
   DEFAULT_MAX_RUNTIME_SECONDS,
   Envelope,
   LEASE_SECONDS,
+  MAX_PRICE_CENTS,
   MODEL_ALLOWLIST,
   MarketplaceError,
   ModelInfo,
@@ -27,10 +29,11 @@ import {
   nowIso,
   plusSecondsIso,
   type AgentKind,
-  type ClaimPublic,
+  type ClaimPublicV02,
   type JudgePayload,
   type KeyDescriptor,
   type ResultPlaintext,
+  type RunnerKeySource,
   type SellerPayload,
   type SellerPublic,
   type TaskPublic,
@@ -39,7 +42,7 @@ import {
   type VerdictReasonCode,
 } from "@atm/shared";
 import { hashApiKey } from "./auth.js";
-import { db, logEvent, one, rawSql, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
+import { countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
@@ -73,7 +76,7 @@ export async function getTask(id: string): Promise<TaskRow | null> {
 
 async function mustGetTask(id: string): Promise<TaskRow> {
   const t = await getTask(id);
-  if (!t) throw new MarketplaceError("NOT_FOUND", `Unknown task ${id}.`);
+  if (!t) throw new MarketplaceError("NOT_FOUND", `Unknown task ${id}.`, { next_action: "Check the task_id (list_my_tasks for buyers, list_open_tasks for sellers)." });
   return t;
 }
 
@@ -123,13 +126,16 @@ export function toTaskPublic(t: TaskRow): TaskPublic {
 }
 
 export function toSellerPublic(s: SellerRow, a: AgentRow): SellerPublic {
+  const registered = s.runner_key_id && s.runner_pubkey_b64 ? { key_id: s.runner_key_id, public_key_b64: s.runner_pubkey_b64 } : null;
+  const perClaim = s.last_claim_key_id && s.last_claim_pubkey_b64 ? { key_id: s.last_claim_key_id, public_key_b64: s.last_claim_pubkey_b64 } : null;
   return {
     seller_id: a.id,
     display_name: a.display_name,
     status: s.status,
     models: s.models,
     runner: {
-      public_key: { key_id: s.runner_key_id ?? "unregistered", public_key_b64: s.runner_pubkey_b64 ?? "" },
+      public_key: registered ?? perClaim ?? { key_id: "none", public_key_b64: "" },
+      key_source: registered ? "registered" : perClaim ? "per-claim" : "none",
       wasm_sha256: s.runner_wasm_sha256,
       runtime: s.runtime,
       wassette_version: s.wassette_version,
@@ -153,7 +159,9 @@ export interface RegisterAgentInput {
 
 export async function registerAgent(input: RegisterAgentInput): Promise<{ agent: AgentRow; api_key: string; notes: string[] }> {
   if (input.kind === "judge" && input.judge_secret !== env().JUDGE_REGISTRATION_SECRET) {
-    throw new MarketplaceError("FORBIDDEN", "Judge registration requires the operator's JUDGE_REGISTRATION_SECRET.");
+    throw new MarketplaceError("FORBIDDEN", "Judge registration requires the operator's JUDGE_REGISTRATION_SECRET.", {
+      next_action: "Pass judge_secret from the operator, or register as kind='buyer' or kind='seller'.",
+    });
   }
   const id = newId(input.kind);
   const api_key = newApiKey();
@@ -200,10 +208,30 @@ export async function registerAgent(input: RegisterAgentInput): Promise<{ agent:
   return { agent, api_key, notes };
 }
 
+/** Validate a runner public key (32-byte X25519, base64) and derive its id when none is given. */
+function runnerKey(pubB64: string, keyId?: string): KeyDescriptor {
+  let pub: Uint8Array;
+  try {
+    pub = publicKeyFromB64(pubB64);
+  } catch (err) {
+    throw new MarketplaceError("VALIDATION_ERROR", `runner_pubkey_b64 is not an X25519 public key: ${(err as Error).message}.`, {
+      next_action: "Send the base64 of the 32-byte public key generated inside the runner sandbox (the runner's get-public-key output).",
+    });
+  }
+  // A runner sealed to the judge's key would let that seller host read judge copies.
+  if (toB64(pub) === env().JUDGE_PUBLIC_KEY_B64) {
+    throw new MarketplaceError("VALIDATION_ERROR", "runner_pubkey_b64 is the judge's public key; a seller runner must use its own key.", {
+      next_action: "Generate a fresh key inside the runner sandbox. Do not give a seller daemon JUDGE_PRIVATE_KEY_B64.",
+    });
+  }
+  return { key_id: keyId?.trim() || `runner-${keyIdFor(pub)}`, public_key_b64: toB64(pub) };
+}
+
 export interface RegisterSellerInput {
   models: ModelInfo[];
-  runner_pubkey_b64: string;
-  runner_key_id: string;
+  /** Optional since v0.2: without it every claim_task must carry a per-claim key. */
+  runner_pubkey_b64?: string;
+  runner_key_id?: string;
   runner_wasm_sha256?: string;
   runtime: "wassette" | "node-unsandboxed";
   wassette_version?: string;
@@ -226,12 +254,20 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
   const min = payments().min_cents;
   const tooCheap = input.models.filter((m) => m.ask_cents < min).map((m) => m.model_id);
   if (tooCheap.length) {
-    throw new MarketplaceError("VALIDATION_ERROR", `ask_cents must be at least ${min} (${payments().label}) for: ${tooCheap.join(", ")}.`);
+    throw new MarketplaceError("VALIDATION_ERROR", `ask_cents must be at least ${min} (${payments().label}) for: ${tooCheap.join(", ")}.`, {
+      next_action: `Re-call register_seller with ask_cents >= ${min} for every model.`,
+    });
   }
+  if (input.runner_key_id && !input.runner_pubkey_b64) {
+    throw new MarketplaceError("VALIDATION_ERROR", "runner_key_id was sent without runner_pubkey_b64.", {
+      next_action: "Send both, or neither and present runner_pubkey_b64 on every claim_task instead.",
+    });
+  }
+  const key = input.runner_pubkey_b64 ? runnerKey(input.runner_pubkey_b64, input.runner_key_id) : null;
   const patch = {
     models: input.models,
-    runner_pubkey_b64: input.runner_pubkey_b64,
-    runner_key_id: input.runner_key_id,
+    runner_pubkey_b64: key?.public_key_b64 ?? null,
+    runner_key_id: key?.key_id ?? null,
     runner_wasm_sha256: input.runner_wasm_sha256 ?? null,
     runtime: input.runtime,
     wassette_version: input.wassette_version ?? null,
@@ -239,7 +275,7 @@ export async function registerSeller(agent: AgentRow, input: RegisterSellerInput
   };
   let rows = unwrap(await db().from("sellers").update(patch).eq("agent_id", agent.id).select()) as SellerRow[];
   if (!rows.length) rows = unwrap(await db().from("sellers").insert({ agent_id: agent.id, ...patch }).select()) as SellerRow[];
-  await logEvent("seller.registered", { agent_id: agent.id, meta: { models: input.models.map((m) => m.model_id), runtime: input.runtime } });
+  await logEvent("seller.registered", { agent_id: agent.id, meta: { models: input.models.map((m) => m.model_id), runtime: input.runtime, key_mode: key ? "registered" : "per-claim" } });
   return toSellerPublic(rows[0]!, agent);
 }
 
@@ -280,15 +316,17 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
     });
   }
   const min = payments().min_cents;
-  if (input.max_price_cents < min) {
-    throw new MarketplaceError("VALIDATION_ERROR", `max_price_cents must be at least ${min} (${payments().label}).`);
+  if (input.max_price_cents < min || input.max_price_cents > MAX_PRICE_CENTS) {
+    throw new MarketplaceError("VALIDATION_ERROR", `max_price_cents must be between ${min} and ${MAX_PRICE_CENTS} (${payments().label}).`, {
+      next_action: `Re-post with ${min} <= max_price_cents <= ${MAX_PRICE_CENTS}.`,
+    });
   }
   const projected = buyer.reserved_cents + buyer.spent_cents + input.max_price_cents;
   if (projected > buyer.spend_cap_cents) {
     throw new MarketplaceError(
       "SPEND_CAP_EXCEEDED",
       `This would bring reserved+spent to ${projected}c, above your cap of ${buyer.spend_cap_cents}c (reserved ${buyer.reserved_cents}c, spent ${buyer.spent_cents}c).`,
-      { next_action: "Lower max_price_cents, wait for open tasks to settle, or ask your human to register a buyer with a higher spend_cap_cents." },
+      { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
 
@@ -328,17 +366,17 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
 }
 
 export async function listTasksForBuyer(buyer: AgentRow, status?: TaskStatus): Promise<TaskPublic[]> {
-  await expireStale();
+  await sweep();
   let q = db().from("tasks").select("*").eq("buyer_id", buyer.id).order("created_at", { ascending: false }).limit(50);
   if (status) q = q.eq("status", status);
   return (unwrap(await q) as TaskRow[]).map(toTaskPublic);
 }
 
 export async function getTaskForActor(actor: AgentRow, taskId: string): Promise<{ task: TaskPublic; verdict: Omit<VerdictRow, "replacement_enc_buyer"> | null; settlement: SettlementRow | null }> {
-  await expireStale();
+  await sweep();
   const task = await mustGetTask(taskId);
-  if (actor.kind === "buyer" && task.buyer_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.");
-  if (actor.kind === "seller" && task.seller_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "You do not hold this task's claim.");
+  if (actor.kind === "buyer" && task.buyer_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.", { next_action: "Call list_my_tasks for your own task ids." });
+  if (actor.kind === "seller" && task.seller_id !== actor.id) throw new MarketplaceError("FORBIDDEN", "You do not hold this task's claim.", { next_action: "Call list_open_tasks for tasks you can claim." });
   const verdict = await latestVerdict(taskId);
   const settlement = await settlementFor(taskId);
   const publicVerdict = verdict ? (({ replacement_enc_buyer: _r, ...rest }) => rest)(verdict) : null;
@@ -346,9 +384,9 @@ export async function getTaskForActor(actor: AgentRow, taskId: string): Promise<
 }
 
 export async function getResultForBuyer(buyer: AgentRow, taskId: string) {
-  await expireStale();
+  await sweep();
   const task = await mustGetTask(taskId);
-  if (task.buyer_id !== buyer.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.");
+  if (task.buyer_id !== buyer.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.", { next_action: "Call list_my_tasks for your own task ids." });
   const result = await latestResult(taskId);
   const verdict = await latestVerdict(taskId);
   const settlement = await settlementFor(taskId);
@@ -397,13 +435,15 @@ export async function getResultForBuyer(buyer: AgentRow, taskId: string) {
 
 export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskPublic> {
   const task = await mustGetTask(taskId);
-  if (task.buyer_id !== buyer.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.");
+  if (task.buyer_id !== buyer.id) throw new MarketplaceError("FORBIDDEN", "This task belongs to another buyer.", { next_action: "Call list_my_tasks for your own task ids." });
   if (task.status !== "OPEN" && task.status !== "AWAITING_PAYMENT") {
-    throw new MarketplaceError("INVALID_STATE", `Only OPEN tasks can be cancelled; this one is ${task.status}.`);
+    throw new MarketplaceError("INVALID_STATE", `Only OPEN tasks can be cancelled; this one is ${task.status}.`, {
+      next_action: "A claimed task settles through the judge; poll get_task / get_result instead.",
+    });
   }
   const rel = await payments().release(task, "cancelled by buyer");
   const rows = unwrap(await db().from("tasks").update({ status: "CANCELLED", payment_state: rel.payment_state, plaintext_enc_server: null, updated_at: nowIso() }).eq("id", taskId).eq("status", task.status).select()) as TaskRow[];
-  if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task changed state while cancelling; read it again.");
+  if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task changed state while cancelling; read it again.", { next_action: "Call get_task, then cancel_task again if it is still OPEN." });
   await recordSettlement(task, { kind: payments().mode, seller_payout_cents: 0, buyer_refund_cents: task.max_price_cents, note: rel.note });
   await adjustBuyerBalance(buyer.id, { reserved: -task.max_price_cents });
   await logEvent("task.cancelled", { task_id: taskId, agent_id: buyer.id });
@@ -414,11 +454,15 @@ export async function cancelTask(buyer: AgentRow, taskId: string): Promise<TaskP
 // Seller: list / claim / lease / result
 // ---------------------------------------------------------------------------
 
-export async function listOpenTasksFor(agent: AgentRow): Promise<{ tasks: (TaskPublic & { eligible_models: string[] })[]; seller_models: string[] }> {
-  await expireStale();
+export const OPEN_TASKS_DEFAULT_LIMIT = 50;
+export const OPEN_TASKS_MAX_LIMIT = 100;
+
+export async function listOpenTasksFor(agent: AgentRow, limit = OPEN_TASKS_DEFAULT_LIMIT): Promise<{ tasks: (TaskPublic & { eligible_models: string[] })[]; seller_models: string[] }> {
+  await sweep();
   const seller = await getSeller(agent.id);
   const myModels = seller?.models ?? [];
-  const rows = unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(100)) as TaskRow[];
+  const n = Math.min(Math.max(1, Math.trunc(limit) || OPEN_TASKS_DEFAULT_LIMIT), OPEN_TASKS_MAX_LIMIT);
+  const rows = unwrap(await db().from("tasks").select("*").eq("status", "OPEN").order("created_at", { ascending: true }).limit(n)) as TaskRow[];
   const tasks = rows
     .map((t) => {
       const eligible = myModels.filter((m) => t.allowed_models.includes(m.model_id) && m.ask_cents <= t.max_price_cents).map((m) => m.model_id);
@@ -428,31 +472,60 @@ export async function listOpenTasksFor(agent: AgentRow): Promise<{ tasks: (TaskP
   return { tasks, seller_models: myModels.map((m) => m.model_id) };
 }
 
-export async function claimTask(agent: AgentRow, taskId: string, modelId: string): Promise<ClaimPublic> {
-  await expireStale();
-  const seller = await getSeller(agent.id);
-  if (!seller?.runner_pubkey_b64 || !seller.runner_key_id) {
-    throw new MarketplaceError("INVALID_STATE", "Seller has no runner key registered.", { next_action: "Call register_seller with your runner's public key first." });
+export interface ClaimKeyInput {
+  /** v0.2: X25519 key generated inside the sandbox instance that will decrypt this claim. */
+  runner_pubkey_b64?: string;
+  runner_key_id?: string;
+}
+
+export async function claimTask(agent: AgentRow, taskId: string, modelId: string, perClaim: ClaimKeyInput = {}): Promise<ClaimPublicV02> {
+  if (perClaim.runner_key_id && !perClaim.runner_pubkey_b64) {
+    throw new MarketplaceError("VALIDATION_ERROR", "runner_key_id was sent without runner_pubkey_b64.", {
+      next_action: "Send runner_pubkey_b64 (and optionally runner_key_id) together, or neither to use your registered key.",
+    });
   }
-  if (seller.status === "SUSPENDED") throw new MarketplaceError("SELLER_SUSPENDED", "This seller is suspended after a rejected result.");
+  const claimKey = perClaim.runner_pubkey_b64 ? runnerKey(perClaim.runner_pubkey_b64, perClaim.runner_key_id) : null;
+  await sweep();
+  const seller = await getSeller(agent.id);
+  if (!seller) throw new MarketplaceError("INVALID_STATE", "This seller has not called register_seller yet.", { next_action: "Call register_seller with your local models first." });
+  const registeredKey = seller.runner_pubkey_b64 && seller.runner_key_id ? { key_id: seller.runner_key_id, public_key_b64: seller.runner_pubkey_b64 } : null;
+  const sealTo = claimKey ?? registeredKey;
+  const keySource: RunnerKeySource = claimKey ? "per-claim" : "registered";
+  if (seller.status === "SUSPENDED") {
+    throw new MarketplaceError("SELLER_SUSPENDED", "This seller is suspended after a rejected result.", { next_action: "Stop claiming; the operator must lift the suspension (get_seller_reputation shows strikes)." });
+  }
+  if (!sealTo) {
+    throw new MarketplaceError("INVALID_STATE", "No runner key: this seller registered without one, so claim_task must carry a per-claim key.", {
+      next_action: "Call claim_task with runner_pubkey_b64 (and runner_key_id) generated inside the sandbox instance that will run the task, or register_seller with a runner key.",
+    });
+  }
   const task = await mustGetTask(taskId);
-  if (task.status !== "OPEN") throw new MarketplaceError("CLAIM_CONFLICT", `Task is ${task.status}, not OPEN.`);
+  if (task.status !== "OPEN") throw new MarketplaceError("CLAIM_CONFLICT", `Task is ${task.status}, not OPEN.`, { next_action: "Call list_open_tasks for tasks you can still claim." });
   if (!task.allowed_models.includes(modelId)) {
-    throw new MarketplaceError("MODEL_NOT_ALLOWED", `Buyer allows ${task.allowed_models.join(", ")}; ${modelId} is not among them.`);
+    throw new MarketplaceError("MODEL_NOT_ALLOWED", `Buyer allows ${task.allowed_models.join(", ")}; ${modelId} is not among them.`, {
+      next_action: "Claim with one of the task's eligible_models from list_open_tasks.",
+    });
   }
   const mine = seller.models.find((m) => m.model_id === modelId);
   if (!mine) throw new MarketplaceError("MODEL_NOT_ALLOWED", `${modelId} is not in your registration.`, { next_action: "Call register_seller with your current Ollama models." });
   if (mine.ask_cents > task.max_price_cents) {
-    throw new MarketplaceError("MODEL_NOT_ALLOWED", `Your ask of ${mine.ask_cents}c exceeds the buyer's max of ${task.max_price_cents}c.`);
+    throw new MarketplaceError("MODEL_NOT_ALLOWED", `Your ask of ${mine.ask_cents}c exceeds the buyer's max of ${task.max_price_cents}c.`, {
+      next_action: "Skip this task, or lower ask_cents with register_seller.",
+    });
   }
   const active = unwrap(await db().from("tasks").select("id").eq("seller_id", agent.id).in("status", [...ACTIVE_CLAIM_STATUSES]).limit(1)) as { id: string }[];
-  if (active.length) throw new MarketplaceError("CLAIM_CONFLICT", `You already hold an active claim (${active[0]!.id}); finish or release it first.`);
-  if (!task.plaintext_enc_server) throw new MarketplaceError("INVALID_STATE", "Task payload is no longer available.");
+  if (active.length) {
+    throw new MarketplaceError("CLAIM_CONFLICT", `You already hold an active claim (${active[0]!.id}); finish or release it first.`, {
+      next_action: `submit_result or release_task for ${active[0]!.id}.`,
+    });
+  }
+  if (!task.plaintext_enc_server) throw new MarketplaceError("INVALID_STATE", "Task payload is no longer available.", { next_action: "Call list_open_tasks and pick another task." });
 
   const claimId = newId("claim");
   const pt = kekOpen<ServerPlaintext>(task.plaintext_enc_server);
   const sellerPayload: SellerPayload = { task_id: task.id, claim_id: claimId, prompt: pt.prompt, context: pt.context, max_tokens: pt.max_tokens };
-  const envelope = sealJson({ key_id: seller.runner_key_id, public_key_b64: seller.runner_pubkey_b64 }, sellerPayload);
+  const envelope = sealJson(sealTo, sellerPayload);
+  const recipients = await recipientKeysFor(task);
   const lease = plusSecondsIso(LEASE_SECONDS);
   const rows = unwrap(
     await db()
@@ -465,6 +538,8 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
         price_cents: mine.ask_cents,
         lease_expires_at: lease,
         payload_enc_seller: envelope,
+        claim_runner_key_id: sealTo.key_id,
+        claim_runner_pubkey_b64: sealTo.public_key_b64,
         claim_count: task.claim_count + 1,
         updated_at: nowIso(),
       })
@@ -473,8 +548,13 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
       .select(),
   ) as TaskRow[];
   if (!rows.length) throw new MarketplaceError("CLAIM_CONFLICT", "Another seller claimed this task first.", { retryable: true, next_action: "Call list_open_tasks again." });
-  unwrap(await db().from("sellers").update({ last_seen: nowIso() }).eq("agent_id", agent.id));
-  await logEvent("task.claimed", { task_id: task.id, agent_id: agent.id, meta: { claim_id: claimId, model_id: modelId, price_cents: mine.ask_cents, lease_expires_at: lease } });
+  unwrap(
+    await db()
+      .from("sellers")
+      .update({ last_seen: nowIso(), ...(claimKey ? { last_claim_key_id: claimKey.key_id, last_claim_pubkey_b64: claimKey.public_key_b64 } : {}) })
+      .eq("agent_id", agent.id),
+  );
+  await logEvent("task.claimed", { task_id: task.id, agent_id: agent.id, meta: { claim_id: claimId, model_id: modelId, price_cents: mine.ask_cents, lease_expires_at: lease, runner_key_id: sealTo.key_id, runner_key_source: keySource } });
   const ctx = await inkbox.notify({ type: "assignment", task_id: task.id, to_handle: agent.inkbox_handle, text: `Task ${task.id} assigned to you (${modelId}, ${mine.ask_cents}c). Lease until ${lease}.`, context_id: task.inkbox_context_id });
   if (ctx && !task.inkbox_context_id) unwrap(await db().from("tasks").update({ inkbox_context_id: ctx }).eq("id", task.id));
   const updated = rows[0]!;
@@ -487,6 +567,9 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
     lease_expires_at: lease,
     seller_envelope: envelope,
     max_runtime_s: updated.max_runtime_s,
+    runner_key_id: sealTo.key_id,
+    runner_key_source: keySource,
+    ...recipients,
   };
 }
 
@@ -495,19 +578,24 @@ async function requireLiveClaim(agent: AgentRow, taskId: string, claimId: string
   if (task.seller_id !== agent.id || task.claim_id !== claimId) {
     throw new MarketplaceError("LEASE_EXPIRED", "This claim is no longer yours (expired, released, or replaced).", { next_action: "Stop work on it and call list_open_tasks." });
   }
-  if (!ACTIVE_CLAIM_STATUSES.includes(task.status)) throw new MarketplaceError("INVALID_STATE", `Task is ${task.status}; the claim is not active.`);
+  if (!ACTIVE_CLAIM_STATUSES.includes(task.status)) {
+    throw new MarketplaceError("INVALID_STATE", `Task is ${task.status}; the claim is not active.`, { next_action: "Stop work on it; call get_task to see its outcome." });
+  }
   if (isPast(task.lease_expires_at)) {
-    await expireStale();
+    await sweep();
     throw new MarketplaceError("LEASE_EXPIRED", "Lease expired before this call.", { next_action: "Call list_open_tasks; the task may be OPEN again." });
   }
   return task;
 }
 
-export async function recipientKeys(agent: AgentRow, taskId: string, claimId: string): Promise<{ buyer_public_key: KeyDescriptor; judge_public_key: KeyDescriptor }> {
-  const task = await requireLiveClaim(agent, taskId, claimId);
+async function recipientKeysFor(task: TaskRow): Promise<{ buyer_public_key: KeyDescriptor; judge_public_key: KeyDescriptor }> {
   const buyer = await getAgent(task.buyer_id);
   if (!buyer?.buyer_pubkey_b64 || !buyer.buyer_key_id) throw new MarketplaceError("INTERNAL_ERROR", "Buyer has no public key on file.");
   return { buyer_public_key: { key_id: buyer.buyer_key_id, public_key_b64: buyer.buyer_pubkey_b64 }, judge_public_key: judgeKey() };
+}
+
+export async function recipientKeys(agent: AgentRow, taskId: string, claimId: string): Promise<{ buyer_public_key: KeyDescriptor; judge_public_key: KeyDescriptor }> {
+  return recipientKeysFor(await requireLiveClaim(agent, taskId, claimId));
 }
 
 export async function renewLease(agent: AgentRow, taskId: string, claimId: string): Promise<{ lease_expires_at: string }> {
@@ -543,10 +631,10 @@ export async function submitResult(agent: AgentRow, taskId: string, claimId: str
   const task = await requireLiveClaim(agent, taskId, claimId);
   const buyer = await getAgent(task.buyer_id);
   if (buyer?.buyer_key_id && input.result_enc_buyer.recipient_key_id !== buyer.buyer_key_id) {
-    throw new MarketplaceError("VALIDATION_ERROR", `result_enc_buyer must be encrypted to ${buyer.buyer_key_id}.`);
+    throw new MarketplaceError("VALIDATION_ERROR", `result_enc_buyer must be encrypted to ${buyer.buyer_key_id}.`, { next_action: "Seal to buyer_public_key from the claim_task response (or get_recipient_keys) and resubmit." });
   }
   if (input.result_enc_judge.recipient_key_id !== env().JUDGE_KEY_ID) {
-    throw new MarketplaceError("VALIDATION_ERROR", `result_enc_judge must be encrypted to ${env().JUDGE_KEY_ID}.`);
+    throw new MarketplaceError("VALIDATION_ERROR", `result_enc_judge must be encrypted to ${env().JUDGE_KEY_ID}.`, { next_action: "Seal to judge_public_key from the claim_task response (or get_recipient_keys) and resubmit." });
   }
   const resultId = newId("result");
   unwrap(
@@ -572,7 +660,7 @@ export async function submitResult(agent: AgentRow, taskId: string, claimId: str
       .in("status", [...ACTIVE_CLAIM_STATUSES])
       .select(),
   ) as TaskRow[];
-  if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task left the active state while submitting.");
+  if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task left the active state while submitting.", { next_action: "Call get_task; the lease may have lapsed and the task reopened." });
   unwrap(await db().from("sellers").update({ last_seen: nowIso() }).eq("agent_id", agent.id));
   await logEvent("result.submitted", { task_id: taskId, agent_id: agent.id, meta: { result_id: resultId, runtime_ms: input.runtime_ms, commitment_sha256: input.commitment_sha256 } });
   await inkbox.notify({ type: "submitted", task_id: taskId, to_handle: null, text: `Result for ${taskId} submitted; awaiting judge.`, context_id: task.inkbox_context_id });
@@ -597,7 +685,7 @@ export interface ReviewPackage {
 }
 
 export async function fetchReviewPackage(judge: AgentRow): Promise<ReviewPackage | null> {
-  await expireStale();
+  await sweep();
   const candidates = unwrap(await db().from("tasks").select("*").eq("status", "SUBMITTED").order("updated_at", { ascending: true }).limit(5)) as TaskRow[];
   for (const t of candidates) {
     const rows = unwrap(await db().from("tasks").update({ status: "JUDGING", judge_id: judge.id, updated_at: nowIso() }).eq("id", t.id).eq("status", "SUBMITTED").select()) as TaskRow[];
@@ -644,11 +732,10 @@ export async function submitVerdict(judge: AgentRow, input: SubmitVerdictInput) 
     return { idempotent: true, task: toTaskPublic(task), verdict: v && { verdict: v.verdict, reason_code: v.reason_code }, settlement: existing, seller_status: null as string | null };
   }
   if (task.status !== "JUDGING" && task.status !== "SUBMITTED") {
-    throw new MarketplaceError("INVALID_STATE", `Task is ${task.status}; verdicts apply to JUDGING tasks.`);
+    throw new MarketplaceError("INVALID_STATE", `Task is ${task.status}; verdicts apply to JUDGING tasks.`, { next_action: "Call fetch_review_package for the next task waiting for review." });
   }
-  const result = one<ResultRow>(await db().from("results").select("*").eq("id", input.result_id).eq("task_id", task.id).limit(1));
-  const res = await result;
-  if (!res) throw new MarketplaceError("NOT_FOUND", `Result ${input.result_id} not found for task ${task.id}.`);
+  const res = await one<ResultRow>(await db().from("results").select("*").eq("id", input.result_id).eq("task_id", task.id).limit(1));
+  if (!res) throw new MarketplaceError("NOT_FOUND", `Result ${input.result_id} not found for task ${task.id}.`, { next_action: "Use the result_id from fetch_review_package." });
 
   const verdictId = newId("verdict");
   unwrap(
@@ -734,7 +821,7 @@ async function finalizeExpired(task: TaskRow, reason: string): Promise<TaskRow> 
   const rows = unwrap(
     await db()
       .from("tasks")
-      .update({ status: "EXPIRED", payment_state: rel?.payment_state ?? task.payment_state, plaintext_enc_server: null, payload_enc_seller: null, claim_id: null, seller_id: null, lease_expires_at: null, updated_at: nowIso() })
+      .update({ status: "EXPIRED", payment_state: rel?.payment_state ?? task.payment_state, plaintext_enc_server: null, payload_enc_seller: null, claim_id: null, seller_id: null, lease_expires_at: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
       .eq("id", task.id)
       .eq("status", task.status)
       .select(),
@@ -750,7 +837,7 @@ async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
   const rows = unwrap(
     await db()
       .from("tasks")
-      .update({ status: "OPEN", claim_id: null, seller_id: null, model_id: null, price_cents: null, lease_expires_at: null, payload_enc_seller: null, updated_at: nowIso() })
+      .update({ status: "OPEN", claim_id: null, seller_id: null, model_id: null, price_cents: null, lease_expires_at: null, payload_enc_seller: null, claim_runner_key_id: null, claim_runner_pubkey_b64: null, updated_at: nowIso() })
       .eq("id", task.id)
       .eq("claim_id", task.claim_id)
       .select(),
@@ -759,22 +846,54 @@ async function reopen(task: TaskRow, reason: string): Promise<TaskRow> {
   return rows[0] ?? task;
 }
 
-export async function expireStale(): Promise<{ expired: number; reopened: number; requeued: number }> {
+export async function expireStale(): Promise<{ expired: number; reopened: number; requeued: number; failed: number }> {
+  await ensureSchema();
   const now = nowIso();
-  let expired = 0, reopened = 0, requeued = 0;
+  let expired = 0, reopened = 0, requeued = 0, failed = 0;
+  // One task whose Stripe release or update fails must not block the rest of the sweep.
+  const each = async (t: TaskRow, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      failed++;
+      warnOnce(`expire:${t.id}`, `[expire] ${t.id} (${t.status}): ${(err as Error).message}`);
+      return false;
+    }
+  };
   const deadListings = unwrap(await db().from("tasks").select("*").in("status", ["OPEN", "AWAITING_PAYMENT"]).lt("expires_at", now).limit(50)) as TaskRow[];
-  for (const t of deadListings) { await finalizeExpired(t, "listing deadline passed"); expired++; }
+  for (const t of deadListings) if (await each(t, () => finalizeExpired(t, "listing deadline passed"))) expired++;
   const deadLeases = unwrap(await db().from("tasks").select("*").in("status", [...ACTIVE_CLAIM_STATUSES]).lt("lease_expires_at", now).limit(50)) as TaskRow[];
   for (const t of deadLeases) {
-    if (isPast(t.expires_at)) { await finalizeExpired(t, "lease expired after listing deadline"); expired++; }
-    else { await reopen(t, "lease expired"); reopened++; }
+    if (isPast(t.expires_at)) { if (await each(t, () => finalizeExpired(t, "lease expired after listing deadline"))) expired++; }
+    else if (await each(t, () => reopen(t, "lease expired"))) reopened++;
   }
   const stuck = unwrap(await db().from("tasks").select("*").eq("status", "JUDGING").lt("updated_at", new Date(Date.now() - JUDGING_TIMEOUT_S * 1000).toISOString()).limit(20)) as TaskRow[];
   for (const t of stuck) {
-    unwrap(await db().from("tasks").update({ status: "SUBMITTED", judge_id: null, updated_at: nowIso() }).eq("id", t.id).eq("status", "JUDGING"));
-    requeued++;
+    const ok = await each(t, async () => unwrap(await db().from("tasks").update({ status: "SUBMITTED", judge_id: null, updated_at: nowIso() }).eq("id", t.id).eq("status", "JUDGING")));
+    if (ok) requeued++;
   }
-  return { expired, reopened, requeued };
+  return { expired, reopened, requeued, failed };
+}
+
+const warned = new Set<string>();
+function warnOnce(key: string, line: string): void {
+  if (warned.has(key)) return;
+  if (warned.size > 1000) warned.clear();
+  warned.add(key);
+  console.warn(line);
+}
+
+/**
+ * Lazy housekeeping run at the start of read and claim paths. Never throws:
+ * a failing sweep must not fail the tool that triggered it.
+ */
+export async function sweep(): Promise<void> {
+  try {
+    await expireStale();
+  } catch (err) {
+    warnOnce(`sweep:${(err as Error).message}`, `[expire] sweep failed: ${(err as Error).message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -794,22 +913,22 @@ export async function listSellers(): Promise<SellerPublic[]> {
 export async function sellerReputation(sellerId: string): Promise<SellerPublic> {
   const s = await getSeller(sellerId);
   const a = await getAgent(sellerId);
-  if (!s || !a) throw new MarketplaceError("NOT_FOUND", `Unknown seller ${sellerId}.`);
+  if (!s || !a) throw new MarketplaceError("NOT_FOUND", `Unknown seller ${sellerId}.`, { next_action: "Call list_sellers for valid seller ids." });
   return toSellerPublic(s, a);
 }
 
 export async function dashboard() {
-  await expireStale();
+  await sweep();
   const tasks = (unwrap(await db().from("tasks").select("*").order("created_at", { ascending: false }).limit(40)) as TaskRow[]).map(toTaskPublic);
   const sellers = await listSellers();
   const events = unwrap(await db().from("events").select("*").order("created_at", { ascending: false }).limit(60));
   const verdicts = (unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,reason_public,score,created_at").order("created_at", { ascending: false }).limit(40)) as Omit<VerdictRow, "replacement_enc_buyer" | "judge_id" | "result_id">[]);
   const settlements = unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[];
-  const counts = await rawSql<{ status: string; n: number }>("select status, count(*)::int as n from tasks group by status");
   return {
     generated_at: nowIso(),
     payments: { mode: payments().mode, label: payments().label },
-    counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
+    db: dbLabel(),
+    counts: await countTasksByStatus(),
     tasks,
     sellers,
     verdicts,

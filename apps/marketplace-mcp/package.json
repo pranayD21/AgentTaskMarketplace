@@ -23,6 +23,7 @@
     "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
-    "@mcp-use/cli": "^4.4.1"
+    "@mcp-use/cli": "^4.4.1",
+    "@atm/runner-core": "workspace:*"
   }
 }

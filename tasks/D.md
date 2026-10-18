@@ -9,7 +9,7 @@ git clone git@github.com:pranayD21/AgentTaskMarketplace.git && cd AgentTaskMarke
 git switch -c feat/d-payments origin/main
 pnpm install && pnpm -r typecheck
 # .env from the human: STRIPE_SECRET_KEY (sk_test_…), STRIPE_PROFILE_ID (profile_test_…), plus INSFORGE_* and the KEK/judge values so you can run your own server.
-pnpm dev:server -- --no-open
+pnpm dev:server --no-open
 node scripts/buyer.mjs post "Say hello." --expect hello --max 100     # creates a hold; see it at https://dashboard.stripe.com/test/payments
 ```
 

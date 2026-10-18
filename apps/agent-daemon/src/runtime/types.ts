@@ -1,5 +1,5 @@
 import type { Envelope, JudgeTaskOutput, KeyDescriptor, RunTaskOutput } from "@atm/shared";
-import type { JudgeTaskOpts, RunTaskOpts } from "@atm/runner-core";
+import type { JudgeCycleOpts, JudgeCycleOutput, JudgeTaskOpts, RunTaskOpts, RunCycleOpts, RunCycleOutput } from "@atm/runner-core";
 
 export interface RuntimeInfo {
   runtime: "wassette" | "node-unsandboxed";
@@ -11,8 +11,12 @@ export interface RuntimeInfo {
 /** What the daemon needs from an execution environment; the sandbox boundary is behind this. */
 export interface Runtime {
   info(): RuntimeInfo;
+  prepare?(): Promise<void>;
+  runCycle?(opts: RunCycleOpts): Promise<RunCycleOutput>;
   getPublicKey(): Promise<KeyDescriptor>;
   runTask(envelope: Envelope, opts: RunTaskOpts): Promise<RunTaskOutput>;
   judgeTask(taskEnvelope: Envelope, resultEnvelope: Envelope, opts: JudgeTaskOpts): Promise<JudgeTaskOutput>;
+  /** fetch_review_package → judge → submit_verdict in one runner call; the runner talks to the marketplace itself. */
+  judgeCycle(opts: JudgeCycleOpts): Promise<JudgeCycleOutput>;
   close(): Promise<void>;
 }

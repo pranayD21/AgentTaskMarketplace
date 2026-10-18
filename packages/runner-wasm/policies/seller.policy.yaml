@@ -1,7 +1,10 @@
 version: "1.0"
-description: "ATM seller runner: may reach only the local Ollama API"
+description: "Local demo defaults. Wassette 0.8 matches schemes and hostnames, ignoring ports. The daemon generates grants from configured URLs."
 permissions:
   network:
     allow:
-      - host: "localhost:11434"
-      - host: "127.0.0.1:11434"
+      - host: "http://localhost:11434"
+      - host: "http://127.0.0.1:3000"
+  environment:
+    allow:
+      - key: "AGENT_API_KEY"

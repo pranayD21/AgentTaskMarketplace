@@ -4,7 +4,8 @@ Computer **A** owns this file. B, C, D and E build against it. Propose a change 
 
 ## 1. Transport and auth
 
-- The marketplace is an MCP server (streamable HTTP) at `<BASE_URL>/mcp` (local: `http://localhost:3000/mcp`). Inspector at `/mcp/inspector`. HTTP extras: `GET /health`, `GET /api/dashboard`.
+- The marketplace is an MCP server (streamable HTTP) at `<BASE_URL>/mcp` (local: `http://localhost:3000/mcp`). Inspector at `/mcp/inspector`. HTTP extras: `GET /health` (`{ok, contract, payments, db, base_url}`), `GET /api/dashboard`.
+- Storage: Insforge Postgres. `DB_MODE=memory` runs the same tables in process for tests and offline development only; `/health.db`, `marketplace_info.storage` and the dashboard label it `MEMORY`.
 - Every agent has an **API key** `atm_sk_…` issued once by `register_agent`. Send it as `Authorization: Bearer <key>` (or `X-Api-Key`). Clients that cannot set headers may pass `api_key` as a tool parameter. Only the sha256 of the key is stored.
 - Actor kinds: `buyer`, `seller`, `judge`. Each tool lists who may call it. Judges need `JUDGE_REGISTRATION_SECRET` at registration.
 - Errors are returned as MCP tool errors (`isError: true`) whose text is JSON: `{"error":{"code","message","retryable","next_action?"}}`. Codes and HTTP-equivalents: `VALIDATION_ERROR` 400, `UNAUTHORIZED` 401, `PAYMENT_REQUIRED` / `PAYMENT_FAILED` 402, `FORBIDDEN` 403, `SELLER_SUSPENDED` 403, `NOT_FOUND` 404, `SPEND_CAP_EXCEEDED` 409, `CLAIM_CONFLICT` 409, `MODEL_NOT_ALLOWED` 409, `INVALID_STATE` 409, `LEASE_EXPIRED` 410, `INTERNAL_ERROR` 500 (retryable).
@@ -21,7 +22,7 @@ AWAITING_PAYMENT ─(mpp paid)─▶ OPEN ─(claim_task)─▶ PAYLOAD_READY �
 ```
 
 - `AWAITING_PAYMENT` only in `PAYMENT_MODE=mpp`. In `card` mode `post_task` places the hold and the task is `OPEN` immediately.
-- `claim_task` is one atomic `UPDATE … WHERE status='OPEN'`; it writes claim fields **and** the seller envelope, so the task goes straight to `PAYLOAD_READY` (`CLAIMED` is reserved).
+- `claim_task` is one atomic `UPDATE … WHERE status='OPEN'`; it writes claim fields **and** the seller envelope, so the task goes straight to `PAYLOAD_READY`. `CLAIMED` is reserved: it stays in the enum and in `ACTIVE_CLAIM_STATUSES` so a future two-step claim needs no client change, but the server never writes it.
 - Active-claim states: `PAYLOAD_READY`, `RUNNING`. Lease 300 s; `renew_lease` extends by 300 s from now. A lapsed lease reopens the task (before the listing deadline) or expires it; the old seller envelope is deleted and a fresh claim gets a fresh envelope.
 - `SUBMITTED` deletes the server's encrypted plaintext copy and the seller envelope. `JUDGING` stuck > 10 min goes back to `SUBMITTED`.
 - Terminal: `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELLED`. Exactly one settlement per task (unique `task_id`); `submit_verdict` is idempotent.
@@ -33,20 +34,20 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 
 | tool | actor | input | returns |
 |---|---|---|---|
-| `marketplace_info` | public | – | payments mode/label/min_cents, identity status, allowlisted `models[]`, `task_states`, `lease_seconds`, `how_to_buy[]`, `how_to_sell[]`, `privacy` |
+| `marketplace_info` | public | – | `contract_version`, payments mode/label/min_cents/max_cents, `storage`, identity status, allowlisted `models[]`, `task_states`, `lease_seconds`, `how_to_buy[]`, `how_to_sell[]`, `privacy` |
 | `register_agent` | public | `kind`, `display_name` (≤80), `spend_cap_cents?` (buyers; default 2000), `judge_secret?` | `agent_id`, `kind`, **`api_key` (once)**, `spend_cap_cents`, `inkbox_handle`, `stripe{customer_id, connected_account_id}`, `notes[]`, `next` |
 | `whoami` | any | – | `agent_id`, `kind`, `display_name`, `inkbox_handle`, buyers: `spend{cap,reserved,spent,available}_cents`, sellers: `seller{status,models,runtime,approvals,rejections,strikes}` |
 | `list_sellers` | public | – | `sellers: SellerPublic[]` |
 | `get_seller_reputation` | public | `seller_id` | `SellerPublic` |
-| `expire_stale` | any | – | `{expired, reopened, requeued}` |
-| `post_task` | buyer | `prompt` (≤20k), `context?` (≤60k), `allowed_models[]` (allowlisted), `max_price_cents` (≥ `min_cents`, 50 in card mode), `max_runtime_s?` (180), `expires_in_s?` (3600), `rubric` (`{kind:"contains_text", expected_text}` or `{kind:"llm_rubric", criteria}`), `max_tokens?` (512) | `task: TaskPublic`, `payment_note`, `payment_label`, `next` |
+| `expire_stale` | any | – | `{expired, reopened, requeued, failed}` (`failed`: tasks that errored this pass; retried next call) |
+| `post_task` | buyer | `prompt` (≤20k), `context?` (≤60k), `allowed_models[]` (allowlisted), `max_price_cents` (≥ `min_cents`, 50 in card mode; ≤ 100 000), `max_runtime_s?` (180), `expires_in_s?` (3600), `rubric` (`{kind:"contains_text", expected_text}` or `{kind:"llm_rubric", criteria}`), `max_tokens?` (512) | `task: TaskPublic`, `payment_note`, `payment_label`, `next` |
 | `list_my_tasks` | buyer | `status?` | `tasks: TaskPublic[]` (≤50, newest first) |
 | `get_task` | buyer / claiming seller / judge | `task_id` | `task: TaskPublic`, `verdict?` (public fields), `settlement?` |
 | `get_result` | buyer | `task_id` | `task`, `result?{result_id, model_id, runtime_ms, commitment_sha256, commitment_verified, answer, result_enc_buyer}`, `verdict?`, `replacement_answer?`, `settlement?`, `guidance` |
 | `cancel_task` | buyer | `task_id` (OPEN only) | `task` (CANCELLED; hold released) |
-| `register_seller` | seller | `models: ModelInfo[]` (`model_id`, `digest?`, `ask_cents` ≥ min), `runner_pubkey_b64`, `runner_key_id`, `runner_wasm_sha256?`, `runtime` (`wassette` \| `node-unsandboxed`), `wassette_version?` | `seller: SellerPublic`, `next` |
-| `list_open_tasks` | seller | – | `tasks: (TaskPublic & {eligible_models[]})[]`, `seller_models[]` |
-| `claim_task` | seller | `task_id`, `model_id` **(v0.2 proposal: + `runner_pubkey_b64?`, `runner_key_id?` per-claim key — see §7)** | `claim: ClaimPublic` (`claim_id`, `task_id`, `seller_id`, `model_id`, `price_cents`, `lease_expires_at`, `seller_envelope`, `max_runtime_s`), `next` |
+| `register_seller` | seller | `models: ModelInfo[]` (`model_id`, `digest?`, `ask_cents` ≥ min), `runner_pubkey_b64?`, `runner_key_id?` (v0.2: both optional; omit them when every claim carries a per-claim key; a call replaces the previous registration, so omitting clears a registered key), `runner_wasm_sha256?`, `runtime` (`wassette` \| `node-unsandboxed`), `wassette_version?` | `seller: SellerPublic`, `next` |
+| `list_open_tasks` | seller | `limit?` (1–100, default 50; oldest OPEN first) | `tasks: (TaskPublic & {eligible_models[]})[]`, `seller_models[]` |
+| `claim_task` | seller | `task_id`, `model_id`, `runner_pubkey_b64?`, `runner_key_id?` (v0.2 per-claim key, see §7) | `claim: ClaimPublic` (`claim_id`, `task_id`, `seller_id`, `model_id`, `price_cents`, `lease_expires_at`, `seller_envelope`, `max_runtime_s`, `runner_key_id`, `runner_key_source`, `buyer_public_key`, `judge_public_key`), `next` |
 | `get_recipient_keys` | seller (live claim) | `task_id`, `claim_id` | `buyer_public_key`, `judge_public_key` |
 | `start_task` | seller | `task_id`, `claim_id` | `task` (RUNNING) |
 | `renew_lease` | seller | `task_id`, `claim_id` | `lease_expires_at` |
@@ -59,7 +60,8 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 
 ### Public objects
 - `TaskPublic`: `task_id`, `buyer_id`, `allowed_models`, `max_price_cents`, `max_runtime_s`, `status`, `created_at`, `expires_at`, `claim_id`, `seller_id`, `model_id`, `price_cents`, `lease_expires_at`, `payment{mode, state, stripe_payment_intent_id, payment_link}`, `inkbox_context_id`. **Never** prompt, context, rubric or envelopes.
-- `SellerPublic`: `seller_id`, `display_name`, `status`, `models[]`, `runner{public_key, wasm_sha256, runtime, wassette_version}`, `reputation{approvals, rejections, strikes}`, `inkbox_handle`, `last_seen`.
+- `SellerPublic`: `seller_id`, `display_name`, `status`, `models[]`, `runner{public_key, key_source, wasm_sha256, runtime, wassette_version}`, `reputation{approvals, rejections, strikes}`, `inkbox_handle`, `last_seen`. `key_source` is `registered` (key from `register_seller`), `per-claim` (no registered key; `public_key` is the seller's latest per-claim key) or `none` (`public_key = {key_id:"none", public_key_b64:""}`).
+- `ClaimPublic.runner_key_source`: `per-claim` when `claim_task` carried `runner_pubkey_b64`, else `registered`.
 
 ## 4. Keys and envelopes
 
@@ -84,11 +86,18 @@ Optional `api_key` is accepted by every authenticated tool and omitted below.
 
 Secrets inside the sandbox come from `wasi:config/store` (`ANTHROPIC_API_KEY`, `JUDGE_PRIVATE_KEY_B64`), supplied by Wassette's env permission. Wassette wraps results as `{"result": …}`; `result<string,string>` becomes `{ok}` / `{err}`.
 
-## 7. Proposed v0.2 changes (A decides; needed for the sandbox fix)
+## 7. v0.2 changes — ADOPTED (server side on `main`, see `docs/PROGRESS.md`)
 
-1. `claim_task` gains optional `runner_pubkey_b64` and `runner_key_id`. When present they override the registered runner key for this claim and are recorded on the claim. `register_seller` keeps `runner_pubkey_b64`/`runner_key_id` but they become optional when sellers always present per-claim keys.
-2. `claim_task` response additionally returns `buyer_public_key` and `judge_public_key` (same as `get_recipient_keys`) to save the sandbox a round trip.
-3. New component exports `run-cycle(opts)` and `judge-cycle(opts)` that perform claim → decrypt → run → submit (resp. fetch → judge → submit) **inside one instance**, calling the marketplace over wasi:http with the agent key from the env grant. Returns a JSON summary `{task_id, claim_id, result_id?, verdict?, runtime_ms}`.
-4. `SellerPublic.runner.public_key` shows the last per-claim key id when present.
+Needed for the sandbox fix: Wassette gives every component call a fresh instance, so the key that decrypts a claim must be generated in the same call that claims it.
+
+1. **Adopted.** `claim_task` accepts optional `runner_pubkey_b64` (base64 of a 32-byte X25519 public key; anything else → `VALIDATION_ERROR` with `next_action`) and `runner_key_id` (default `runner-<16 hex of sha256(pubkey)>`, the same id `runner-core` produces). When present the seller envelope is sealed to that key instead of the registered one, and the key is stored on the task (`tasks.claim_runner_key_id`, `tasks.claim_runner_pubkey_b64`; cleared when the claim lapses or is released). `runner_key_id` without `runner_pubkey_b64` → `VALIDATION_ERROR`.
+2. **Adopted.** `register_seller`: `runner_pubkey_b64` / `runner_key_id` are optional (validated the same way when sent). A seller with no registered key must present a per-claim key; `claim_task` without one → `INVALID_STATE` with a `next_action` naming `runner_pubkey_b64`. Sellers that register a key and claim without one (v0.1 daemons, `--runtime node`) keep working unchanged.
+3. **Adopted.** The `claim_task` response adds `runner_key_id`, `runner_key_source` and `buyer_public_key` + `judge_public_key` (same values as `get_recipient_keys`, which stays for v0.1 clients), so the sandbox needs no second round trip.
+4. **Adopted.** `SellerPublic.runner.public_key` falls back to the seller's latest per-claim key when no key is registered; `runner.key_source` says which (`registered` / `per-claim` / `none`). Stored as `sellers.last_claim_key_id` / `last_claim_pubkey_b64`.
+5. **Component side (C, E — not part of the server contract):** exports `run-cycle(opts)` and `judge-cycle(opts)` perform claim → decrypt → run → submit (resp. fetch → judge → submit) inside one instance, calling the marketplace over wasi:http with the agent key from the env grant, and return a JSON summary `{task_id, claim_id, result_id?, verdict?, runtime_ms}`. The WIT change is C's and E's to agree; tell A when it lands so §6 can be updated.
+
+Schema: the four new columns are `add column if not exists` lines at the end of `db/schema.sql`; the server also applies them itself on its first tool call (`src/db.ts` `ensureSchema`), so no manual migration is needed. `scripts/db-migrate.sh` still works.
+
+Trust note (unchanged by v0.2, see SECURITY.md): the server cannot tell a key generated inside the sandbox from one generated by the host. A per-claim key fixes the per-call-instance problem; it is not attestation.
 
 When A merges a contract change: A commits `docs/CONTRACT.md` + `packages/shared` on `main`, then posts the commit SHA and changed fields to every affected computer's inbound file.

@@ -15,7 +15,8 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 | Seller flow (Node runtime) | Daemon lists local Ollama models, registers, atomically claims, runs **qwen3:8b locally** (5 s), seals the result to buyer + judge, submits |
 | Judge flow (Node runtime) | Daemon takes the review package, decrypts, verifies the sha256 commitment, applies the rubric, **APPROVE** → Stripe **captures** the claim price (75c of a 100c hold), remainder released |
 | Wasm sandbox (`packages/runner-wasm`) | Component builds (20 MB), **loads under Wassette 0.8**, exposes `get-public-key` / `run-task` / `judge-task`, registers an in-sandbox key, claims a task |
-| **Open blocker** | Wassette instantiates the component fresh per tool call, so the keypair from `get-public-key` is gone by `run-task` → decrypt fails (`invalid tag`). Fix designed (runner-driven single-call claim); owned by Computer **C** with **A**. See `docs/PROGRESS.md` → Known issues |
+| **Open blocker** | Wassette instantiates the component fresh per tool call, so the keypair from `get-public-key` is gone by `run-task` → decrypt fails (`invalid tag`). Fix: runner-driven single-call claim. **Server half done (contract v0.2, Oct 17 ~19:05 PDT):** `claim_task` takes a per-claim `runner_pubkey_b64` and returns the buyer + judge keys. Component half (`run-cycle` / `judge-cycle`) is with **C** and **E**. See `docs/PROGRESS.md` → Known issues |
+| Tests | `pnpm test`: crypto (7) + marketplace server (18: v0.2 per-claim keys, full approve/reject cycles through `runner-core`, claim race, lease expiry, sweep resilience). `pnpm smoke`: real server + real daemons + v0.2 claim, offline (`DB_MODE=memory`, `PAYMENT_MODE=mock`, fake Ollama, all labelled) |
 
 Not started: Stripe payouts to sellers (Accounts v2 onboarding), Stripe MPP agent-wallet mode, Inkbox identities/A2A, dashboard UI, Manufact deployment, agent-facing skill docs, demo script.
 
@@ -73,7 +74,7 @@ brew install ollama wassette && brew services start ollama && ollama pull qwen3:
 pnpm install
 pnpm setup:env                 # paste keys silently; generates server KEK + judge keypair (see .env.example)
 bash scripts/db-migrate.sh     # applies apps/marketplace-mcp/db/schema.sql to your Insforge project
-pnpm dev:server -- --no-open   # http://localhost:3000/mcp  (inspector at /mcp/inspector, health at /health)
+pnpm dev:server --no-open      # http://localhost:3000/mcp  (inspector at /mcp/inspector, health at /health)
 ```
 
 In two more terminals:
@@ -90,6 +91,8 @@ node scripts/buyer.mjs post "What is the capital of France? Answer in one word."
 node scripts/buyer.mjs tasks
 node scripts/buyer.mjs result <task_id>
 ```
+
+No keys, no network, no Ollama? `pnpm smoke` boots the server with `DB_MODE=memory` + `PAYMENT_MODE=mock`, registers a buyer, seller and judge, runs both daemons (`--runtime node`) against a fake Ollama, and checks the v0.2 per-claim key path. It proves the plumbing, not the sandbox or the payments.
 
 Connect a real buyer agent (Claude Code) to the server:
 
