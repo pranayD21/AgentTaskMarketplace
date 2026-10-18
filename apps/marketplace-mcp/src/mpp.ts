@@ -335,25 +335,44 @@ function forgetChallenge(taskId: string): void {
  */
 export async function markTaskPaid(task: TaskRow, paymentIntentId: string): Promise<TaskRow> {
   const max = task.max_price_cents;
-  const key = `paid:${task.id}`;
-  const undoKey = `unpaid:${task.id}`;
+  // Keys are per payment attempt, not per task: a task-level key would be
+  // consumed by a failed-and-compensated attempt, so a later payment (or a
+  // replay of the refunded one) could open the task with no live reservation,
+  // and a losing concurrent payment could undo the winner's reservation.
+  const key = `paid:${task.id}:${paymentIntentId}`;
+  const undoKey = `unpaid:${task.id}:${paymentIntentId}`;
+
+  // Replay of the payment that already opened this task: nothing to do.
+  const before = await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1));
+  if (!before) throw new MarketplaceError("NOT_FOUND", `Task ${task.id} not found.`);
+  if (before.stripe_payment_intent_id === paymentIntentId && before.status !== "AWAITING_PAYMENT") return before;
+
   // Reserve the full offer against the buyer cap and, for a job part, the job
-  // budget — both keyed, so a replayed payment is a no-op and a crash between
-  // the two writes can be compensated without double counting.
+  // budget. `applied` tells us whether THIS call changed a ledger; only what we
+  // applied is ever compensated. A key already consumed together with its undo
+  // key means this payment attempt was refunded: it cannot open the task.
   const reserved = await adjustBuyerBalance(task.buyer_id, { reserved: max }, { enforceCap: true, key });
   if (!reserved.buyer || reserved.refused) {
     throw new MarketplaceError("SPEND_CAP_EXCEEDED", "The buyer has insufficient remaining budget for this payment.", {
       next_action: "Check whoami and release unwanted holds before paying another task.",
     });
   }
+  if (!reserved.applied && (reserved.buyer.balance_keys ?? []).includes(undoKey)) {
+    throw new MarketplaceError("INVALID_STATE", `Payment ${paymentIntentId} for ${task.id} was already refunded; it cannot open the task.`, {
+      next_action: "Pay the task again; a new payment gets a new reservation.",
+    });
+  }
+  const buyerApplied = reserved.applied;
+  let jobApplied = false;
   if (task.job_id) {
     const jr = await adjustJobBudget(task.job_id, { reserved: max }, { enforceCap: true, key });
     if (!jr.job || jr.refused) {
-      await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
+      if (buyerApplied) await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
       throw new MarketplaceError("JOB_BUDGET_EXCEEDED", `Paying this part would exceed the job's budget${jr.job ? ` of ${jr.job.budget_cents}c (reserved ${jr.job.reserved_cents}c, spent ${jr.job.spent_cents}c)` : ""}.`, {
         next_action: "Create a job with a larger budget, or wait for other parts to settle; the payment is refunded.",
       });
     }
+    jobApplied = jr.applied;
   }
   let rows: TaskRow[];
   try {
@@ -368,11 +387,12 @@ export async function markTaskPaid(task: TaskRow, paymentIntentId: string): Prom
       });
     }
   } catch (err) {
-    // An identical payment retried concurrently must not refund the winning payment.
+    // This payment lost (another payment opened the task, or it was cancelled):
+    // give back only the reservation this call made; the winner's stays.
     const current = await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1));
-    if (current?.stripe_payment_intent_id === paymentIntentId) return current;
-    await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
-    if (task.job_id) await adjustJobBudget(task.job_id, { reserved: -max }, { key: undoKey });
+    if (current?.stripe_payment_intent_id === paymentIntentId && current.status !== "AWAITING_PAYMENT") return current;
+    if (buyerApplied) await adjustBuyerBalance(task.buyer_id, { reserved: -max }, { key: undoKey });
+    if (jobApplied && task.job_id) await adjustJobBudget(task.job_id, { reserved: -max }, { key: undoKey });
     throw err;
   }
   await logEvent("task.paid", { task_id: task.id, agent_id: task.buyer_id, meta: { amount_cents: max, rail: "stripe-mpp-test", payment_intent: paymentIntentId, job_id: task.job_id ?? null } });

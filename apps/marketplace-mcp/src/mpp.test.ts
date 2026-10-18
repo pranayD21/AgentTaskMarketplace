@@ -62,8 +62,8 @@ describe("markTaskPaid reserves against the buyer cap and the job budget with ke
     const { agent, jobId, task } = await seed({ cap: 100, budget: 60, max: 55, id: "task_paid_1" });
     const opened = await markTaskPaid(task, "pi_paid_1");
     expect(opened).toMatchObject({ status: "OPEN", payment_state: "PAID", stripe_payment_intent_id: "pi_paid_1" });
-    expect(await buyerRow(agent.id)).toMatchObject({ reserved_cents: 55, balance_keys: expect.arrayContaining(["paid:task_paid_1"]) });
-    expect(await jobRow(jobId)).toMatchObject({ reserved_cents: 55, balance_keys: expect.arrayContaining(["paid:task_paid_1"]) });
+    expect(await buyerRow(agent.id)).toMatchObject({ reserved_cents: 55, balance_keys: expect.arrayContaining(["paid:task_paid_1:pi_paid_1"]) });
+    expect(await jobRow(jobId)).toMatchObject({ reserved_cents: 55, balance_keys: expect.arrayContaining(["paid:task_paid_1:pi_paid_1"]) });
     const again = await markTaskPaid(task, "pi_paid_1");
     expect(again.stripe_payment_intent_id).toBe("pi_paid_1");
     expect((await buyerRow(agent.id)).reserved_cents).toBe(55);
@@ -81,5 +81,43 @@ describe("markTaskPaid reserves against the buyer cap and the job budget with ke
     await expect(markTaskPaid(task, "pi_paid_3")).rejects.toMatchObject({ code: "SPEND_CAP_EXCEEDED" });
     expect((await buyerRow(agent.id)).reserved_cents).toBe(0);
     expect((await jobRow(jobId)).reserved_cents).toBe(0);
+  });
+  it("a compensated failed open cannot reopen the task on the consumed key; a new payment reserves afresh", async () => {
+    const { agent, jobId, task } = await seed({ cap: 500, budget: 200, max: 55, id: "task_paid_4" });
+    // Make the open fail: the task leaves AWAITING_PAYMENT under our feet (e.g. cancelled), then comes back.
+    unwrap(await db().from("tasks").update({ status: "CANCELLED" }).eq("id", task.id));
+    await expect(markTaskPaid(task, "pi_first")).rejects.toMatchObject({ code: "INVALID_STATE" });
+    expect((await buyerRow(agent.id)).reserved_cents).toBe(0);
+    expect((await jobRow(jobId)).reserved_cents).toBe(0);
+    unwrap(await db().from("tasks").update({ status: "AWAITING_PAYMENT" }).eq("id", task.id));
+    // Replaying the refunded payment must not open the task with no reservation.
+    await expect(markTaskPaid(task, "pi_first")).rejects.toMatchObject({ code: "INVALID_STATE", message: expect.stringMatching(/already refunded/) });
+    expect((await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1)))!.status).toBe("AWAITING_PAYMENT");
+    expect((await buyerRow(agent.id)).reserved_cents).toBe(0);
+    // A new payment gets its own key and a real reservation.
+    expect(await markTaskPaid(task, "pi_second")).toMatchObject({ status: "OPEN", stripe_payment_intent_id: "pi_second" });
+    expect((await buyerRow(agent.id)).reserved_cents).toBe(55);
+    expect((await jobRow(jobId)).reserved_cents).toBe(55);
+  });
+  it("two concurrent payments with different intents: one wins, the loser gives back only its own reservation", async () => {
+    const { agent, jobId, task } = await seed({ cap: 500, budget: 200, max: 55, id: "task_paid_5" });
+    const results = await Promise.all([markTaskPaid(task, "pi_A"), markTaskPaid(task, "pi_B")].map((p) => p.then((r) => ({ ok: r }), (e) => ({ err: e as Error }))));
+    const wins = results.filter((r) => "ok" in r);
+    const losses = results.filter((r) => "err" in r);
+    expect(wins).toHaveLength(1);
+    expect(losses).toHaveLength(1);
+    expect((losses[0] as unknown as { err: { code: string } }).err.code).toBe("INVALID_STATE");
+    const current = (await one<TaskRow>(await db().from("tasks").select("*").eq("id", task.id).limit(1)))!;
+    expect(current.status).toBe("OPEN");
+    expect(["pi_A", "pi_B"]).toContain(current.stripe_payment_intent_id);
+    // Exactly one reservation survives, on both ledgers, and it belongs to the winner.
+    expect((await buyerRow(agent.id)).reserved_cents).toBe(55);
+    expect((await jobRow(jobId)).reserved_cents).toBe(55);
+    expect((await buyerRow(agent.id)).balance_keys).toEqual(expect.arrayContaining([`paid:task_paid_5:${current.stripe_payment_intent_id}`]));
+    // Replaying the winner is a no-op; replaying the loser is refused without touching the ledger.
+    expect((await markTaskPaid(task, current.stripe_payment_intent_id!)).stripe_payment_intent_id).toBe(current.stripe_payment_intent_id);
+    const loserId = current.stripe_payment_intent_id === "pi_A" ? "pi_B" : "pi_A";
+    await expect(markTaskPaid(task, loserId)).rejects.toMatchObject({ code: "INVALID_STATE" });
+    expect((await buyerRow(agent.id)).reserved_cents).toBe(55);
   });
 });
