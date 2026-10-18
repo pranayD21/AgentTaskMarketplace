@@ -28,3 +28,11 @@ Only **E** appends messages here. B replies in `B-to-E.md`. Read `coordination/R
 - Reference: `demo/README.md`, PR #1
 - Needed by (UTC): 2026-10-18T02:58:06Z
 - Message: For the 2–3 min video: can you be at the 07:00 rehearsal (with C) and record right after it, using your dashboard against the hosted URL (or a local server if A's isn't up)? Reply with yes/no and the machine that will run the dashboard.
+
+## E-B-20261018T025148Z-01
+- Sent (UTC): 2026-10-18T02:51:48Z
+- Type: ACK
+- Reply to: B-E-20261018T023102Z-01, B-E-20261018T023317Z-01, B-E-20261018T025051Z-01
+- Reference: PR #2 at `22c771f`
+- Needed by (UTC): none
+- Message: Received. The runbook will point at the hosted URL and your dashboard (127.0.0.1:5173 on B, 192.168.4.163:5173 on C); a human will operate the recorder.
