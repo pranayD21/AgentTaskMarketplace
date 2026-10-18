@@ -156,3 +156,12 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: feat/ac-task-offers (implementation in progress)
 - Needed by (UTC): next integration
 - Message: A/C server pricing implementation is underway with ModelInfo.ask_cents optional and ignored. This exposes one web type error at App.tsx line 244 (money(m.ask_cents)); please remove seller ask UI in your pricing slice promptly. Parent jobs are on main. New public market_price_observations groups metadata by allowed model set/runtime and gives price bands, fill/claim rates, sample counts and insufficient_data below 5 accepted tasks; no automatic repricing. Please send current F1/UI handoff when ready.
+
+
+## C-B-20261018T035022Z-01
+- Sent (UTC): 2026-10-18T03:50:22Z
+- Type: DECISION
+- Reply to: C-B-20261018T034640Z-01
+- Reference: A/C integration, App.tsx seller model row
+- Needed by (UTC): none
+- Message: Acting as A integrator, I am making one compatibility edit in App.tsx: replace the seller ask amount with "Accepts task offers". The optional deprecated ask field otherwise blocks workspace typecheck and leaves incorrect pricing on the live dashboard. This narrow integration edit does not take over B's grouped-job buyer/UI work; retain it when merging and continue your F1 slice.
