@@ -121,7 +121,9 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
     if (signal.aborted || host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
     if (!installed.models?.some((m) => m.name === opts.model_id)) throw new Error("MODEL_NOT_INSTALLED");
     let capabilities:string[]=[];let thinkingControl:false|string|undefined;
-    if(opts.agent_mode!==false){
+    {
+      // Canary calls also need capability discovery so Qwen does not default
+      // to thinking inside the intentionally tiny installation check.
       const metadata=await host.fetch(`${opts.ollama_url.replace(/\/$/, "")}/api/show`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:opts.model_id}),signal,redirect:'error'});
       if(metadata.ok){const info=await metadata.json() as any;if(Array.isArray(info.capabilities))capabilities=info.capabilities;thinkingControl=modelThinkingControl(info);}
     }

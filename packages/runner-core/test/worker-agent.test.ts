@@ -40,3 +40,8 @@ it('uses reported thinking controls without guessing from model names',async()=>
  expect(modelThinkingControl({thinking:{values:[true,false]}})).toBe(false);
  expect(modelThinkingControl({thinking:{values:['low','medium','high']}})).toBe('low');
 });
+it('discovers thinking controls for the small installation canary too',async()=>{
+ const {modelCanary}=await import('../src/index.js');let metadata=false;
+ const fetcher:typeof fetch=async(input,init)=>{const url=String(input);if(url.endsWith('/api/tags'))return Response.json({models:[{name:'qwen3:8b'}]});if(url.endsWith('/api/show')){metadata=true;return Response.json({capabilities:['completion','thinking','tools']});}const body=JSON.parse(String(init?.body));expect(metadata).toBe(true);expect(body.think).toBe(false);expect(body.tools).toEqual([]);expect(body.options.num_predict).toBe(8);return Response.json({message:{content:'4'},eval_count:1});};
+ expect((await modelCanary({fetch:fetcher,now:Date.now,getSecret:async()=>undefined},{ollama_url:'http://ollama',model_id:'qwen3:8b'})).passed).toBe(true);
+});
