@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import type { AgentRow, TaskRow } from "./db.js";
-import { compensateStripeHold, inspectStripeMoney, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, transferIdempotencyKey, transferMatches } from "./payments.js";
+import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
 
 // ---------------------------------------------------------------- fakes
 const seller = { id: "seller_1", stripe_account_id: "acct_test" } as AgentRow;
@@ -15,6 +15,8 @@ interface FakeStripeOptions {
   existing?: Stripe.Transfer[];
   known?: Record<string, Stripe.Transfer>;
   failCreates?: number;
+  /** Error object thrown by failing creates (default: a plain Error, i.e. uncertain). */
+  createError?: unknown;
   active?: boolean;
 }
 function fakeStripe(o: FakeStripeOptions = {}) {
@@ -25,7 +27,7 @@ function fakeStripe(o: FakeStripeOptions = {}) {
       list: async () => ({ data: o.existing ?? [] }),
       retrieve: async (id: string) => { const t = o.known?.[id]; if (!t) throw new Error(`No such transfer: ${id}`); return t; },
       create: async (params: Stripe.TransferCreateParams, opts: { idempotencyKey: string }) => {
-        if (failures > 0) { failures--; throw new Error("insufficient funds in platform balance"); }
+        if (failures > 0) { failures--; throw o.createError ?? new Error("insufficient funds in platform balance"); }
         const t = tr({ id: `tr_${created.length + 1}`, amount: params.amount, currency: params.currency, destination: params.destination, transfer_group: params.transfer_group ?? null });
         created.push({ params, key: opts.idempotencyKey });
         return t;
@@ -79,6 +81,26 @@ describe("reconcileSellerTransfer (P2)", () => {
     expect(o2).toMatchObject({ state: "PENDING", pending_reason: "MISMATCH" });
     expect(otherDest.created).toHaveLength(0);
   });
+  it("marks retry_safe_to_advance only when Stripe definitively rejected the create", async () => {
+    const rejected = fakeStripe({ failCreates: 1, createError: Object.assign(new Error("Insufficient funds"), { type: "StripeInvalidRequestError", statusCode: 400 }) });
+    expect(await reconcileSellerTransfer(rejected.stripe, task, seller, 75, "ch_1", { attempt: 0 })).toMatchObject({ state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: true });
+    const dropped = fakeStripe({ failCreates: 1, createError: Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" }) });
+    expect(await reconcileSellerTransfer(dropped.stripe, task, seller, 75, "ch_1", { attempt: 0 })).toMatchObject({ state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false });
+    const blocked = fakeStripe({ active: false });
+    expect(await reconcileSellerTransfer(blocked.stripe, task, seller, 75, "ch_1", { poll: { attempts: 1, delayMs: 1 } })).toMatchObject({ pending_reason: "PENDING_ONBOARDING", retry_safe_to_advance: false });
+    const mismatch = fakeStripe({ existing: [tr({ id: "tr_half", amount: 40 })] });
+    expect(await reconcileSellerTransfer(mismatch.stripe, task, seller, 75, "ch_1")).toMatchObject({ pending_reason: "MISMATCH", retry_safe_to_advance: false });
+  });
+  it("classifies Stripe errors: decided 4xx advance the key, transport/5xx/429/401 do not", () => {
+    expect(stripeDefinitivelyRejected({ type: "StripeCardError" })).toBe(true);
+    expect(stripeDefinitivelyRejected({ type: "StripeIdempotencyError" })).toBe(true);
+    expect(stripeDefinitivelyRejected({ statusCode: 402 })).toBe(true);
+    expect(stripeDefinitivelyRejected({ type: "StripeAPIError", statusCode: 500 })).toBe(false);
+    expect(stripeDefinitivelyRejected({ type: "StripeRateLimitError", statusCode: 429 })).toBe(false);
+    expect(stripeDefinitivelyRejected({ type: "StripeAuthenticationError", statusCode: 401 })).toBe(false);
+    expect(stripeDefinitivelyRejected(new Error("timeout"))).toBe(false);
+    expect(stripeDefinitivelyRejected(null)).toBe(false);
+  });
   it("transferMatches names the first mismatching field", () => {
     const expect_ = { task_id: "task_1", destination: "acct_test", amount_cents: 75 };
     expect(transferMatches(tr({ id: "a" }), expect_)).toBeNull();
@@ -90,8 +112,8 @@ describe("reconcileSellerTransfer (P2)", () => {
     const a0 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 0 });
     const a1 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 1 });
     const a2 = await reconcileSellerTransfer(stripe, task, seller, 75, "ch_1", { attempt: 2 });
-    expect(a0).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR" });
-    expect(a1).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR" });
+    expect(a0).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false });
+    expect(a1).toMatchObject({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", retry_safe_to_advance: false });
     expect(a2).toMatchObject({ transfer_id: "tr_1", state: "TRANSFERRED", amount_cents: 75 });
     expect(created).toHaveLength(1);
     expect(created[0]!.key).toBe(transferIdempotencyKey("task_1", 2));
@@ -141,19 +163,19 @@ describe("MockProvider fault injection", () => {
     await p.hold({ id: "task_m", max_price_cents: 100 }, buyer);
     const cap = await p.capture(mtask, seller, 75);
     expect(cap).toMatchObject({ stripe_transfer_id: null, owed_cents: 75, transferred_cents: 0, transfer_state: "PENDING", pending_reason: "PROVIDER_ERROR" });
-    expect((await p.retryTransfer(mtask, seller, 75, { attempt: 1 })).state).toBe("PENDING");
-    const ok = await p.retryTransfer(mtask, seller, 75, { attempt: 2 });
+    expect((await p.retryTransfer!(mtask, seller, 75, { attempt: 1 })).state).toBe("PENDING");
+    const ok = await p.retryTransfer!(mtask, seller, 75, { attempt: 2 });
     expect(ok).toMatchObject({ transfer_id: "mock_tr_task_m", state: "TRANSFERRED", amount_cents: 75 });
-    expect(await p.retryTransfer(mtask, seller, 60, { attempt: 3 })).toMatchObject({ state: "PENDING", pending_reason: "MISMATCH" });
-    const again = await p.retryTransfer(mtask, seller, 75, { attempt: 3, known_transfer_id: ok.transfer_id });
+    expect(await p.retryTransfer!(mtask, seller, 60, { attempt: 3 })).toMatchObject({ state: "PENDING", pending_reason: "MISMATCH" });
+    const again = await p.retryTransfer!(mtask, seller, 75, { attempt: 3, known_transfer_id: ok.transfer_id });
     expect(again.transfer_id).toBe("mock_tr_task_m");
     expect(mockLedgerFor("task_m")).toMatchObject({ captured: 75, transferred: 75, transfer_id: "mock_tr_task_m" });
     expect((await p.inspect(mtask)).transfer_ids).toEqual(["mock_tr_task_m"]);
   });
-  it("hold and capture faults throw retryable PAYMENT_FAILED, then succeed when the budget is spent", async () => {
+  it("hold and capture faults throw PAYMENT_FAILED, then succeed when the budget is spent", async () => {
     setMockFaults("hold:1,capture:1");
     const p = payments();
-    await expect(p.hold({ id: "task_h", max_price_cents: 50 }, buyer)).rejects.toMatchObject({ code: "PAYMENT_FAILED", retryable: true });
+    await expect(p.hold({ id: "task_h", max_price_cents: 50 }, buyer)).rejects.toMatchObject({ code: "PAYMENT_FAILED", retryable: false, hold_outcome: "not_created" });
     await expect(p.hold({ id: "task_h", max_price_cents: 50 }, buyer)).resolves.toMatchObject({ payment_state: "MOCK" });
     const htask = { ...mtask, id: "task_h" };
     await expect(p.capture(htask, seller, 50)).rejects.toMatchObject({ code: "PAYMENT_FAILED" });
@@ -166,5 +188,75 @@ describe("MockProvider fault injection", () => {
     const hold = await p.hold({ id: "task_c", max_price_cents: 40 }, buyer);
     await p.compensateHold({ id: "task_c", max_price_cents: 40 }, hold, "insert failed");
     expect((await p.inspect({ ...mtask, id: "task_c" })).authorized_cents).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------- idempotent card hold
+describe("StripeCardProvider.hold idempotency (P1)", () => {
+  const buyer = { id: "buyer_1", stripe_customer_id: "cus_1", stripe_payment_method_id: "pm_1" } as AgentRow;
+  function fakeHoldClient(o: { status?: string; throwOnce?: unknown } = {}) {
+    const byKey = new Map<string, { id: string; status: string }>();
+    const calls: { key: string; amount: number }[] = [];
+    let pending = o.throwOnce;
+    const client = {
+      paymentIntents: {
+        create: async (params: { amount: number }, opts: { idempotencyKey: string }) => {
+          calls.push({ key: opts.idempotencyKey, amount: params.amount });
+          if (pending) { const e = pending; pending = undefined; throw e; }
+          const existing = byKey.get(opts.idempotencyKey);
+          if (existing) return existing; // Stripe replays the stored result for the same key
+          const pi = { id: `pi_${byKey.size + 1}`, status: o.status ?? "requires_capture" };
+          byKey.set(opts.idempotencyKey, pi);
+          return pi;
+        },
+      },
+    } as unknown as Stripe;
+    return { client, calls };
+  }
+  it("uses the task-scoped key and replays the same intent on a retried hold", async () => {
+    const { client, calls } = fakeHoldClient();
+    const p = new StripeCardProvider("sk_test_x", client);
+    const h1 = await p.hold({ id: "task_h", max_price_cents: 100 }, buyer);
+    const h2 = await p.hold({ id: "task_h", max_price_cents: 100 }, buyer);
+    expect(h1.stripe_payment_intent_id).toBe("pi_1");
+    expect(h2.stripe_payment_intent_id).toBe("pi_1");
+    expect(calls.map((c) => c.key)).toEqual([holdIdempotencyKey("task_h"), holdIdempotencyKey("task_h")]);
+  });
+  it("recovers from an ambiguous response: the retry after a transport error replays, never a second intent", async () => {
+    const { client, calls } = fakeHoldClient({ throwOnce: Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" }) });
+    const p = new StripeCardProvider("sk_test_x", client);
+    await expect(p.hold({ id: "task_a", max_price_cents: 100 }, buyer)).rejects.toMatchObject({ code: "PAYMENT_FAILED", retryable: true, hold_outcome: "unknown" });
+    const h = await p.hold({ id: "task_a", max_price_cents: 100 }, buyer);
+    expect(h).toMatchObject({ payment_state: "HELD", stripe_payment_intent_id: "pi_1" });
+    expect(calls).toHaveLength(2);
+  });
+  it("a definitive rejection is not retryable, and a replayed cancelled hold says to post a new task", async () => {
+    const declined = fakeHoldClient({ throwOnce: Object.assign(new Error("card declined"), { type: "StripeCardError", statusCode: 402 }) });
+    await expect(new StripeCardProvider("sk_test_x", declined.client).hold({ id: "task_d", max_price_cents: 100 }, buyer)).rejects.toMatchObject({ code: "PAYMENT_FAILED", retryable: false, hold_outcome: "not_created" });
+    const cancelled = fakeHoldClient({ status: "canceled" });
+    await expect(new StripeCardProvider("sk_test_x", cancelled.client).hold({ id: "task_c", max_price_cents: 100 }, buyer)).rejects.toMatchObject({ code: "PAYMENT_FAILED", retryable: false, next_action: expect.stringMatching(/new task/) });
+    const changed = fakeHoldClient({ throwOnce: Object.assign(new Error("Keys for idempotent requests can only be used with the same parameters"), { type: "StripeIdempotencyError", statusCode: 400 }) });
+    await expect(new StripeCardProvider("sk_test_x", changed.client).hold({ id: "task_i", max_price_cents: 100 }, buyer)).rejects.toMatchObject({ retryable: false, hold_outcome: "unknown", message: expect.stringMatching(/different parameters/) });
+  });
+  it("hold_outcome: mock faults are definitive unless marked transient; holdOutcomeOf classifies foreign errors", async () => {
+    setMockFaults("hold:1");
+    await expect(payments().hold({ id: "task_m1", max_price_cents: 10 }, buyer)).rejects.toMatchObject({ hold_outcome: "not_created", retryable: false });
+    setMockFaults("hold~:1");
+    await expect(payments().hold({ id: "task_m2", max_price_cents: 10 }, buyer)).rejects.toMatchObject({ hold_outcome: "unknown", retryable: true });
+    setMockFaults(null);
+    expect(holdOutcomeOf({ hold_outcome: "not_created" })).toBe("not_created");
+    expect(holdOutcomeOf(Object.assign(new Error("x"), { type: "StripeCardError" }))).toBe("not_created");
+    expect(holdOutcomeOf(new Error("ETIMEDOUT"))).toBe("unknown");
+  });
+  it("mock transient faults do not advance the attempt key; definitive ones do", async () => {
+    setMockFaults("transfer~:1");
+    const p = payments();
+    await p.hold({ id: "task_t", max_price_cents: 100 }, buyer);
+    const t = { id: "task_t", payment_mode: "mock", max_price_cents: 100, stripe_payment_intent_id: "mock_pi_task_t" } as TaskRow;
+    expect(await p.capture(t, seller, 60)).toMatchObject({ transfer_state: "PENDING", transfer_retry_safe_to_advance: false });
+    setMockFaults("transfer:1");
+    await p.hold({ id: "task_u", max_price_cents: 100 }, buyer);
+    expect(await p.capture({ ...t, id: "task_u", stripe_payment_intent_id: "mock_pi_task_u" }, seller, 60)).toMatchObject({ transfer_state: "PENDING", transfer_retry_safe_to_advance: true });
+    setMockFaults(null);
   });
 });

@@ -23,6 +23,14 @@ export interface TransferOutcome {
   pending_reason?: PendingReason;
   /** Cents actually moved by the transfer on the rail (0 unless TRANSFERRED). */
   amount_cents: number;
+  /**
+   * True ONLY when Stripe definitively rejected a create for this attempt's
+   * idempotency key (a decided 4xx), so the next retry must use the next
+   * attempt number. False for transport errors, timeouts, 5xx, rate limits,
+   * auth/config errors, lookup uncertainty, onboarding blocks and MISMATCH:
+   * the key was not consumed (or must not be retried), so do not advance.
+   */
+  retry_safe_to_advance: boolean;
   /** True when the transfer already existed on Stripe and was adopted rather than created. */
   recovered?: boolean;
   note: string;
@@ -50,6 +58,8 @@ export interface CaptureResult {
   transferred_cents: number;
   transfer_state: TransferState;
   pending_reason?: PendingReason;
+  /** See TransferOutcome.retry_safe_to_advance. */
+  transfer_retry_safe_to_advance: boolean;
   note: string;
 }
 /** Money assertions: what the rail holds for a task right now (from Stripe or the mock ledger). */
@@ -93,7 +103,7 @@ export interface PaymentProvider {
    * transfer Stripe already holds is adopted, and only then one is created.
    * Pass `opts.attempt = transfer_attempts` so every retry uses a fresh key.
    */
-  retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts?: RetryTransferOptions): Promise<TransferOutcome>;
+  retryTransfer?(task: TaskRow, seller: AgentRow | null, amountCents: number, opts?: RetryTransferOptions): Promise<TransferOutcome>;
   /** Money assertions for fault tests and reconciliation; never mutates. */
   inspect(task: TaskRow): Promise<MoneyState>;
 }
@@ -260,6 +270,23 @@ export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl:
   return link.url;
 }
 
+/**
+ * Did Stripe decide this request (so its result is stored under the
+ * idempotency key and a retry must use a new key)? Decided means a 4xx the
+ * API produced after executing: card/invalid-request/idempotency/permission
+ * errors. Connection errors, timeouts, 5xx, 429 and 401 leave the key
+ * unconsumed or the outcome unknown.
+ */
+export function stripeDefinitivelyRejected(err: unknown): boolean {
+  const e = err as { type?: string; statusCode?: number; definitive?: boolean } | null;
+  if (!e || typeof e !== "object") return false;
+  if (typeof e.definitive === "boolean") return e.definitive; // mock/test hook
+  if (e.type === "StripeCardError" || e.type === "StripeInvalidRequestError" || e.type === "StripeIdempotencyError" || e.type === "StripePermissionError") return true;
+  if (e.type === "StripeConnectionError" || e.type === "StripeAPIError" || e.type === "StripeRateLimitError" || e.type === "StripeAuthenticationError") return false;
+  const code = e.statusCode ?? 0;
+  return code >= 400 && code < 500 && code !== 401 && code !== 403 && code !== 408 && code !== 429;
+}
+
 /** Non-reversed transfers Stripe holds for this task (by transfer_group), any destination. */
 export async function findTransfersForTask(stripe: Stripe, taskId: string): Promise<Stripe.Transfer[]> {
   const page = await stripe.transfers.list({ transfer_group: taskId, limit: 10 });
@@ -275,6 +302,28 @@ export function transferMatches(t: Stripe.Transfer, expect: { task_id: string; d
   if (t.currency !== "usd") return `transfer ${t.id} is ${t.currency}, not usd`;
   if (t.amount !== expect.amount_cents) return `transfer ${t.id} moved ${t.amount}c, task owes ${expect.amount_cents}c`;
   return null;
+}
+
+export function holdIdempotencyKey(taskId: string): string {
+  return `atm:${taskId}:hold`;
+}
+
+/**
+ * What a failed hold() means for the service (CONTRACT §9 recovery):
+ * "not_created" — the rail definitively rejected it, no intent exists, the
+ * reservation may be released; "unknown" — timeout/transport/5xx or an
+ * idempotency conflict, an intent may exist, so keep the reservation and
+ * replay hold() with the same task id (its key returns the same intent).
+ */
+export type HoldOutcome = "not_created" | "unknown";
+export function holdOutcomeOf(err: unknown): HoldOutcome {
+  const e = err as { hold_outcome?: HoldOutcome } | null;
+  if (e && typeof e === "object" && (e.hold_outcome === "not_created" || e.hold_outcome === "unknown")) return e.hold_outcome;
+  return stripeDefinitivelyRejected(err) ? "not_created" : "unknown";
+}
+function holdError(message: string, outcome: HoldOutcome, next_action: string, retryable = outcome === "unknown"): MarketplaceError {
+  const err = new MarketplaceError("PAYMENT_FAILED", message, { retryable, next_action });
+  return Object.assign(err, { hold_outcome: outcome });
 }
 
 export function transferIdempotencyKey(taskId: string, attempt: number): string {
@@ -303,8 +352,8 @@ export async function reconcileSellerTransfer(
   chargeId: string | null,
   opts: RetryTransferOptions = {},
 ): Promise<TransferOutcome> {
-  if (amountCents <= 0) return { transfer_id: null, state: "NOT_APPLICABLE", amount_cents: 0, note: "nothing owed to the seller" };
-  if (!seller?.stripe_account_id) return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, note: "seller has no connected account (payout PENDING_ONBOARDING)" };
+  if (amountCents <= 0) return { transfer_id: null, state: "NOT_APPLICABLE", amount_cents: 0, retry_safe_to_advance: false, note: "nothing owed to the seller" };
+  if (!seller?.stripe_account_id) return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, retry_safe_to_advance: false, note: "seller has no connected account (payout PENDING_ONBOARDING)" };
   const destination = seller.stripe_account_id;
   const expect = { task_id: task.id, destination, amount_cents: amountCents };
 
@@ -312,10 +361,10 @@ export async function reconcileSellerTransfer(
     try {
       const t = await stripe.transfers.retrieve(opts.known_transfer_id);
       const problem = transferMatches(t, expect);
-      if (!problem) return { transfer_id: t.id, state: "TRANSFERRED", amount_cents: t.amount, note: `transfer ${t.id} verified (${t.amount}c to ${destination})` };
-      return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, note: `recorded transfer does not match the task: ${problem}; needs operator reconciliation` };
+      if (!problem) return { transfer_id: t.id, state: "TRANSFERRED", amount_cents: t.amount, retry_safe_to_advance: false, note: `transfer ${t.id} verified (${t.amount}c to ${destination})` };
+      return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, retry_safe_to_advance: false, note: `recorded transfer does not match the task: ${problem}; needs operator reconciliation` };
     } catch (err) {
-      return { transfer_id: null, state: "PENDING", pending_reason: "LOOKUP_ERROR", amount_cents: 0, note: `recorded transfer ${opts.known_transfer_id} could not be read: ${(err as Error).message}; retry pending` };
+      return { transfer_id: null, state: "PENDING", pending_reason: "LOOKUP_ERROR", amount_cents: 0, retry_safe_to_advance: false, note: `recorded transfer ${opts.known_transfer_id} could not be read: ${(err as Error).message}; retry pending` };
     }
   }
 
@@ -323,18 +372,18 @@ export async function reconcileSellerTransfer(
   try {
     existing = await findTransfersForTask(stripe, task.id);
   } catch (err) {
-    return { transfer_id: null, state: "PENDING", pending_reason: "LOOKUP_ERROR", amount_cents: 0, note: `transfer lookup failed: ${(err as Error).message}; retry pending` };
+    return { transfer_id: null, state: "PENDING", pending_reason: "LOOKUP_ERROR", amount_cents: 0, retry_safe_to_advance: false, note: `transfer lookup failed: ${(err as Error).message}; retry pending` };
   }
   if (existing.length) {
     const match = existing.find((t) => transferMatches(t, expect) === null);
-    if (match) return { transfer_id: match.id, state: "TRANSFERRED", amount_cents: match.amount, recovered: true, note: `recovered existing transfer ${match.id} (${match.amount}c to ${destination})` };
+    if (match) return { transfer_id: match.id, state: "TRANSFERRED", amount_cents: match.amount, retry_safe_to_advance: false, recovered: true, note: `recovered existing transfer ${match.id} (${match.amount}c to ${destination})` };
     const problems = existing.map((t) => transferMatches(t, expect)).filter(Boolean).join("; ");
-    return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, note: `Stripe holds a transfer for this task that does not match what it owes (${problems}); not creating another; needs operator reconciliation` };
+    return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, retry_safe_to_advance: false, note: `Stripe holds a transfer for this task that does not match what it owes (${problems}); not creating another; needs operator reconciliation` };
   }
 
   const status = await ensureTransfersActive(stripe, destination, seller, opts.poll ?? {});
   if (status.transfers !== "active") {
-    return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, note: `transfer PENDING_ONBOARDING: ${destination} stripe_transfers=${status.transfers} (${status.blocking.join(", ") || "no details"})` };
+    return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, retry_safe_to_advance: false, note: `transfer PENDING_ONBOARDING: ${destination} stripe_transfers=${status.transfers} (${status.blocking.join(", ") || "no details"})` };
   }
   const attempt = opts.attempt ?? 0;
   try {
@@ -349,11 +398,12 @@ export async function reconcileSellerTransfer(
     const problem = transferMatches(transfer, expect);
     if (problem) {
       // An idempotent replay of an older request with other parameters, or a partial transfer: do not call it paid.
-      return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, note: `created transfer does not match the task: ${problem}; needs operator reconciliation` };
+      return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, retry_safe_to_advance: false, note: `created transfer does not match the task: ${problem}; needs operator reconciliation` };
     }
-    return { transfer_id: transfer.id, state: "TRANSFERRED", amount_cents: transfer.amount, note: `transferred ${transfer.amount}c to ${destination} (${transfer.id}${attempt ? `, attempt ${attempt}` : ""})` };
+    return { transfer_id: transfer.id, state: "TRANSFERRED", amount_cents: transfer.amount, retry_safe_to_advance: false, note: `transferred ${transfer.amount}c to ${destination} (${transfer.id}${attempt ? `, attempt ${attempt}` : ""})` };
   } catch (err) {
-    return { transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", amount_cents: 0, note: `transfer failed (attempt ${attempt}): ${(err as Error).message}; retry pending` };
+    const definitive = stripeDefinitivelyRejected(err);
+    return { transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", amount_cents: 0, retry_safe_to_advance: definitive, note: `transfer ${definitive ? "rejected" : "uncertain"} (attempt ${attempt}): ${(err as Error).message}; ${definitive ? "next retry must use attempt " + (attempt + 1) : "retry with the same attempt key"}` };
   }
 }
 
@@ -424,21 +474,28 @@ export async function onboardSellerAccount(stripe: Stripe, agent: { id: string; 
  */
 export type MockFaultStep = "hold" | "capture" | "transfer" | "release" | "compensate";
 let mockFaultSpec: string | null | undefined;
-const mockFaultBudget = new Map<MockFaultStep, number>();
+const mockFaultBudget = new Map<MockFaultStep, { left: number; transient: boolean }>();
+/** `transfer:2` = two definitive failures; `transfer~:2` = two transient ones (key not consumed). */
 export function setMockFaults(spec: string | null): void {
   mockFaultSpec = spec;
   mockFaultBudget.clear();
   for (const entry of (spec ?? "").split(",").map((e) => e.trim()).filter(Boolean)) {
-    const [step, n] = entry.split(":");
-    mockFaultBudget.set(step as MockFaultStep, n === undefined ? Number.POSITIVE_INFINITY : Number(n));
+    const [rawStep, n] = entry.split(":");
+    const transient = rawStep!.endsWith("~");
+    const step = (transient ? rawStep!.slice(0, -1) : rawStep!) as MockFaultStep;
+    mockFaultBudget.set(step, { left: n === undefined ? Number.POSITIVE_INFINITY : Number(n), transient });
   }
 }
-function mockFaultFires(step: MockFaultStep): boolean {
+/** Returns null when the step succeeds, else whether the injected failure is definitive. */
+function mockFault(step: MockFaultStep): { definitive: boolean } | null {
   if (mockFaultSpec === undefined) setMockFaults(process.env.MOCK_PAYMENT_FAULTS ?? null);
-  const left = mockFaultBudget.get(step) ?? 0;
-  if (left <= 0) return false;
-  mockFaultBudget.set(step, left - 1);
-  return true;
+  const b = mockFaultBudget.get(step);
+  if (!b || b.left <= 0) return null;
+  b.left -= 1;
+  return { definitive: !b.transient };
+}
+function mockFaultFires(step: MockFaultStep): boolean {
+  return mockFault(step) !== null;
 }
 
 interface MockLedgerEntry { held: number; captured: number; refunded: number; transferred: number; transfer_id: string | null; state: "HELD" | "CAPTURED" | "RELEASED" }
@@ -455,7 +512,8 @@ class MockProvider implements PaymentProvider {
   async onboardBuyer() { return {}; }
   async onboardSeller() { return {}; }
   async hold(task: { id: string; max_price_cents: number }): Promise<HoldResult> {
-    if (mockFaultFires("hold")) throw new MarketplaceError("PAYMENT_FAILED", "MOCK fault: hold refused.", { retryable: true, next_action: "Retry post_task." });
+    const fault = mockFault("hold");
+    if (fault) throw holdError(`MOCK fault: hold ${fault.definitive ? "refused" : "uncertain"}.`, fault.definitive ? "not_created" : "unknown", "Retry post_task.");
     mockLedger.set(task.id, { held: task.max_price_cents, captured: 0, refunded: 0, transferred: 0, transfer_id: null, state: "HELD" });
     return { payment_state: "MOCK", stripe_payment_intent_id: `mock_pi_${task.id}`, payment_link: null, task_status: "OPEN", note: "mock hold (no payment rail)" };
   }
@@ -474,6 +532,7 @@ class MockProvider implements PaymentProvider {
       transferred_cents: transfer.amount_cents,
       transfer_state: transfer.state,
       pending_reason: transfer.pending_reason,
+      transfer_retry_safe_to_advance: transfer.retry_safe_to_advance,
       note: `mock payout of ${amountCents}c (no payment rail); ${transfer.note}`,
     };
   }
@@ -490,7 +549,7 @@ class MockProvider implements PaymentProvider {
     return { payment_state: "MOCK", note: `mock hold undone (${reason})` };
   }
   retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts: RetryTransferOptions = {}): Promise<TransferOutcome> {
-    if (amountCents <= 0) return Promise.resolve({ transfer_id: null, state: "NOT_APPLICABLE", amount_cents: 0, note: "nothing owed to the seller" });
+    if (amountCents <= 0) return Promise.resolve({ transfer_id: null, state: "NOT_APPLICABLE", amount_cents: 0, retry_safe_to_advance: false, note: "nothing owed to the seller" });
     return this.mockTransfer(task, seller, amountCents, opts.attempt ?? 0);
   }
   async inspect(task: TaskRow): Promise<MoneyState> {
@@ -509,14 +568,15 @@ class MockProvider implements PaymentProvider {
   private async mockTransfer(task: { id: string }, seller: AgentRow | null, amountCents: number, attempt: number): Promise<TransferOutcome> {
     const entry = mockLedger.get(task.id);
     if (entry?.transfer_id) {
-      if (entry.transferred !== amountCents) return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, note: `mock transfer ${entry.transfer_id} moved ${entry.transferred}c, task owes ${amountCents}c; needs operator reconciliation` };
-      return { transfer_id: entry.transfer_id, state: "TRANSFERRED", amount_cents: entry.transferred, recovered: attempt > 0, note: `mock transfer ${entry.transfer_id} already exists` };
+      if (entry.transferred !== amountCents) return { transfer_id: null, state: "PENDING", pending_reason: "MISMATCH", amount_cents: 0, retry_safe_to_advance: false, note: `mock transfer ${entry.transfer_id} moved ${entry.transferred}c, task owes ${amountCents}c; needs operator reconciliation` };
+      return { transfer_id: entry.transfer_id, state: "TRANSFERRED", amount_cents: entry.transferred, retry_safe_to_advance: false, recovered: attempt > 0, note: `mock transfer ${entry.transfer_id} already exists` };
     }
-    if (!seller) return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, note: "seller unknown (payout PENDING_ONBOARDING)" };
-    if (mockFaultFires("transfer")) return { transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", amount_cents: 0, note: `MOCK fault: transfer failed (attempt ${attempt}); retry pending` };
+    if (!seller) return { transfer_id: null, state: "PENDING", pending_reason: "PENDING_ONBOARDING", amount_cents: 0, retry_safe_to_advance: false, note: "seller unknown (payout PENDING_ONBOARDING)" };
+    const fault = mockFault("transfer");
+    if (fault) return { transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", amount_cents: 0, retry_safe_to_advance: fault.definitive, note: `MOCK fault: transfer ${fault.definitive ? "rejected" : "uncertain"} (attempt ${attempt}); retry pending` };
     const id = `mock_tr_${task.id}`;
     if (entry) { entry.transferred = amountCents; entry.transfer_id = id; }
-    return { transfer_id: id, state: "TRANSFERRED", amount_cents: amountCents, note: `mock transfer ${id} of ${amountCents}c${attempt ? ` (attempt ${attempt})` : ""}` };
+    return { transfer_id: id, state: "TRANSFERRED", amount_cents: amountCents, retry_safe_to_advance: false, note: `mock transfer ${id} of ${amountCents}c${attempt ? ` (attempt ${attempt})` : ""}` };
   }
 }
 
@@ -526,14 +586,15 @@ class MockProvider implements PaymentProvider {
 // expiry, Connect transfer of the captured amount to the seller.
 // ---------------------------------------------------------------------------
 
-class StripeCardProvider implements PaymentProvider {
+export class StripeCardProvider implements PaymentProvider {
   readonly mode = "card" as const;
   readonly label = "Stripe TEST MODE — manual-capture hold on the buyer's saved test card";
   readonly min_cents = 50; // Stripe minimum charge for USD
   private readonly stripe: Stripe;
 
-  constructor(secretKey: string | undefined) {
-    this.stripe = createStripe(secretKey);
+  /** `client` lets tests inject a fake; production builds one from the test-mode key. */
+  constructor(secretKey: string | undefined, client?: Stripe) {
+    this.stripe = client ?? createStripe(secretKey);
   }
 
   onboardBuyer(agent: { id: string; display_name: string }): Promise<Partial<AgentRow>> {
@@ -550,6 +611,11 @@ class StripeCardProvider implements PaymentProvider {
         next_action: "Re-register the buyer agent so a test card is attached.",
       });
     }
+    // One hold per task id, ever: the task-scoped idempotency key makes a retry
+    // after an ambiguous response (timeout, lost reply) replay the same
+    // PaymentIntent instead of authorising the buyer twice. The service must
+    // retry with the same task id and amount; a different amount is an
+    // idempotency error, surfaced below.
     let pi: Stripe.PaymentIntent;
     try {
       pi = await this.stripe.paymentIntents.create({
@@ -564,12 +630,27 @@ class StripeCardProvider implements PaymentProvider {
         transfer_group: task.id,
         description: `Agent Task Marketplace hold for ${task.id} (TEST MODE)`,
         metadata: { task_id: task.id, buyer_id: buyer.id, app: "agent-task-marketplace" },
-      });
+      }, { idempotencyKey: holdIdempotencyKey(task.id) });
     } catch (err) {
-      throw new MarketplaceError("PAYMENT_FAILED", "Stripe refused the test-card hold.", { retryable: true, next_action: "Check the buyer test payment method and Stripe status, then retry post_task." });
+      const e = err as { type?: string; message?: string };
+      if (e?.type === "StripeIdempotencyError") {
+        // An intent for this task id exists with other parameters: not "not_created".
+        throw holdError("A hold for this task id already exists with different parameters.", "unknown", "Retry with the same amount, or post the task under a new id.", false);
+      }
+      if (stripeDefinitivelyRejected(err)) {
+        throw holdError("Stripe refused the test-card hold.", "not_created", "Check the buyer test payment method, then post a new task.");
+      }
+      throw holdError("Stripe did not confirm the hold.", "unknown", "Retry post_task for the same task id; the hold uses an idempotency key, so no second authorisation is created.");
     }
     if (pi.status !== "requires_capture") {
-      throw new MarketplaceError("PAYMENT_FAILED", `Unexpected PaymentIntent status ${pi.status}; expected requires_capture.`, { next_action: "Check this PaymentIntent in Stripe before posting another task." });
+      // A replay can return a hold that was already compensated or captured: an intent exists.
+      throw Object.assign(
+        new MarketplaceError("PAYMENT_FAILED", `PaymentIntent ${pi.id} is ${pi.status}; expected requires_capture.`, {
+          retryable: false,
+          next_action: pi.status === "canceled" ? "This task's hold was already released; post a new task." : "Check this PaymentIntent in Stripe before posting another task.",
+        }),
+        { hold_outcome: "unknown" as HoldOutcome },
+      );
     }
     return {
       payment_state: "HELD",
@@ -582,7 +663,7 @@ class StripeCardProvider implements PaymentProvider {
 
   async capture(task: TaskRow, seller: AgentRow | null, amountCents: number): Promise<CaptureResult> {
     if (!task.stripe_payment_intent_id) {
-      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, owed_cents: amountCents, transferred_cents: 0, transfer_state: "NOT_APPLICABLE", note: "no PaymentIntent on task; nothing captured" };
+      return { payment_state: "CAPTURED", stripe_capture_id: null, stripe_transfer_id: null, owed_cents: amountCents, transferred_cents: 0, transfer_state: "NOT_APPLICABLE", transfer_retry_safe_to_advance: false, note: "no PaymentIntent on task; nothing captured" };
     }
     const pi = await this.stripe.paymentIntents.capture(task.stripe_payment_intent_id, { amount_to_capture: amountCents }, { idempotencyKey: `atm:${task.id}:capture` });
     const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id ?? null;
@@ -596,6 +677,7 @@ class StripeCardProvider implements PaymentProvider {
       transferred_cents: transfer.amount_cents,
       transfer_state: transfer.state,
       pending_reason: transfer.pending_reason,
+      transfer_retry_safe_to_advance: transfer.retry_safe_to_advance,
       note,
     };
   }
@@ -657,7 +739,11 @@ class RoutingProvider implements PaymentProvider {
   capture(task: TaskRow, seller: AgentRow | null, amountCents: number) { return this.for(task.payment_mode).capture(task, seller, amountCents); }
   release(task: TaskRow, reason: string) { return this.for(task.payment_mode).release(task, reason); }
   compensateHold(task: { id: string; max_price_cents: number }, hold: HoldResult, reason: string) { return this.configured.compensateHold(task, hold, reason); }
-  retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts?: RetryTransferOptions) { return this.for(task.payment_mode).retryTransfer(task, seller, amountCents, opts); }
+  retryTransfer(task: TaskRow, seller: AgentRow | null, amountCents: number, opts?: RetryTransferOptions): Promise<TransferOutcome> {
+    const p = this.for(task.payment_mode);
+    if (!p.retryTransfer) return Promise.resolve({ transfer_id: null, state: "PENDING", pending_reason: "PROVIDER_ERROR", amount_cents: 0, retry_safe_to_advance: false, note: `${p.mode} rail cannot retry transfers` });
+    return p.retryTransfer(task, seller, amountCents, opts);
+  }
   inspect(task: TaskRow) { return this.for(task.payment_mode).inspect(task); }
 
   /** Settlement must use the stored rail; configuration errors must not select a different rail. */
