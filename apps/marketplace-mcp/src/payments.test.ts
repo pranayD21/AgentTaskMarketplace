@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import type { AgentRow, TaskRow } from "./db.js";
-import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
+import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
 
 // ---------------------------------------------------------------- fakes
 const seller = { id: "seller_1", stripe_account_id: "acct_test" } as AgentRow;
@@ -262,5 +262,48 @@ describe("StripeCardProvider.hold idempotency (P1)", () => {
     await p.hold({ id: "task_u", max_price_cents: 100 }, buyer);
     expect(await p.capture({ ...t, id: "task_u", stripe_payment_intent_id: "mock_pi_task_u" }, seller, 60)).toMatchObject({ transfer_state: "PENDING", transfer_retry_safe_to_advance: true });
     setMockFaults(null);
+  });
+});
+
+// ---------------------------------------------------------------- seller payout onboarding (installer step 6)
+describe("sellerPayoutOnboarding", () => {
+  function fakeAccounts(o: { status: string; blocking?: string[]; linkFails?: boolean }) {
+    const links: string[] = [];
+    const stripe = {
+      v2: { core: {
+        accounts: { retrieve: async () => ({ id: "acct_x", configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: o.status, status_details: [] } } } } }, requirements: { entries: (o.blocking ?? []).map((d) => ({ description: d, impact: { restricts_capabilities: [{ capability: "stripe_balance.stripe_transfers" }] } })) } }) },
+        accountLinks: { create: async (p: { account: string }) => { if (o.linkFails) throw new Error("links disabled"); links.push(p.account); return { url: `https://connect.stripe.com/setup/${p.account}` }; } },
+      } },
+    } as unknown as Stripe;
+    return { stripe, links };
+  }
+  const agent = { id: "seller_1", stripe_account_id: "acct_x" };
+  it("active accounts need nothing", async () => {
+    const { stripe, links } = fakeAccounts({ status: "active" });
+    expect(await sellerPayoutOnboarding(stripe, agent, "http://localhost:3000")).toEqual({ payout_status: "active", onboarding_url: null, blocking: [] });
+    expect(links).toHaveLength(0);
+  });
+  it("restricted accounts get a hosted onboarding link and the blocking requirements", async () => {
+    const { stripe, links } = fakeAccounts({ status: "restricted", blocking: ["identity.entity_type", "defaults.profile.business_url"] });
+    const r = await sellerPayoutOnboarding(stripe, agent, "http://localhost:3000");
+    expect(r).toMatchObject({ payout_status: "pending", onboarding_url: "https://connect.stripe.com/setup/acct_x", blocking: ["identity.entity_type", "defaults.profile.business_url"] });
+    expect(links).toEqual(["acct_x"]);
+  });
+  it("never throws: no account → none; link failure → pending without a url", async () => {
+    const { stripe } = fakeAccounts({ status: "restricted", linkFails: true });
+    expect((await sellerPayoutOnboarding(stripe, { id: "s", stripe_account_id: null }, "http://x")).payout_status).toBe("none");
+    expect(await sellerPayoutOnboarding(stripe, agent, "http://x")).toMatchObject({ payout_status: "pending", onboarding_url: null });
+  });
+  it("includeLink=false only reads status and mints no link", async () => {
+    const { stripe, links } = fakeAccounts({ status: "restricted", blocking: ["identity.entity_type"] });
+    expect(await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: false })).toMatchObject({ payout_status: "pending", onboarding_url: null, blocking: ["identity.entity_type"] });
+    expect(links).toHaveLength(0);
+  });
+  it("is exposed on the configured provider, and sellerPayoutInfo maps the mock rail to MOCK with a TEST/MOCK label", async () => {
+    expect(await payments().payoutOnboarding({ id: "s", stripe_account_id: null })).toMatchObject({ payout_status: "active" });
+    const info = await sellerPayoutInfo({ id: "s", stripe_account_id: null }, { includeLink: true });
+    expect(info).toMatchObject({ payout_status: "MOCK", payout_onboarding_url: null, blocking: [] });
+    expect(info.payout_label).toMatch(/MOCK/);
+    expect(info.payout_label).toMatch(/not a verified real payout/);
   });
 });
