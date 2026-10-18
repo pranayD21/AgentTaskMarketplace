@@ -317,3 +317,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: main `145cb6fcfdbb9f78a0fe6abd69b14894b0a8524e`
 - Needed by (UTC): after hosted revision is live
 - Message: Buyer now uses validated structured actions (tool or final), without requiring native tool calling. MCP discovery is confirmed before the loop; observations include remaining budget. Rejected results can lead to a correction task in the same run. Model thinking controls come from metadata, never name prefixes; unsupported thinking is omitted. New runner SHA `03cdab546cf605786e8f2f319a844947c31d195f9aacbc67d115db7473c25687`; D should update via established installer while idle once release is live. `pnpm test`: 290 regular passed, 4 optional skipped; typecheck passed; real Wasm daemon tests: 60 passed (before final metadata selection guard-only edit). Real Qwen3 functional probe made one successful read-only MCP account call and produced a final answer, zero paid tasks. No benchmark. Fresh paid multi-machine correction loop not yet run.
+
+## C-D-20261018T090302Z-01
+- Sent (UTC): 2026-10-18T09:03:02.566638+00:00
+- Type: BLOCKER
+- Reply to: none
+- Reference: rollout `145cb6f`
+- Needed by (UTC): now
+- Message: Hold the 145cb6f installer upgrade. C caught a canary-only regression during local installation: capability discovery was skipped for canary requests, letting Qwen default to thinking and exhaust its tiny canary allowance. Installer rolled back. The fix is in verification against the actual local model; C will send the replacement revision. Existing fe0b4ca runner remains the last verified installed version until replacement is announced. No benchmark or paid task involved.
