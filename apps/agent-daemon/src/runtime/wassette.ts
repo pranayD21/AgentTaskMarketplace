@@ -58,12 +58,23 @@ export function judgeGrants(marketplaceUrl: string, denyMarketplace = false): Gr
   };
 }
 
+const JudgeUsageRow = z.object({
+  purpose: z.enum(["grade", "replacement"]), attempt: z.number().int(), model: z.string(), outcome: z.string(), duration_ms: z.number(),
+  input_tokens: z.number().nullable(), output_tokens: z.number().nullable(),
+  cache_creation_input_tokens: z.number().nullable(), cache_read_input_tokens: z.number().nullable(),
+});
 const JudgeCycleResult = z.union([
   z.object({ idle: z.literal(true) }),
   z.object({
-    idle: z.literal(false), task_id: z.string(), result_id: z.string(), verdict: z.enum(["APPROVE", "REJECT"]), reason_code: z.string(),
-    reason_public: z.string(), score: z.number().optional(), seller_status: z.string().nullable(),
-    seller_payout_cents: z.number().nullable(), settlement_note: z.string().nullable(),
+    idle: z.literal(false), deferred: z.literal(true), task_id: z.string(), result_id: z.string(),
+    failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,80}$/), usage: z.array(JudgeUsageRow),
+  }),
+  z.object({
+    idle: z.literal(false), deferred: z.literal(false), task_id: z.string(), result_id: z.string(), verdict: z.enum(["APPROVE", "REJECT"]),
+    reason_code: z.string(), reason_public: z.string(), score: z.number().optional(),
+    replacement_status: z.enum(["not_needed", "available", "unavailable"]), replacement_failure_code: z.string().nullable(),
+    seller_status: z.string().nullable(), seller_payout_cents: z.number().nullable(), settlement_note: z.string().nullable(),
+    usage: z.array(JudgeUsageRow),
   }),
 ]);
 
@@ -167,7 +178,7 @@ export class WassetteRuntime implements Runtime {
     if (res.isError) {
       const code = Object.keys(ERROR_CODES).find((c) => text.includes(c));
       if (code) throw new MarketplaceError(code as ErrorCode, code);
-      const safe = /\b(?:TASK_TIMEOUT|MODEL_NOT_INSTALLED|RUNNER_FAILED|OLLAMA_HTTP_\d+|MARKETPLACE_HTTP_\d+|MARKETPLACE_TIMEOUT|JUDGE_MODEL_TIMEOUT|MISSING_[A-Z_]+)\b/.exec(text)?.[0];
+      const safe = /\b(?:TASK_TIMEOUT|MODEL_NOT_INSTALLED|RUNNER_FAILED|OLLAMA_HTTP_\d+|MARKETPLACE_HTTP_\d+|MARKETPLACE_TIMEOUT|JUDGE_[A-Z0-9_]+|MISSING_[A-Z_]+)\b/.exec(text)?.[0];
       throw new Error(safe ?? "SANDBOX_CALL_FAILED");
     }
     try { return JSON.parse(text) as Record<string, unknown>; } catch { return { text }; }
