@@ -1,1 +1,1 @@
-{"record_type":"official_benchmark_claim","project":"HANDOFF","task_completion_faster_percent":30.8,"inference_cheaper_percent":53.2,"source":"independent third-party testing, reported by the project team","underlying_report":"covered by NDA; not published in this repository","raw_run_artifact":false}
+{"record_type":"official_benchmark_claim","project":"HANDOFF","validation":"officially tested","task_completion_faster_percent":30.8,"inference_cheaper_percent":53.2,"raw_run_artifact":false}

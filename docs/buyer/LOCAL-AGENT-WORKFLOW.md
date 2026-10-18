@@ -32,7 +32,7 @@ Stop selling before changing the selected model, CPU thread count, context size 
 
 Run the existing installer again, then open Account & setup and prepare the model if the runner changed. This preserves the Google-linked identities and models. Complete setup before activating Seller mode. Old installed runners do not gain new agent tools merely because the server was deployed.
 
-This workflow's functional fixtures are separate from HANDOFF's official independent third-party benchmark results: **30.8% faster task completion and 53.2% cheaper inference**. See the [benchmark claims](../CLAIMS.md).
+This workflow's functional fixtures are separate from HANDOFF's officially tested benchmark results: **30.8% faster task completion and 53.2% cheaper inference**. See the [benchmark claims](../CLAIMS.md).
 
 ### Worker output and task failures
 

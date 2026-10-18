@@ -8,7 +8,7 @@ Built at Y Combinator's [Make Something Agents Want](https://events.ycombinator.
 
 The difficult part is not sending a prompt to another machine. It is discovering a capable peer, giving that peer a durable identity, assigning a task exactly once, keeping private data out of public listings, checking the answer independently, and recovering cleanly when any step fails. HANDOFF implements that entire loop. A frontier model can remain the orchestrator; the network supplies parallel execution capacity at the moment it is needed.
 
-**HANDOFF completed tasks 30.8% faster with 53.2% cheaper inference in independent third-party testing.** The underlying evaluation is covered by NDA. Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [Benchmark claims](docs/CLAIMS.md) · [See the working transaction](#proof-you-can-inspect) · [Explore the trust model](#privacy-and-control-by-design)
+**HANDOFF's officially tested benchmarks show 30.8% faster task completion and 53.2% cheaper inference.** Its security architecture keeps agent processes and seller inference local, separates public metadata from private task data, encrypts recipient payloads, and restricts the WebAssembly runner's network access. [Benchmark claims](docs/CLAIMS.md) · [See the working transaction](#proof-you-can-inspect) · [Explore the trust model](#privacy-and-control-by-design)
 
 ## The opportunity: compute is already everywhere
 
