@@ -22,7 +22,9 @@ import {
   MAX_PRICE_CENTS,
   MODEL_ALLOWLIST,
   APPROVE_REASON_CODES,
+  CLIENT_REQUEST_ID_PATTERN,
   MarketplaceError,
+  PART_KEY_PATTERN,
   ModelInfo,
   REJECT_REASON_CODES,
   Rubric,
@@ -36,6 +38,9 @@ import {
   type ClaimPublicV02,
   type JudgePayload,
   type KeyDescriptor,
+  type JobProgress,
+  type JobPublic,
+  type JobStatus,
   type ResultPlaintext,
   type RunnerKeySource,
   type SellerPayload,
@@ -46,11 +51,12 @@ import {
   type VerdictReasonCode,
 } from "@atm/shared";
 import { hashApiKey } from "./auth.js";
-import { adjustBuyerBalance, countTasksByStatus, db, dbLabel, ensureSchema, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
+import { adjustBuyerBalance, adjustJobBudget, countTasksByStatus, db, dbLabel, ensureSchema, type JobRow, logEvent, one, unwrap, type AgentRow, type ResultRow, type SellerRow, type SettlementRow, type TaskRow, type VerdictRow } from "./db.js";
 import { env } from "./env.js";
 import { newApiKey, newId } from "./ids.js";
 import { inkbox } from "./inkbox.js";
 import { kekOpen, kekSeal } from "./kek.js";
+import { notifyTask } from "./notices.js";
 import { payments } from "./payments.js";
 import { deferReview, reviewDue, reviewOf } from "./review.js";
 import { RESUME_AFTER_S, finalizeSettlement, outcomeForStatus, recordIntent, retryPendingTransfers, settlementOf } from "./settlement.js";
@@ -320,9 +326,58 @@ export interface PostTaskInput {
   expires_in_s?: number;
   rubric: Rubric;
   max_tokens?: number;
+  // v0.3 §10: parts of a job, and idempotent posting
+  job_id?: string;
+  part_key?: string;
+  part_label?: string;
+  client_request_id?: string;
 }
 
-export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{ task: TaskPublic; payment_note: string; payment_label: string }> {
+/** A part whose latest attempt ended like this may be posted again as a new attempt. */
+const FAILED_ATTEMPT_STATUSES: readonly TaskStatus[] = ["REJECTED", "EXPIRED", "CANCELLED"];
+
+async function latestAttempt(jobId: string, partKey: string): Promise<TaskRow | null> {
+  return one<TaskRow>(await db().from("tasks").select("*").eq("job_id", jobId).eq("part_key", partKey).order("attempt", { ascending: false }).limit(1));
+}
+
+/** The task an earlier, possibly unanswered post already created (contract §10). */
+async function existingPost(buyer: AgentRow, input: PostTaskInput): Promise<TaskRow | null> {
+  if (input.client_request_id) {
+    const t = await one<TaskRow>(await db().from("tasks").select("*").eq("buyer_id", buyer.id).eq("client_request_id", input.client_request_id).limit(1));
+    if (t) return t;
+  }
+  if (input.job_id && input.part_key) {
+    const latest = await latestAttempt(input.job_id, input.part_key);
+    if (latest && !FAILED_ATTEMPT_STATUSES.includes(latest.status)) return latest;
+  }
+  return null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return err instanceof MarketplaceError && /\b23505\b|duplicate key/.test(err.message);
+}
+
+function validatePostKeys(input: PostTaskInput): void {
+  const bad = (msg: string, next: string) => new MarketplaceError("VALIDATION_ERROR", msg, { next_action: next });
+  if ((input.job_id == null) !== (input.part_key == null)) throw bad("job_id and part_key go together.", "Send both to post a part of a job (create_job first), or neither for a standalone task.");
+  if (input.part_key != null && !PART_KEY_PATTERN.test(input.part_key)) throw bad("part_key must match [A-Za-z0-9._-]{1,64}.", "Use a short stable id such as part-1; it is public.");
+  if (input.part_label != null && input.job_id == null) throw bad("part_label needs a job_id.", "Drop part_label, or post the task as part of a job.");
+  if (input.client_request_id != null && !CLIENT_REQUEST_ID_PATTERN.test(input.client_request_id)) {
+    throw bad("client_request_id must match [A-Za-z0-9._-]{8,64}.", "Generate one random id per intended task and reuse it when retrying the same post.");
+  }
+}
+
+export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{ task: TaskPublic; idempotent: boolean; payment_note: string; payment_label: string }> {
+  validatePostKeys(input);
+  let job: JobRow | null = null;
+  if (input.job_id) {
+    job = await one<JobRow>(await db().from("jobs").select("*").eq("id", input.job_id).limit(1));
+    if (!job || job.buyer_id !== buyer.id) throw new MarketplaceError("NOT_FOUND", `Unknown job ${input.job_id}.`, { next_action: "Call list_my_jobs, or create_job first." });
+  }
+  const repeat = await existingPost(buyer, input);
+  if (repeat) return { task: toTaskPublic(repeat), idempotent: true, payment_note: "This post was already accepted; the existing task is returned and no new hold was placed.", payment_label: payments().label };
+  const attempt = job ? ((await latestAttempt(job.id, input.part_key!))?.attempt ?? 0) + 1 : null;
+
   const unknown = input.allowed_models.filter((m) => !isAllowlistedModel(m));
   if (unknown.length) {
     throw new MarketplaceError("MODEL_NOT_ALLOWED", `Models not on the allowlist: ${unknown.join(", ")}.`, {
@@ -338,8 +393,20 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
   // Reserve against the cap atomically before any money moves, so concurrent
   // posts from one buyer cannot jointly exceed what the human approved.
   const id = newId("task");
+  if (job) {
+    const jr = await adjustJobBudget(job.id, { reserved: input.max_price_cents }, { enforceCap: true, key: `reserve:${id}` });
+    if (jr.refused) {
+      const j = jr.job!;
+      throw new MarketplaceError(
+        "JOB_BUDGET_EXCEEDED",
+        `This part would bring job ${j.id} to ${j.reserved_cents + j.spent_cents + input.max_price_cents}c, above its ${j.budget_cents}c budget (reserved ${j.reserved_cents}c, spent ${j.spent_cents}c).`,
+        { next_action: "Call get_job to see which parts are live; lower max_price_cents, cancel an OPEN part, or create a new job with a larger budget within your cap." },
+      );
+    }
+  }
   const reservation = await adjustBuyerBalance(buyer.id, { reserved: input.max_price_cents }, { enforceCap: true, key: `reserve:${id}` });
   if (reservation.refused) {
+    if (job) await adjustJobBudget(job.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
     const b = reservation.buyer!;
     const projected = b.reserved_cents + b.spent_cents + input.max_price_cents;
     throw new MarketplaceError(
@@ -348,7 +415,10 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
       { next_action: "Call whoami for available_cents, then lower max_price_cents, cancel_task OPEN tasks you no longer need (releases their holds), or wait for claimed tasks to settle. Only your human can raise the cap." },
     );
   }
-  const unreserve = () => adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
+  const unreserve = async () => {
+    await adjustBuyerBalance(buyer.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
+    if (job) await adjustJobBudget(job.id, { reserved: -input.max_price_cents }, { key: `unreserve:${id}` });
+  };
 
   const max_tokens = input.max_tokens ?? 512;
   const judgePayload: JudgePayload = { task_id: id, prompt: input.prompt, context: input.context, rubric: input.rubric };
@@ -378,20 +448,28 @@ export async function postTask(buyer: AgentRow, input: PostTaskInput): Promise<{
     stripe_payment_intent_id: hold.stripe_payment_intent_id,
     payment_link: hold.payment_link,
     claim_count: 0,
+    job_id: job?.id ?? null,
+    part_key: input.part_key ?? null,
+    part_label: input.part_label ?? null,
+    attempt,
+    client_request_id: input.client_request_id ?? null,
   };
   let task: TaskRow;
   try {
     task = (unwrap(await db().from("tasks").insert(row).select()) as TaskRow[])[0]!;
   } catch (err) {
     await compensateHold(row, hold.payment_state, unreserve);
+    // A concurrent identical post won the unique index: hand back its task (contract §10).
+    const winner = isUniqueViolation(err) ? await existingPost(buyer, input) : null;
+    if (winner) return { task: toTaskPublic(winner), idempotent: true, payment_note: "A concurrent identical post was accepted first; its task is returned and this hold was released.", payment_label: payments().label };
     throw err;
   }
   await logEvent("task.posted", {
     task_id: id,
     agent_id: buyer.id,
-    meta: { allowed_models: input.allowed_models, max_price_cents: input.max_price_cents, rubric_kind: input.rubric.kind, payment_state: hold.payment_state },
+    meta: { allowed_models: input.allowed_models, max_price_cents: input.max_price_cents, rubric_kind: input.rubric.kind, payment_state: hold.payment_state, job_id: job?.id ?? null, part_key: input.part_key ?? null, attempt },
   });
-  return { task: toTaskPublic(task), payment_note: hold.note, payment_label: payments().label };
+  return { task: toTaskPublic(task), idempotent: false, payment_note: hold.note, payment_label: payments().label };
 }
 
 /**
@@ -410,6 +488,91 @@ async function compensateHold(row: Record<string, unknown>, paymentState: string
   }
   await unreserve();
   await logEvent("task.post_compensated", { task_id: taskId, agent_id: String(row.buyer_id), meta: { payment_state: paymentState } });
+}
+
+// ---------------------------------------------------------------------------
+// Jobs: one buyer request split into parts (contract §10). No private text.
+// ---------------------------------------------------------------------------
+
+const NON_TERMINAL_STATUSES: readonly TaskStatus[] = ["CLAIMED", "PAYLOAD_READY", "RUNNING", "SUBMITTED", "JUDGING"];
+
+/** Progress over the latest attempt of each part_key. */
+export function summarizeJob(job: JobRow, parts: TaskRow[]): JobPublic {
+  const latest = new Map<string, TaskRow>();
+  for (const t of parts) {
+    const key = t.part_key ?? t.id;
+    const cur = latest.get(key);
+    if (!cur || (t.attempt ?? 0) > (cur.attempt ?? 0)) latest.set(key, t);
+  }
+  const l = [...latest.values()];
+  const count = (pred: (t: TaskRow) => boolean) => l.filter(pred).length;
+  const progress: JobProgress = {
+    parts: l.length,
+    approved: count((t) => t.status === "APPROVED"),
+    rejected: count((t) => t.status === "REJECTED"),
+    in_progress: count((t) => NON_TERMINAL_STATUSES.includes(t.status)),
+    open: count((t) => t.status === "OPEN" || t.status === "AWAITING_PAYMENT"),
+    failed_latest: count((t) => FAILED_ATTEMPT_STATUSES.includes(t.status)),
+  };
+  const status: JobStatus = !l.length ? "EMPTY" : progress.in_progress + progress.open > 0 ? "IN_PROGRESS" : progress.approved === l.length ? "COMPLETE" : "PARTIAL_FAILURE";
+  return { job_id: job.id, buyer_id: job.buyer_id, label_public: job.label_public, budget_cents: job.budget_cents, reserved_cents: job.reserved_cents, spent_cents: job.spent_cents, status, created_at: job.created_at, progress };
+}
+
+async function partsOf(jobIds: string[]): Promise<Map<string, TaskRow[]>> {
+  const out = new Map<string, TaskRow[]>(jobIds.map((id) => [id, []]));
+  if (!jobIds.length) return out;
+  const rows = unwrap(await db().from("tasks").select("*").in("job_id", jobIds).order("created_at", { ascending: true }).limit(2000)) as TaskRow[];
+  for (const t of rows) out.get(t.job_id!)?.push(t);
+  return out;
+}
+
+export interface CreateJobInput {
+  label_public?: string;
+  budget_cents: number;
+  client_job_key?: string;
+}
+
+export async function createJob(buyer: AgentRow, input: CreateJobInput): Promise<{ job: JobPublic; idempotent: boolean }> {
+  if (input.client_job_key != null && !CLIENT_REQUEST_ID_PATTERN.test(input.client_job_key)) {
+    throw new MarketplaceError("VALIDATION_ERROR", "client_job_key must match [A-Za-z0-9._-]{8,64}.", { next_action: "Generate one random key per job and reuse it when retrying create_job." });
+  }
+  const byKey = async () =>
+    input.client_job_key ? await one<JobRow>(await db().from("jobs").select("*").eq("buyer_id", buyer.id).eq("client_job_key", input.client_job_key).limit(1)) : null;
+  const existing = await byKey();
+  if (existing) return { job: summarizeJob(existing, (await partsOf([existing.id])).get(existing.id)!), idempotent: true };
+  const fresh = (await getAgent(buyer.id)) ?? buyer;
+  const available = fresh.spend_cap_cents - fresh.reserved_cents - fresh.spent_cents;
+  if (input.budget_cents > available) {
+    throw new MarketplaceError("SPEND_CAP_EXCEEDED", `A ${input.budget_cents}c job budget exceeds your available ${available}c (cap ${fresh.spend_cap_cents}c).`, {
+      next_action: "Lower budget_cents to at most available_cents from whoami. Only your human can raise the cap.",
+    });
+  }
+  let job: JobRow;
+  try {
+    job = (unwrap(await db().from("jobs").insert({ id: newId("job"), buyer_id: buyer.id, label_public: input.label_public ?? null, budget_cents: input.budget_cents, client_job_key: input.client_job_key ?? null }).select()) as JobRow[])[0]!;
+  } catch (err) {
+    const winner = isUniqueViolation(err) ? await byKey() : null;
+    if (winner) return { job: summarizeJob(winner, []), idempotent: true };
+    throw err;
+  }
+  await logEvent("job.created", { agent_id: buyer.id, meta: { job_id: job.id, budget_cents: job.budget_cents } });
+  return { job: summarizeJob(job, []), idempotent: false };
+}
+
+export async function getJobForBuyer(buyer: AgentRow, jobId: string) {
+  await sweep();
+  const job = await one<JobRow>(await db().from("jobs").select("*").eq("id", jobId).limit(1));
+  if (!job || job.buyer_id !== buyer.id) throw new MarketplaceError("NOT_FOUND", `Unknown job ${jobId}.`, { next_action: "Call list_my_jobs for your job ids." });
+  const parts = (await partsOf([job.id])).get(job.id)!;
+  const summary = summarizeJob(job, parts);
+  return { job: summary, progress: summary.progress, parts: parts.map(toTaskPublic) };
+}
+
+export async function listJobsForBuyer(buyer: AgentRow): Promise<JobPublic[]> {
+  await sweep();
+  const jobs = unwrap(await db().from("jobs").select("*").eq("buyer_id", buyer.id).order("created_at", { ascending: false }).limit(50)) as JobRow[];
+  const parts = await partsOf(jobs.map((j) => j.id));
+  return jobs.map((j) => summarizeJob(j, parts.get(j.id)!));
 }
 
 export async function listTasksForBuyer(buyer: AgentRow, status?: TaskStatus): Promise<TaskPublic[]> {
@@ -628,9 +791,8 @@ export async function claimTask(agent: AgentRow, taskId: string, modelId: string
       .eq("agent_id", agent.id),
   );
   await logEvent("task.claimed", { task_id: task.id, agent_id: agent.id, meta: { claim_id: claimId, model_id: modelId, price_cents: mine.ask_cents, lease_expires_at: lease, runner_key_id: sealTo.key_id, runner_key_source: keySource } });
-  const ctx = await inkbox.notify({ type: "assignment", task_id: task.id, to_handle: agent.inkbox_handle, text: `Task ${task.id} assigned to you (${modelId}, ${mine.ask_cents}c). Lease until ${lease}.`, context_id: task.inkbox_context_id });
-  if (ctx && !task.inkbox_context_id) unwrap(await db().from("tasks").update({ inkbox_context_id: ctx }).eq("id", task.id));
   const updated = rows[0]!;
+  await notifyTask(updated, { type: "assignment", to_handle: agent.inkbox_handle, text: `Task ${task.id} assigned to you (${modelId}, ${mine.ask_cents}c). Lease until ${lease}.` });
   return {
     claim_id: claimId,
     task_id: task.id,
@@ -736,7 +898,7 @@ export async function submitResult(agent: AgentRow, taskId: string, claimId: str
   if (!rows.length) throw new MarketplaceError("INVALID_STATE", "Task left the active state while submitting.", { next_action: "Call get_task; the lease may have lapsed and the task reopened." });
   unwrap(await db().from("sellers").update({ last_seen: nowIso() }).eq("agent_id", agent.id));
   await logEvent("result.submitted", { task_id: taskId, agent_id: agent.id, meta: { result_id: resultId, runtime_ms: input.runtime_ms, commitment_sha256: input.commitment_sha256 } });
-  await inkbox.notify({ type: "submitted", task_id: taskId, to_handle: null, text: `Result for ${taskId} submitted; awaiting judge.`, context_id: task.inkbox_context_id });
+  await notifyTask(rows[0]!, { type: "submitted", to_handle: null, text: `Result for ${taskId} submitted; awaiting judge.` });
   return { result_id: resultId, task: toTaskPublic(rows[0]!) };
 }
 
@@ -982,6 +1144,9 @@ export async function dashboard() {
   const verdicts = (unwrap(await db().from("verdicts").select("id,task_id,verdict,reason_code,score,created_at").order("created_at", { ascending: false }).limit(40)) as Pick<VerdictRow, "id" | "task_id" | "verdict" | "reason_code" | "score" | "created_at">[])
     .map((v) => ({ ...v, reason_public: publicReason(v.reason_code) }));
   const settlements = (unwrap(await db().from("settlements").select("*").order("created_at", { ascending: false }).limit(40)) as SettlementRow[]).map(publicSettlement);
+  const jobRows = unwrap(await db().from("jobs").select("*").order("created_at", { ascending: false }).limit(20)) as JobRow[];
+  const jobParts = await partsOf(jobRows.map((j) => j.id));
+  const jobs = jobRows.map((j) => summarizeJob(j, jobParts.get(j.id)!));
   return {
     generated_at: nowIso(),
     payments: { mode: payments().mode, label: payments().label },
@@ -991,6 +1156,7 @@ export async function dashboard() {
     sellers,
     verdicts,
     settlements,
+    jobs,
     events,
   };
 }
