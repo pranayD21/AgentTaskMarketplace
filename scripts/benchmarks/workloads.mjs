@@ -75,7 +75,7 @@ export function summarize(records) {
   };
 }
 export function usageRecords(report) {
-  return report.records.filter(row => row.ended_at).map(row => ({
+  const main = report.records.filter(row => row.ended_at).map(row => ({
     schema: 'atm.usage.v1', run_id: report.run_id, case_id: row.sample_id, arm: report.arm,
     component: report.arm === 'local' ? 'seller' : 'buyer',
     task_id: row.task_id ?? null,
@@ -92,4 +92,13 @@ export function usageRecords(report) {
     price_source: report.rate_source?.url ?? null, price_date: report.rate_source?.checked_on ?? null,
     notes: `phase=${report.phase}; status=${row.status}; output redacted; system cost incomplete`,
   }));
+  const payment = report.records.filter(row => row.ended_at && row.payment).map(row => ({
+    schema:'atm.usage.v1',run_id:report.run_id,case_id:row.sample_id,arm:'marketplace',component:'payment',task_id:row.task_id,
+    provider:'stripe',model:'stripe-test-card',started_at:row.started_at,ended_at:row.ended_at,latency_ms:row.latency_ms,
+    input_tokens:null,output_tokens:null,retries:0,success:row.payment.state==='CAPTURED',energy_wh:null,
+    cost_usd:row.payment.hypothetical_live_card_fee_usd,cost_basis:row.payment.hypothetical_live_card_fee_usd===null?null:'estimate',
+    price_source:'https://stripe.com/pricing',price_date:'2026-10-18',
+    notes:`Hypothetical live US domestic-card processing fee, NOT incurred in Stripe TEST. Buyer test charge ${row.stripe_test_charge_cents ?? 'unknown'}c; offer ${row.payment.posted_offer_cents}c; transferred ${row.payment.payout_transferred_cents ?? 'unknown'}c. Buyer price is not a system resource cost.`,
+  }));
+  return [...main,...payment];
 }

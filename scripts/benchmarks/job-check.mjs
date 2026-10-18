@@ -128,7 +128,8 @@ try {
   await registration.initialize();
   const identity = await registration.tool('register_agent', { kind: 'buyer', display_name: 'isolated-job-fixture', spend_cap_cents: 200 });
   const inputFile = path.join(temporary, 'input.json');
-  await fs.writeFile(inputFile, JSON.stringify({ instruction:'Double the numeric value in each record.',records:[{id:'a',value:3},{id:'b',value:4},{id:'c',value:5},{id:'d',value:6}],rubric:{kind:'contains_text',expected_text:'output'} }),{mode:0o600});
+  const privateMarker='PRIVATE_SYNTHETIC_REASON_MUST_NOT_PUBLISH';
+  await fs.writeFile(inputFile, JSON.stringify({ instruction:`Double the numeric value in each record. ${privateMarker}`,records:[{id:'a',value:3},{id:'b',value:4},{id:'c',value:5},{id:'d',value:6}],rubric:{kind:'contains_text',expected_text:'output'} }),{mode:0o600});
   const planned=await invoke(['job-plan',inputFile,'--name','fixture','--parts','2','--budget','200'],endpoint,identity.api_key);
   assert.equal(planned.code,0); assert.equal(postCalls,0);
   const failed=await invoke(['job-run','fixture','--timeout','1'],endpoint,identity.api_key);
@@ -140,7 +141,6 @@ try {
   const journal=JSON.parse(await fs.readFile(path.join(temporary,'fixture.json'),'utf8'));
   const judgeIdentity=await registration.tool('register_agent',{kind:'judge',display_name:'isolated-job-judge',judge_secret:judgeSecret});
   const judgeClient=createClient(endpoint,judgeIdentity.api_key); await judgeClient.initialize();
-  const privateMarker='PRIVATE_SYNTHETIC_REASON_MUST_NOT_PUBLISH';
   const sellerIds=[];
   for(const part of journal.plan.parts){
     const sellerIdentity=await registration.tool('register_agent',{kind:'seller',display_name:'isolated-job-seller'});

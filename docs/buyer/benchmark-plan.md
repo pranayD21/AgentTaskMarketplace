@@ -69,3 +69,11 @@ Per-attempt redacted JSON and summaries go to `docs/buyer/runs/<run>-<arm>-<phas
 ## Functional failures are separate
 
 `node scripts/benchmarks/disconnect-check.mjs` starts an isolated real MCP server in MEMORY/MOCK mode, cuts a real HTTP response after upstream post acceptance, restarts the buyer process, recovers its sole task, and cancels it. The redacted [disconnect result](runs/disconnect-v1.json) is functional evidence, not a quality/latency/cost sample or real Stripe test. Armature's missing-ID recovery remains labelled simulated in [evaluation.md](evaluation.md).
+
+## Marketplace execution gate, 04:18Z
+
+D authorized 1,200 test cents on B's existing buyer (`D-B-20261018T040908Z-01`). The corrected reservation is **$2.20 per case**, confirmed in `D-B-20261018T041636Z-01`: initial replacement plus five server retry rounds, three provider calls per invocation, up to 4,800 output tokens each. At the [official Opus 5.5 rates](https://platform.claude.com/docs/en/about-claude/pricing) ($4/M input and $20/M output, rechecked October 18), a conservative 3,000 input-token bound gives $1.944 per case. The fixed synthetic prompts must be no more than 2,500 UTF-8 bytes; replacement adds no other private context in this protocol. This bound requires the deployed judge to use that model and default three attempts; C confirms its actual configuration before execution.
+
+Run one case at a time. Reserve before posting, release only after deterministic APPROVE, and stop on the first failed/unknown request or rejection while retaining its full reservation for E/D reconciliation. This bounds in-flight exposure without reserving all twelve cases at once or changing a shared judge. The minimum reservation is enforced in the harness. Uncertain model usage is never booked as zero, and invalid persisted ledgers fail closed.
+
+Payment usage rows are separate from model costs. Their `cost_usd` is explicitly a **hypothetical live domestic-card fee estimate** at [Stripe's 2.9% + 30¢ rate](https://stripe.com/pricing), not an incurred Stripe TEST cost. Buyer test offers/charges/refunds and owed/transferred amounts stay in payment metadata; they are not counted as system resources. Test mode does not move real money ([Stripe testing](https://docs.stripe.com/testing)). Full resource totals remain unknown.
