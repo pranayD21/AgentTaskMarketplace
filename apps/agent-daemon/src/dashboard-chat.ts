@@ -140,7 +140,15 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
     }});
    }finally{pollAbort.abort();await poller;}
    const stopped=run.events.filter(e=>e.type==='stopped').at(-1);run.status=stopped?.reason==='turn_limit'?'failed':'finished';if(run.status==='failed')run.error='The agent reached its turn limit. Posted task outputs remain available below.';
-  }catch(error){run.status=controller.signal.aborted?'stopped':'failed';run.error=controller.signal.aborted?'Chat stopped. Posted tasks remain visible and may still finish.':(error instanceof Error&&error.message.startsWith('Repeated tool errors')?'The model could not produce a valid action three times in a row. Its last attempts are shown above; try rephrasing or another model.':null)??'The local agent or marketplace connection failed. Any partial work and posted task IDs remain below. Check Ollama before retrying.';}
+  }catch(error){
+   // Keep the underlying reason (a short, single line) so a failure can be diagnosed from the thread.
+   const reason=error instanceof Error?error.message.split('\n')[0]!.slice(0,200):String(error).slice(0,200);
+   event(run,'run_error',{reason});
+   run.status=controller.signal.aborted?'stopped':'failed';
+   run.error=controller.signal.aborted?'Chat stopped. Posted tasks remain visible and may still finish.'
+    :reason.startsWith('Repeated tool errors')?'The model could not produce a valid action three times in a row. Its last attempts are shown above; try rephrasing or another model.'
+    :`The local agent or marketplace connection failed: ${reason}. Any partial work and posted task IDs remain below.`;
+  }
   finally{clearTimeout(timer);active.delete(run.id);persist();await mp.close();}
  }
  async function updateTask(mp:Marketplace,run:Run,id:string,signal:AbortSignal){
