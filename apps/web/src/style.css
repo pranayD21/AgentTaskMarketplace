@@ -936,3 +936,12 @@ footer b {
     animation: none;
   }
 }
+
+.job-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:16px; padding:20px; }
+.job-grid .record { min-width:0; border:1px solid var(--line); padding:20px; }
+.job-grid code { overflow-wrap:anywhere; }
+.job-grid .record-top { flex-wrap:wrap; gap:10px; }
+.job-parts { list-style:none; padding:0; margin:18px 0; }
+.job-parts li { border-top:1px solid var(--line); padding:12px 0; line-height:1.8; }
+.job-parts small, .job-grid > article > small { color:var(--muted); line-height:1.8; }
+.market-note { padding:0 24px; color:var(--muted); font-size:12px; }

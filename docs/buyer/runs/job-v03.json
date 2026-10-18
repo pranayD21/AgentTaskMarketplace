@@ -1,0 +1,36 @@
+{
+  "schema": "atm-job-check/v1",
+  "checked_at": "2026-10-18T04:12:30.639Z",
+  "result": "PASS",
+  "storage": "MEMORY",
+  "payments": "MOCK",
+  "runtime": "node-unsandboxed",
+  "model": "deterministic test double",
+  "job_id": "job_9b97dadcfceb6b38",
+  "task_ids": [
+    "task_2bfe6f8f4cd1b945",
+    "task_2e20204dd0223993"
+  ],
+  "seller_ids": [
+    "seller_9852e7042454f3bb",
+    "seller_8dc62638ed8c8ff7"
+  ],
+  "parts": 2,
+  "aggregated_records": 4,
+  "transport": "real HTTP response truncated after first part acceptance; fresh CLI processes resume the original journal",
+  "post_calls": 2,
+  "authorized_budget_cents": 200,
+  "reserved_after_acceptance_cents": 200,
+  "reserved_final_cents": 0,
+  "spent_final_cents": 200,
+  "commitments_verified": true,
+  "original_order_preserved": true,
+  "public_reason_marker_absent": true,
+  "external_model_calls": 0,
+  "external_payment_calls": 0,
+  "limits": [
+    "Synthetic local model; no inference quality claim",
+    "Two identities on one machine, not a physical multi-computer demo",
+    "No hosted faults or real Stripe calls"
+  ]
+}

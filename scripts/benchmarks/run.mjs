@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createClient, normalizeEndpoint, readIdentity } from '../buyer.mjs';
 import { lock, reserve, settle, writeAtomic, writeTextAtomic } from './budget.mjs';
+import { taskOfferFields } from '../../skills/marketplace/scripts/job.mjs';
 import { VERSION, SYSTEM, MODEL, LOCAL_MODEL, MAX_TOKENS, TEMPERATURE, RATE, hash, order, grade, summarize, usageRecords } from './workloads.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -92,6 +93,7 @@ try {
           !Number.isSafeInteger(judgeReservation) || judgeReservation <= 0) throw new Error('Specify an authorized test-cent budget and D-reviewed worst-case judge API reservation');
       client = createClient(endpoint, key); await client.initialize();
       const info = await client.tool('marketplace_info');
+      taskOfferFields(100, info);
       if (info.payments.mode !== 'card') throw new Error('This benchmark protocol currently requires Stripe TEST card mode');
       const who = await client.tool('whoami');
       const remaining = samples.length - report.records.filter(row => row.task_id).length;
@@ -142,7 +144,7 @@ try {
           if (!row.task_id) {
             reserve(budgetPath, attemptId, judgeReservation);
             const posted = await client.tool('post_task', { prompt: item.prompt, allowed_models: [LOCAL_MODEL],
-              max_price_cents: 100, max_tokens: MAX_TOKENS, max_runtime_s: 180, expires_in_s: 600,
+              price_cents: 100, max_tokens: MAX_TOKENS, max_runtime_s: 180, expires_in_s: 600,
               rubric: { kind: 'contains_text', expected_text: Object.keys(item.expected)[0] } });
             row.task_id = posted.task.task_id; save();
           }

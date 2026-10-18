@@ -8,6 +8,7 @@ import {
   stripeLink,
   time,
 } from "./data";
+import type { MarketData } from "./market";
 import { useDashboard } from "./useDashboard";
 
 function Badge({
@@ -61,11 +62,13 @@ export function DashboardView({
   now,
   filter,
   search,
+  market,
 }: {
   data: DashboardData;
   now: number;
   filter: string;
   search: string;
+  market?: MarketData;
 }) {
   const tasks = data.tasks.filter(
     (t) =>
@@ -128,9 +131,28 @@ export function DashboardView({
           </span>
         ))}
       </div>
+      <section id="jobs" className="panel">
+        <Title n="01" title="Buyer jobs" detail="Parts grouped by public job ID · original answers stay private" />
+        {data.jobs.length ? <div className="job-grid">{data.jobs.map(job => {
+          const children = data.tasks.filter(task => task.job_id === job.job_id).sort((a,b) => (a.part_key ?? "").localeCompare(b.part_key ?? "", undefined, {numeric:true}));
+          const latest = children.filter(task => !children.some(other => other.part_key === task.part_key && (other.attempt ?? 1) > (task.attempt ?? 1)));
+          return <article className="record" key={job.job_id}>
+            <div className="record-top"><code>{job.job_id}</code><Badge tone={job.status === "COMPLETE" ? "good" : job.status === "PARTIAL_FAILURE" ? "bad" : "warm"}>{job.status}</Badge></div>
+            <p>{job.progress.approved} / {job.progress.parts} approved · {job.progress.failed_latest} failed · {job.progress.open + job.progress.in_progress} pending</p>
+            <div className="amounts"><span>Budget <b>{money(job.budget_cents)}</b></span><span>Reserved <b>{money(job.reserved_cents)}</b></span><span>Spent <b>{money(job.spent_cents)}</b></span></div>
+            <ul className="job-parts">{latest.map(part => <li key={part.task_id}>
+              <div><code>{part.part_key}</code> · attempt {part.attempt ?? 1} · offer {money(part.price_cents ?? part.max_price_cents)}</div>
+              <div><Badge tone={statusTone(part.status)}>{part.status}</Badge> <code>{part.task_id}</code></div>
+              <small>Seller / computer: {part.seller_id ? (data.sellers.find(seller => seller.seller_id === part.seller_id)?.display_name ?? "Name unavailable") : "Unclaimed"} · <code>{part.seller_id ?? "—"}</code></small>
+            </li>)}</ul>
+            {latest.length < job.progress.parts && <p className="muted">Only {latest.length} parts are in the latest task window. Totals include all parts.</p>}
+            <small>Server approval counts shown. The buyer separately verifies commitments and aggregates the answers.</small>
+          </article>;
+        })}</div> : <Empty>No parent jobs yet. Use the buyer CLI to plan bounded independent parts.</Empty>}
+      </section>
       <section id="tasks" className="panel task-panel">
         <Title
-          n="01"
+          n="02"
           title="Task board"
           detail={`Showing ${tasks.length} of the latest ${data.tasks.length} tasks · USD test amounts`}
         />
@@ -141,7 +163,7 @@ export function DashboardView({
                 <tr>
                   <th>Task / allowed models</th>
                   <th>State</th>
-                  <th>Budget / claim</th>
+                  <th>Task offer</th>
                   <th>Selected seller</th>
                   <th>Lease left</th>
                   <th>Payment</th>
@@ -156,10 +178,12 @@ export function DashboardView({
                     </td>
                     <td>
                       <Badge tone={statusTone(t.status)}>{t.status}</Badge>
+                      {t.review && <small>Review {t.review.status}{t.review.attempts > 0 ? ` · retry count ${t.review.attempts}` : ""}</small>}
+                      {t.replacement_status && t.replacement_status !== "NOT_NEEDED" && <small>Replacement {t.replacement_status}</small>}
                     </td>
                     <td>
-                      <strong>{money(t.max_price_cents)}</strong>
-                      <small>Claim {money(t.price_cents)}</small>
+                      <strong>{money(t.price_cents ?? t.max_price_cents)}</strong>
+                      <small>{t.seller_id ? "Accepted by seller" : "Claim accepts this offer"}</small>
                     </td>
                     <td>
                       <span title={t.seller_id ?? ""}>
@@ -207,9 +231,20 @@ export function DashboardView({
           </Empty>
         )}
       </section>
+      <section id="market" className="panel">
+        <Title n="03" title="Market observations" detail={market ? `${market.sample_count} recent task offers · updated ${time(market.generated_at)}` : "Observations unavailable"} />
+        <p className="market-note">Comparable model sets and runtime limits only. Sampled prices do not establish equilibrium or change your budget.</p>
+        {market?.groups.length ? <div className="table-scroll"><table><thead><tr><th>Models / runtime limit</th><th>Sample</th><th>Accepted offer median</th><th>Claim / expiry rate</th><th>Median fill time</th></tr></thead><tbody>{market.groups.map((group,index)=><tr key={index}>
+          <td>{group.allowed_models.join(" · ")}<small>{group.max_runtime_s}s limit</small></td>
+          <td>{group.accepted_count} accepted / {group.sample_count} posted<small>{group.approved_count} approved · {group.sample_status === "insufficient_data" ? "Insufficient data" : "Observed sample"}</small></td>
+          <td>{group.sample_status === "insufficient_data" ? "Insufficient data (<5 accepted)" : money(group.accepted_price_cents.median)}</td>
+          <td>{Math.round(group.claim_rate*100)}% / {Math.round(group.expiry_rate*100)}%</td>
+          <td>{group.fill_time_ms.median === null ? "Unknown" : `${(group.fill_time_ms.median/1000).toFixed(1)}s`}<small>{group.fill_time_sample_count} measured fills</small></td>
+        </tr>)}</tbody></table></div> : <Empty>Insufficient data. Task offers remain explicit buyer choices.</Empty>}
+      </section>
       <section id="sellers" className="panel">
         <Title
-          n="02"
+          n="04"
           title="Compute network"
           detail="Model availability and runner identity are self-reported"
         />
@@ -299,7 +334,7 @@ export function DashboardView({
       <div className="lower-grid">
         <section id="settlements" className="panel">
           <Title
-            n="03"
+            n="05"
             title="Review & settlement"
             detail="Judge decisions and test-mode accounting"
           />
@@ -333,8 +368,9 @@ export function DashboardView({
                       <>
                         <div className="amounts">
                           <span>
-                            Seller payout <b>{money(s.seller_payout_cents)}</b>
+                            Seller owed <b>{money(s.payout_owed_cents ?? s.seller_payout_cents)}</b>
                           </span>
+                          <span>Transferred <b>{s.payout_transferred_cents === undefined ? "Unconfirmed" : money(s.payout_transferred_cents)}</b></span>
                           <span>
                             Buyer refund <b>{money(s.buyer_refund_cents)}</b>
                           </span>
@@ -343,9 +379,11 @@ export function DashboardView({
                           <Badge tone={s.kind === "MOCK" ? "warm" : ""}>
                             {s.kind === "MPP" ? "MPP · STRIPE_TEST" : s.kind}
                           </Badge>
-                          <span>{s.state}</span>
+                          <span>{s.finalized_at ? "Buyer settlement final" : "Finalization unconfirmed"}</span>
                         </div>
-                        {s.pendingOnboarding && (
+                        {s.transfer_state === "PENDING" && <p className="onboarding">Seller transfer pending · owed, not paid{s.transfer_retry_at ? " · retry scheduled" : ""}</p>}
+                        {s.transfer_state === "TRANSFERRED" && <p className="muted">Seller transfer confirmed</p>}
+                        {s.pendingOnboarding && s.transfer_state !== "TRANSFERRED" && (
                           <p className="onboarding">
                             PENDING_ONBOARDING · Seller transfer awaits account
                             onboarding.
@@ -365,7 +403,7 @@ export function DashboardView({
         </section>
         <section id="events" className="panel">
           <Title
-            n="04"
+            n="06"
             title="Event stream"
             detail="Latest 60 events · local time"
           />
@@ -396,7 +434,7 @@ export function DashboardView({
 export function App() {
   const base =
     import.meta.env.VITE_MARKETPLACE_BASE_URL || "http://localhost:3000";
-  const { data, error, updated, refresh } = useDashboard(base);
+  const { data, market, error, updated, refresh } = useDashboard(base);
   const [now, setNow] = useState(Date.now());
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -423,22 +461,12 @@ export function App() {
         </a>
         <div className="nav-label">OBSERVATORY</div>
         <nav aria-label="Dashboard sections">
-          <a href="#tasks">
-            ▦ <span>Task board</span>
-            <span>01</span>
-          </a>
-          <a href="#sellers">
-            ◈ <span>Compute network</span>
-            <span>02</span>
-          </a>
-          <a href="#settlements">
-            ⇄ <span>Settlements</span>
-            <span>03</span>
-          </a>
-          <a href="#events">
-            ≋ <span>Event stream</span>
-            <span>04</span>
-          </a>
+          <a href="#jobs">▤ <span>Buyer jobs</span><span>01</span></a>
+          <a href="#tasks">▦ <span>Task board</span><span>02</span></a>
+          <a href="#market">↗ <span>Market observations</span><span>03</span></a>
+          <a href="#sellers">◈ <span>Compute network</span><span>04</span></a>
+          <a href="#settlements">⇄ <span>Settlements</span><span>05</span></a>
+          <a href="#events">≋ <span>Event stream</span><span>06</span></a>
         </nav>
         <div className="sidebar-note">
           <span className="tiny-label">BUILT FOR AGENTS</span>
@@ -531,6 +559,7 @@ export function App() {
         {data ? (
           <DashboardView
             data={data}
+            market={market}
             now={now}
             filter={filter}
             search={search}

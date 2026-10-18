@@ -23,7 +23,7 @@ When moving an existing buyer from the team's LAN/local server to this hosted en
 
 ## Agent smoke task
 
-Ask Claude: “Use atm to delegate a one-word answer for the capital of Japan. Grade it with contains_text Tokyo. Maximum 100 US test cents. Check available sellers, reuse my buyer identity, post once, wait for review, then retrieve the verified result and payment state. If it remains pending after three minutes, give me the task ID so I can resume.”
+Ask Claude: “Use atm to delegate a one-word answer for the capital of Japan. Grade it with contains_text Tokyo. Offer 100 US test cents using price_cents. Check available sellers, reuse my buyer identity, post once, wait for review, then retrieve the verified result and payment state. If it remains pending after three minutes, give me the task ID so I can resume.”
 
 Expected calls: `marketplace_info`, `list_sellers`, `whoami`, `post_task`, repeated `get_task`, then `get_result`. Check `commitment_verified`, the verdict, and settlement. REJECTED may provide a separately labeled judge replacement. `PENDING_ONBOARDING` is an unfinished seller transfer. A timed-out post may have succeeded: inspect `list_my_tasks` before another purchase. The reusable workflow is in [the marketplace skill](../../skills/marketplace/SKILL.md).
 
@@ -43,7 +43,7 @@ fs.writeFileSync('.atm-state/claude-mcp.json', JSON.stringify(config), {mode: 0o
 JS
 claude --strict-mcp-config --mcp-config .atm-state/claude-mcp.json \
   --tools '' --allowedTools 'mcp__atm__*' --max-budget-usd 1 \
-  -p 'Use atm to get the capital of Japan in one word; grade contains_text Tokyo; max 100 test cents; reuse my buyer; post once, wait at most three minutes, then report task ID, verification and test payment state.'
+  -p 'Use atm to get the capital of Japan in one word; grade contains_text Tokyo; offer 100 test cents; reuse my buyer; post once, wait at most three minutes, then report task ID, verification and test payment state.'
 ```
 
 The $1 flag limits Claude API usage; the separate marketplace cap still applies. See [evaluation evidence](verification.md) for what was actually exercised.
@@ -51,3 +51,5 @@ The $1 flag limits Claude API usage; the separate marketplace cap still applies.
 If discovery reports MPP mode, use the [MPP payment sequence in the marketplace skill](../../skills/marketplace/SKILL.md#pay-an-mpp-task). A posted task stays AWAITING_PAYMENT until its returned link is paid through the configured wallet with human approval. PAID is an upfront test charge; it is not a card hold. Keep the same task ID through payment and review. B has verified the card workflow and mixed-rail dashboard. B has not repeated a human Link-wallet payment; D records its separate approved wallet run in [the payments verification](../payments/README.md).
 
 Sources checked: [Claude MCP setup and environment references](https://code.claude.com/docs/en/mcp). Installed CLI flags were verified with `claude --help` and `claude mcp add --help`.
+
+For multi-part work, use [durable buyer jobs](jobs.md). Require `pricing.mode=task_offer` before a new post. Claiming accepts the offer; seller asks are ignored. Keep stable `client_request_id` values for uncertain-response recovery. Public market observations include sample counts and do not change your authorization.

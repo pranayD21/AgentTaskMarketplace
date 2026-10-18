@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   SellerPublic,
+  JobPublic,
   TaskPublic,
   TASK_STATUSES,
   VERDICT_REASON_CODES,
@@ -42,7 +43,8 @@ export const Dashboard = z.object({
       TASK_STATUSES.map((s) => [s, z.number().int().nonnegative().optional()]),
     ),
   ),
-  tasks: z.array(TaskPublic),
+  tasks: z.array(TaskPublic.omit({ part_label: true })),
+  jobs: z.array(JobPublic.omit({ label_public: true })).default([]),
   sellers: z.array(SellerPublic),
   verdicts: z.array(
     z.object({
@@ -64,7 +66,12 @@ export const Dashboard = z.object({
             ? kind
             : "UNRECOGNIZED PAYMENT RAIL",
         ),
-        state: z.string(),
+        state: z.string().transform(v => ["PENDING", "RECORDED"].includes(v) ? v : "UNKNOWN"),
+        finalized_at: z.string().nullable().optional(),
+        payout_owed_cents: z.number().int().nonnegative().optional(),
+        payout_transferred_cents: z.number().int().nonnegative().optional(),
+        transfer_state: z.enum(["NOT_APPLICABLE", "PENDING", "TRANSFERRED"]).optional(),
+        transfer_retry_at: z.string().nullable().optional(),
         seller_payout_cents: z.number().int().nonnegative(),
         buyer_refund_cents: z.number().int().nonnegative(),
         note: z

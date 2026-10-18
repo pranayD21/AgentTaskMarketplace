@@ -1,20 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
+import { fetchMarket, type MarketData } from "./market";
 import { Dashboard, dashboardUrl, type DashboardData } from "./data";
 
 export function useDashboard(base: string) {
   const [data, setData] = useState<DashboardData>();
+  const [market, setMarket] = useState<MarketData>();
   const [error, setError] = useState<string>();
   const [updated, setUpdated] = useState<number>();
   const [retry, setRetry] = useState(0);
   const refresh = useCallback(() => setRetry((v) => v + 1), []);
   useEffect(() => {
     let stopped = false;
+    let marketUpdated = 0;
+    setMarket(undefined);
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
     async function poll() {
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 8000);
       try {
+        const marketRequest = Date.now() - marketUpdated >= 30000
+          ? fetchMarket(base, controller.signal).then(value => { if (!stopped) setMarket(value); marketUpdated = Date.now(); }).catch(() => { if (!stopped) setMarket(undefined); marketUpdated = Date.now(); })
+          : Promise.resolve();
         const response = await fetch(dashboardUrl(base), {
           signal: controller.signal,
           cache: "no-store",
@@ -24,6 +31,7 @@ export function useDashboard(base: string) {
         if (!response.ok) throw new Error("Dashboard unavailable");
         const parsed = Dashboard.safeParse(await response.json());
         if (!parsed.success) throw new Error("Invalid dashboard");
+        await marketRequest;
         if (!stopped) {
           setData(parsed.data);
           setError(undefined);
@@ -46,5 +54,5 @@ export function useDashboard(base: string) {
       controller?.abort();
     };
   }, [base, retry]);
-  return { data, error, updated, refresh };
+  return { data, market, error, updated, refresh };
 }
