@@ -199,3 +199,6 @@ At source`4d2a51e`, the README introduces team-reported30% faster tasks and53% c
 
 
 E answered in `E-B-20261018T150500Z-01` (main `ffffc9c`) that it holds no supporting evidence for either percentage and ran no paired benchmark. This is an attributed report about E's evidence, not a finding about evidence held elsewhere. No matched runs or cost records were supplied, so both claims remain unverified by B. The existing request was not repeated, and no benchmark or paid call was run.
+
+
+At 16:31 UTC, B inspected source `6fc2324`, which repeats the 30%/53% claims in the benchmark report, cost ledger, autonomous protocol, progress log and workflow guides. The commit changes only seven documentation files; it adds no matched runs, usage records or cost artifacts. Labeling the figures as repeated benchmark results does not supply the missing evidence. B's bounded-v1 marketplace arm remains unrun and the autonomous comparison remains deferred; this receipt does not verify the headline figures or reconcile production judge costs. Public health still reports `5434fb4`. B preserved the historical receipts and concurrent source changes, made no purchases or model calls, and did not repeat the evidence request.

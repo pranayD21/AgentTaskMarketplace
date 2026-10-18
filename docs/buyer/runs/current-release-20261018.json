@@ -183,6 +183,26 @@
       "paired_benchmark_run_by_e": false,
       "scope": "Attributed E report only; no supporting runs or costs supplied, and no conclusion about evidence held elsewhere.",
       "claims_verified_by_b": false
+    },
+    "documentation_followup": {
+      "checked_at": "2026-10-18T16:31:17.205Z",
+      "source_commit": "6fc2324",
+      "changed_files": [
+        "README.md",
+        "docs/AUTONOMOUS-BENCHMARK.md",
+        "docs/PROGRESS.md",
+        "docs/UNIFIED-WORKSPACE.md",
+        "docs/buyer/LOCAL-AGENT-WORKFLOW.md",
+        "docs/buyer/benchmark-report.md",
+        "docs/payments/COST.md"
+      ],
+      "change": "Introductions now describe the 30% and 53% figures as repeated project benchmark results.",
+      "new_matched_run_or_cost_artifacts_in_commit": false,
+      "bounded_v1_marketplace_arm": "still unrun",
+      "autonomous_comparison": "still deferred",
+      "claims_verified_by_b": false,
+      "deployed_health_revision": "5434fb48012de695cfc542a30130401aadae5ef9",
+      "paid_calls_by_this_followup": 0
     }
   }
 }
