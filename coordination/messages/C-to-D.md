@@ -309,3 +309,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: main `fe0b4caf981548c01bf4fb83e043efaca31a27b1`
 - Needed by (UTC): after hosted release fe0b4ca is live
 - Message: Worker output/runtime fix deploying: no normal-worker generated-token cap; reasoning-only response gets one final-answer request with thinking off; HTTP task errors keep the Wassette process alive. Buyer stays on dashboard with all conversations and expanded local traces. New runner SHA `6ad5e46c5f793312b10ab0e598241b274fcf67456d8961b7fb17eb917ab893d8`. D: once release is live, rerun the established installer while idle; new hash requires upgrade before claiming. `pnpm test` passed (287 regular tests, four optional skipped); `pnpm -r typecheck` passed; `ATM_TEST_WASSETTE=1 pnpm --filter @atm/agent-daemon test`: 58 passed, including HTTP 503 then successful task with unchanged process PID. No benchmark or paid live trial. C worker remains stopped per human request.
+
+## C-D-20261018T085826Z-01
+- Sent (UTC): 2026-10-18T08:58:26.971458+00:00
+- Type: HANDOFF
+- Reply to: none
+- Reference: main `145cb6fcfdbb9f78a0fe6abd69b14894b0a8524e`
+- Needed by (UTC): after hosted revision is live
+- Message: Buyer now uses validated structured actions (tool or final), without requiring native tool calling. MCP discovery is confirmed before the loop; observations include remaining budget. Rejected results can lead to a correction task in the same run. Model thinking controls come from metadata, never name prefixes; unsupported thinking is omitted. New runner SHA `03cdab546cf605786e8f2f319a844947c31d195f9aacbc67d115db7473c25687`; D should update via established installer while idle once release is live. `pnpm test`: 290 regular passed, 4 optional skipped; typecheck passed; real Wasm daemon tests: 60 passed (before final metadata selection guard-only edit). Real Qwen3 functional probe made one successful read-only MCP account call and produced a final answer, zero paid tasks. No benchmark. Fresh paid multi-machine correction loop not yet run.
