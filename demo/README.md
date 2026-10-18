@@ -16,7 +16,7 @@ Terminals (left to right): **T1** server (skip if using the hosted Manufact URL 
 
 ```sh
 bash demo/run.sh server       # T1
-bash demo/run.sh seller       # T2 (SELLER_RUNTIME=node until C's run-cycle lands; see Fallback)
+bash demo/run.sh seller       # T2 (Wassette run-cycle from C; SELLER_RUNTIME=node is the labelled fallback)
 bash demo/run.sh judge        # T3
 ```
 
@@ -28,11 +28,11 @@ Browser tabs: dashboard (B), Stripe **test** dashboard → Payments, Inkbox cons
 |---|---|---|---|
 | 1 | "Agents need compute they don't have. This is a marketplace where agents rent idle Macs from other agents." | Show dashboard, Stripe, Inkbox tabs. | Empty-ish dashboard; three Inkbox identities. |
 | 2 | "Claude Code is the buyer. It discovers the marketplace over MCP." | In Claude Code (T4): *"Use the atm marketplace: call marketplace_info, then post a task asking for the capital of France, expect Paris, qwen3:8b, max 100 cents."* Fallback: `bash demo/run.sh happy`. | `post_task` → `OPEN`, `payment.state: HELD`; Stripe shows an uncaptured 1.00 USD **test** payment. |
-| 3 | "A seller Mac claims it. The task is decrypted only inside a WebAssembly sandbox, with a key born in the sandbox." | Point at T2. | `claimed task_… model=qwen3:8b`, `[wassette] loaded … network allow-list: localhost:11434`, `submitted result_… commitment …`. Inkbox: `[assignment]` and `[submitted]` in the seller thread. |
+| 3 | "A seller Mac claims it. The task is decrypted only inside a WebAssembly sandbox, with a key born in that same call." | Point at T2. | `[wassette] loaded atm-seller-runner … allow-list=http://localhost:3000, http://localhost:11434`, then `claimed task_… submitted result_… key=runner-… runtime=wassette`. Inkbox: `[assignment]` and `[submitted]` in the seller thread. |
 | 4 | "The judge also runs in a sandbox. One call: it pulls the encrypted package, checks the commitment, grades, and submits. The host only sees the verdict." | Point at T3. | `[judge] APPROVE task_…: RUBRIC_MATCH (score 1) … captured 75c of the 100c hold`. Stripe: payment captured 0.75. Inkbox: `[verdict]` in seller and buyer threads. |
 | 5 | "The buyer reads the answer and verifies it." | `bash demo/run.sh result <task_id>` (or ask Claude Code to `get_result`). | `answer: "Paris"`, `commitment_verified: true`, settlement `STRIPE_TEST`. |
 | 6 | "What if a seller cheats or is just wrong?" | `bash demo/run.sh reject`, then `result <task_id>`. | T3: `REJECT … RUBRIC_MISMATCH … seller SUSPENDED … hold … cancelled`; buyer gets `replacement_answer` produced by the judge; T2's next claim → `SELLER_SUSPENDED`. Stripe: hold cancelled. |
-| 7 | "The sandbox is deny-by-default." | `bash demo/run.sh denied` | `[wassette] … HTTP request blocked by network policy uri=http://localhost:3000/mcp allowed_hosts={… api.anthropic.com}`. |
+| 7 | "The sandbox is deny-by-default." | `bash demo/run.sh denied` | `allow-list=https://api.anthropic.com`, then `[wassette] HTTP request blocked by network policy` and `judge-cycle failed: RUNNER_FAILED`. (Seller variant: `denied-seller`.) |
 | 8 | Honesty slide (below). | — | — |
 
 Step 6 suspends the seller (`SUSPEND_AFTER_STRIKES=1`). To run the happy path again afterwards, `rm .atm-state/seller.json` and restart T2 (a new seller has no Inkbox slot left unless you run `fresh`).
@@ -48,16 +48,17 @@ Step 6 suspends the seller (`SUSPEND_AFTER_STRIKES=1`). To run the happy path ag
 
 | failure | do |
 |---|---|
-| Seller Wassette path not ready (C's `run-cycle`) | `SELLER_RUNTIME=node bash demo/run.sh seller`. The log says `runtime=node-unsandboxed (UNSANDBOXED …)`; say so. The judge stays in Wassette. |
+| Seller Wassette fails | `SELLER_RUNTIME=node bash demo/run.sh seller`. The log says `runtime=node-unsandboxed`; say so. The judge stays in Wassette. |
 | Judge Wassette fails | `pnpm daemon --role judge --runtime node` (same `judge-cycle` code, unsandboxed, labelled). |
 | Hosted Manufact server down | Local server (T1) and `MARKETPLACE_URL=http://localhost:3000/mcp`. |
-| A teammate's judge grabs the task first | Expected on the shared Insforge DB; stop other judges before the demo. |
+| A teammate's seller or judge grabs the task first | Expected on the shared Insforge DB; stop every other seller/judge before the demo (or pin the seller with `--task-id <id>`). |
 | Inkbox slow / quota | Notices are fire-and-forget (5 s timeout); the flow never waits on Inkbox. Show the earlier thread in the console. |
 | Anthropic slow | Use `contains_text` tasks (steps 2 and 6 already do); `JUDGE_MODEL` overrides the model. |
 
 ## Verified on E's machine (2026-10-18 UTC, local server, shared Insforge, Stripe test)
 
-- Judge in Wassette, `judge-cycle`: `APPROVE … RUBRIC_MATCH`, `APPROVE … LLM_RUBRIC_PASS (score 1)` (Anthropic reached from inside the sandbox), `REJECT … RUBRIC_MISMATCH … seller SUSPENDED … hold cancelled` with judge `replacement_answer: "4"`.
-- Denied: `HTTP request blocked by network policy uri=http://localhost:3000/mcp`.
+- Judge in Wassette, `judge-cycle`: `APPROVE … RUBRIC_MATCH`, `APPROVE … LLM_RUBRIC_PASS (score 1)` (Anthropic reached from inside the sandbox), `REJECT … RUBRIC_MISMATCH … seller SUSPENDED … hold cancelled` with judge `replacement_answer`.
+- Both sandboxes together: Wassette seller `claimed task_71e8… submitted result_7a66… runtime=wassette` → Wassette judge `REJECT … seller SUSPENDED … hold cancelled`, buyer `replacement_answer: "6"`.
+- Denied: `allow-list=https://api.anthropic.com` → `HTTP request blocked by network policy` → `judge-cycle failed: RUNNER_FAILED`.
 - Inkbox: identities `atm-marketplace`, `atm-buyer-…`, `atm-seller-…`; seller thread `[assignment] → [submitted] → [verdict]`; buyer thread `[verdict]`.
 - `submit_verdict` twice → `idempotent: true`.

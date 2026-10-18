@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx --env-file=../../.env src/main.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "@atm/crypto": "workspace:*",

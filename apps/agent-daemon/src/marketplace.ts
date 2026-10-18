@@ -8,6 +8,7 @@ export class Marketplace {
   constructor(private readonly url: string, private apiKey: string | undefined) {}
 
   setApiKey(key: string) {
+    void this.client?.close().catch(() => {});
     this.apiKey = key;
     this.client = null;
   }
@@ -29,6 +30,7 @@ export class Marketplace {
     try {
       res = await client.callTool({ name, arguments: args });
     } catch (err) {
+      await client.close().catch(() => {});
       this.client = null; // reconnect next time
       throw err;
     }
@@ -40,4 +42,15 @@ export class Marketplace {
     }
     return parsed;
   }
+
+  async sellerKeyMode(): Promise<"per-claim" | "registered"> {
+    const client = await this.connect();
+    const { tools } = await client.listTools();
+    const claim = tools.find((t) => t.name === "claim_task");
+    const register = tools.find((t) => t.name === "register_seller");
+    return claim?.inputSchema.properties?.runner_pubkey_b64 && claim.inputSchema.properties.runner_key_id &&
+      !register?.inputSchema.required?.includes("runner_pubkey_b64") ? "per-claim" : "registered";
+  }
+
+  async close() { await this.client?.close().catch(() => {}); this.client = null; }
 }

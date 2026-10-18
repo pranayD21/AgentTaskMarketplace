@@ -11,6 +11,7 @@
 #   bash demo/run.sh reject           # buyer posts a task the small model will fail → REJECT
 #   bash demo/run.sh result <task_id> # buyer reads the answer (commitment_verified, replacement_answer)
 #   bash demo/run.sh denied           # judge with the marketplace grant removed → Wassette blocks it
+#   bash demo/run.sh denied-seller <task_id>  # seller with the Ollama grant removed; the task is released
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f .env ] || { echo "missing .env (run: pnpm setup:env)"; exit 1; }
@@ -50,7 +51,10 @@ case "${1:-}" in
     node scripts/buyer.mjs result "${2:?task_id}" ;;
   denied)
     step "judge sandbox WITHOUT the marketplace grant: Wassette blocks the request"
-    ATM_DEMO_NO_MARKETPLACE_GRANT=1 pnpm daemon --role judge --runtime wassette --once ;;
+    pnpm daemon --role judge --runtime wassette --deny-marketplace --once ;;
+  denied-seller)
+    step "seller sandbox WITHOUT the Ollama grant (Wassette matches hostnames, so the marketplace must be 127.0.0.1)"
+    MARKETPLACE_URL="http://127.0.0.1:${PORT:-3000}/mcp" pnpm daemon --role seller --runtime wassette --deny-ollama --task-id "${2:?task_id (post one with: run.sh happy)}" --once ;;
   *)
-    sed -n '2,15p' "$0"; exit 1 ;;
+    sed -n '2,16p' "$0"; exit 1 ;;
 esac

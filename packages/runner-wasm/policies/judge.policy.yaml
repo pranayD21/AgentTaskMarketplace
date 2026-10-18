@@ -1,10 +1,12 @@
 version: "1.0"
-description: "ATM judge runner: may reach only the marketplace and the judge model API, and read three secrets"
+description: "ATM judge runner (judge-cycle): may reach only the marketplace and the judge model API, and read three secrets"
 permissions:
   network:
     allow:
-      - host: "localhost:3000"     # marketplace (the daemon grants the host of MARKETPLACE_URL at runtime)
-      - host: "api.anthropic.com"
+      # Full origins: Wassette 0.8 parses bare host:port as a scheme and enforces scheme + hostname only.
+      # The daemon grants the origin of MARKETPLACE_URL at runtime.
+      - host: "http://localhost:3000"
+      - host: "https://api.anthropic.com"
   environment:
     allow:
       - key: "AGENT_API_KEY"

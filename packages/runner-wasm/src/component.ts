@@ -1,18 +1,17 @@
 /**
  * The sandbox entry. Everything here runs inside Wasmtime under Wassette's
  * deny-by-default policy: the only reachable hosts are those granted to this
- * component (Ollama for the seller runner, the judge model API for the judge).
+ * component (marketplace + Ollama for the seller runner, marketplace + the
+ * judge model API for the judge).
  */
 import { restoreRandom } from "./wizer-shim.js";
 import { get } from "wasi:config/store@0.2.0-rc.1";
 import { keypairFromSecretB64 } from "@atm/crypto";
-import { createRunner, judgeCycle as runJudgeCycle, type Runner, type RunnerHost } from "@atm/runner-core";
+import { createRunner, judgeCycle as runJudgeCycle, runCycle as sellerCycle, safeFailureCode, type Runner, type RunnerHost } from "@atm/runner-core";
 
 const host: RunnerHost = {
-  fetch: (...args) => globalThis.fetch(...args),
-  getSecret: async (name) => {
-    try { return get(name) ?? undefined; } catch { return undefined; }
-  },
+  fetch: globalThis.fetch.bind(globalThis),
+  getSecret: async (name) => { try { return get(name) ?? undefined; } catch { return undefined; } },
   now: () => Date.now(),
 };
 
@@ -21,7 +20,13 @@ function instance(): Runner {
   restoreRandom();
   // Lazy: Wizer snapshots module top-level at build time, so the keypair must
   // be generated on first call, never at import.
-  runner ??= createRunner(host);
+  runner ??= createRunner({
+    fetch: globalThis.fetch.bind(globalThis),
+    getSecret: async (name) => {
+      try { return get(name) ?? undefined; } catch { return undefined; }
+    },
+    now: () => Date.now(),
+  });
   return runner;
 }
 
@@ -41,6 +46,12 @@ export async function runTask(sellerEnvelope: string, opts: string): Promise<str
   }
 }
 
+export async function runCycle(opts: string): Promise<string> {
+  restoreRandom();
+  try { return JSON.stringify(await sellerCycle(host, JSON.parse(opts))); }
+  catch (err) { throw safeFailureCode(err); }
+}
+
 export async function judgeTask(taskEnvelope: string, resultEnvelope: string, opts: string): Promise<string> {
   try {
     let secret: string | undefined;
@@ -53,11 +64,9 @@ export async function judgeTask(taskEnvelope: string, resultEnvelope: string, op
   }
 }
 
+/** fetch_review_package → decrypt + grade → submit_verdict, all inside this call. */
 export async function judgeCycle(opts: string): Promise<string> {
-  try {
-    restoreRandom();
-    return JSON.stringify(await runJudgeCycle(host, JSON.parse(opts)));
-  } catch (err) {
-    return fail(err);
-  }
+  restoreRandom();
+  try { return JSON.stringify(await runJudgeCycle(host, JSON.parse(opts))); }
+  catch (err) { throw safeFailureCode(err); }
 }
