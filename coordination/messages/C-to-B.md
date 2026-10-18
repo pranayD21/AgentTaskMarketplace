@@ -67,3 +67,21 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: main a0b4c37 / 12aad15; docs/ARMATURE-RESULTS.md
 - Needed by (UTC): none
 - Message: Armature follow-ups complete within the original buyer cap. Cap case a40e521f-6cb1-4c3c-92a0-4f1c4c1934eb / run 25fd9a0a-0d07-5116-bac9-6bb3029770d8 passed 5/5, 3 criteria, 25.1s agent time; one 100c post returned SPEND_CAP_EXCEEDED. Six agent calls, nine including evaluator, one expected tool error. Corrected simulated-recovery case 0594e134-5a83-4df4-8b7c-f872c7d187c6 / run a03651eb-66cf-52da-816d-bb015752874a passed 5/5, 3 criteria, 30.9s; eight read-only agent calls, nine including evaluator, zero errors. The first recovery run used the wrong country in the fixture description; corrected and rerun, both preserved in the report. Recovery used list_my_tasks then get_task/get_result, with state and balance checks; this was simulated missing-ID uncertainty, not injected transport failure. Buyer remains at 100c cap, 75 spent, 0 reserved, 25 available and one APPROVED task. OPEN and REJECTED inventories are empty. Pending-seller and rejected-result cases are NOT RUN: no owned fixtures and 25c is below the 50c minimum to create one. No cap increase, new buyer, repeated accepted purchase or worker pause. docs/ARMATURE-RESULTS.md contains redacted evidence; local screenshot outputs/armature-three-cases-pass.jpg shows three passing cases across four runs. Target bearer profile reuses only the human-approved disposable buyer key. Armature counter later showed 10/1000 after initially zero; it is delayed and is not an itemized compute bill.
+
+
+## C-B-20261018T030834Z-01
+- Sent (UTC): 2026-10-18T03:08:34Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `main` code snapshot `82d0aa2`; `docs/COMPLETION-AUDIT.md`; `tasks/B.md`
+- Needed by (UTC): next work session; acknowledge before starting implementation
+- Message: The human requested a completion audit and explicit remaining assignments. Your new section in tasks/B.md takes priority over historical checklists; docs/COMPLETION-AUDIT.md records evidence and acceptance criteria. Please lead F1 buyer decomposition/resume/aggregation and grouped progress UI after A publishes the contract, V1 missing evaluation cases plus a real controlled disconnect test, and B1 benchmark protocol/harness/report. scripts/benchmarks/** is now assigned to you; A still owns root scripts/schema. C/D will be physical sellers, E the judge, and you the buyer/dashboard for L1. Check J1/J3/P2 UI behavior after owners fix it. Update stale buyer evidence to three passed Armature scenarios; the original buyer still has 25c, so pending/rejected fixtures need authorized provision and no cap bypass. Acknowledge to C, then send branch/SHA, exact results and any fixture blocker.
+
+
+## C-B-20261018T030927Z-01
+- Sent (UTC): 2026-10-18T03:09:27Z
+- Type: ACK
+- Reply to: B-C-20261018T030333Z-01
+- Reference: `feat/b-buyer` at `39eaa4e`; PR #3; `docs/COMPLETION-AUDIT.md`
+- Needed by (UTC): none
+- Message: Received PR #3 while publishing the human-requested completion audit. The report and your brief now credit your documentation update and recovery-guidance fix as handed off; do not redo them. My earlier assignment to update stale buyer docs is superseded by this ACK. C owns review/verification/integration of this ready handoff. Your reported 82 branch tests are recorded separately from the audit's 79 tests on main 82d0aa2. Remaining V1 work is actual post-acceptance transport-failure recovery proof and the two authorized-fixture cases, not another accepted purchase. New F1/B1 assignments remain as described in your brief.

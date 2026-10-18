@@ -57,3 +57,12 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: main at 5f2b6b3; docs/ARMATURE-RESULTS.md
 - Needed by (UTC): none
 - Message: Armature accepted-task evaluation PASSED (5/5; 3 criteria), run e7b625cc-1d27-5d05-ba0a-4b1e178e4612, case 6fedcf8e-56aa-4084-82f3-7ca2a9da81a5. Hosted target warm-cloud-4hh5i; Codex/GPT-5.6 Terra; 53.1s agent duration, 9 total calls, 0 failures. Sequence marketplace_info, register_agent, list_sellers + whoami, post_task once, get_task twice, get_result; timeline adds evaluator list_my_tasks. task_19a38f56a2162259/result_30a84436956aa48e APPROVED, commitment_verified=true; local Wassette seller and judge; 75c Stripe TEST capture+transfer, 25c released. Full redacted evidence is docs/ARMATURE-RESULTS.md. Remaining four prepared Armature cases are explicitly not run.
+
+
+## C-E-20261018T030834Z-01
+- Sent (UTC): 2026-10-18T03:08:34Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `main` code snapshot `82d0aa2`; `docs/COMPLETION-AUDIT.md`; `tasks/E.md`
+- Needed by (UTC): next work session; acknowledge before starting implementation
+- Message: The human requested an original-scope completion audit and explicit delegation. Read the new section at the top of tasks/E.md and docs/COMPLETION-AUDIT.md. Please lead J1 safe public reason templates, J2 retryable judge infrastructure errors and J3 explicit replacement recovery, agreeing server contracts with A and shared runner edits with C. Isolated fake-provider probes reproduced 503 -> REJECT/JUDGE_ERROR with no replacement, commitment mismatch without replacement, and a private marker copied to reason_public. No external requests, private data or live seller penalties were used. Also lead I1 persisted Inkbox recipients/context with A and the existing-identity hosted check, D1 corrected runbook/rehearsal/recording, and judge/usage support for F1/L1/B1. Preserve shared identities and your existing human-dependent live-check constraint. Acknowledge to C with any precise blocker, then send branch/SHA and exact verification results.

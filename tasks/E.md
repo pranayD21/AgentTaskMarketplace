@@ -1,6 +1,27 @@
 # Computer E — judge in the sandbox, Inkbox identities + A2A, demo script
 
-## Current handoff (2026-10-17, 19:58 PDT)
+## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
+
+The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.
+
+Start by fetching the latest `origin/main` and bringing it into your existing feature branch without discarding local work. Read your four inbound files in `coordination/messages/`, then acknowledge this assignment to C in `<YOUR LETTER>-to-C.md` (C records its own progress in its outbound handoffs). C remains acting integrator under A's delegation. Send contract/schema requests to A; C coordinates merges. Do not edit another computer's implementation files without a recorded ownership decision.
+
+Use `MARKETPLACE_URL=https://warm-cloud-4hh5i.run.mcp-use.com/mcp` in your private environment. Application health is `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`; dashboard is `http://192.168.4.163:5173/` on C's LAN. Workers use `--poll-ms 5000`. Preserve the running service and existing identities. Do not reset shared Inkbox identities. The Armature buyer has 25 cents available, below the 50-cent new-task minimum; a new buyer or higher cap must not be used to bypass that limit. All current payment evidence is Stripe TEST mode.
+
+### Your work, in order
+
+1. **J1, lead:** replace model-generated public explanations and provider-response text with fixed safe reason-code messages. A must enforce the same projection server-side, including historical rows. Acceptance: a fake judge response containing a private marker never reaches public API/UI, Inkbox notices or logs. An audit probe already reproduced the runner-side leak path; no real leak was observed.
+2. **J2, lead:** distinguish judge-provider outage, timeout and malformed responses from seller quality failure. Agree retry/review state with A before changing the worker. Acceptance: those failures remain recoverable, produce no seller strikes/suspension and no duplicate settlement, then complete after provider recovery. A fake 503 currently produces REJECT/JUDGE_ERROR, so this needs new regression coverage.
+3. **J3, lead:** add bounded replacement recovery and explicit pending/unavailable status for every rejection path, including commitment mismatch and provider failure. A owns the contract, B buyer display. Acceptance: buyer status remains truthful and retry produces a replacement without repeating financial/reputation side effects.
+4. **I1, lead:** persist or reconstruct Inkbox thread recipients/context with A. Verify hosted assignment, submitted and verdict notices across restart using the existing identities. Preserve the shared identities and handle the three-slot quota honestly. Your existing human-dependent live-check constraint remains; report the precise blocker if still unresolved.
+5. **D1, lead:** fix the extra `--` in `demo/run.sh` server startup and stale localhost/onboarding/reset guidance. Rehearse accepted/rejected tasks, two physical sellers, denial, Stripe TEST and Inkbox. Produce the final runbook, recording and submission-artifact locations. Use `/api/health`; do not reset the shared environment as a demo step.
+6. **F1/L1/B1:** run the judge role for C's multi-computer rehearsal, verify part quality and aggregate completeness with B, and record all judge/replacement input/output/cache usage and retries for D's cost ledger. Current provider usage is discarded, so the cost comparison needs new measurement. Coordinate shared fields with A.
+
+### Finish and hand off
+
+Own judge paths in runner-core/agent-daemon, `inkbox.ts`, and `demo/**`; coordinate shared runner-file edits with C. Send C assignment IDs, branch/SHA, exact test results and redacted hosted notice/rehearsal evidence. Keep synthetic rejection tests isolated from shared seller identities so tests cannot suspend the active demonstration worker.
+
+## Historical handoff (2026-10-17, 19:58 PDT)
 
 The judge-cycle and Inkbox implementation are merged. Live Wassette approval is verified on the hosted server, and denial of marketplace access was rechecked. Your 02:45 UTC acknowledgement says final demo updates and the notice check with existing identities await your human’s go. Hand those results to C when ready; preserve shared Inkbox identities.
 

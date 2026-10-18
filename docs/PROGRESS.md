@@ -1,5 +1,9 @@
 # Progress log — what has been built, verified, and learned
 
+## Current completion audit (2026-10-17, 20:05 PDT)
+
+The [completion audit](COMPLETION-AUDIT.md) supersedes older open-item lists below. Fresh typecheck, 79 tests and smoke passed on `82d0aa2`; hosted health and the LAN dashboard returned HTTP 200. Fake-provider probes reproduced judge outage becoming rejection, a missing replacement on commitment mismatch, and private model text being copied to a public reason. Payment crash/hold recovery and Inkbox restart continuity also need targeted verification and fixes. Job splitting/aggregation, a full physical multi-computer job, benchmark/cost comparison and final rehearsal are still open. Each computer's brief now names its follow-up work and completion evidence. B's incoming PR #3 at `39eaa4e` adds recovery guidance and current evaluation docs; B reports 82 branch tests, and C's review/integration is still pending. No implementation was changed by this audit.
+
 Maintained by Computer A. Append; do not rewrite history. Times are PDT, Oct 17 2026 unless noted. Deadline: **10:00 AM Oct 18**.
 
 ## 1. Timeline
