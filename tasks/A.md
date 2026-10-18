@@ -38,12 +38,12 @@ Files: `apps/marketplace-mcp/src/service.ts` (`claimTask`, `registerSeller`, `to
 ## 3. Manufact deployment — target 05:00 (start the login early, it is a browser device flow)
 
 ```sh
-cd apps/marketplace-mcp
-npx -y mcp-use@latest login                 # opens browser; use the team's Manufact account (human)
-pnpm build                                   # mcp-use build → .mcp-use/build
-npx -y mcp-use@latest deploy --no-github -y --name agent-task-marketplace --env-file ../../.env --port 3000
+# Run from the repository root; the human approves the device-code login.
+node apps/marketplace-mcp/node_modules/mcp-use/dist/bin.js login
+pnpm deploy:manufact --json
 ```
 
+- See `docs/DEPLOYMENT.md` for status checks and the workspace upload. The script excludes local URLs and daemon credentials from the hosted environment.
 - Manufact injects `MCP_URL`; `src/env.ts` derives `baseUrl` from it. Do **not** set `BASE_URL` in the deployed env unless you know the slug.
 - Verify from a different machine: `GET https://<slug>.run.mcp-use.com/health`, then `claude mcp add --transport http atm https://<slug>.run.mcp-use.com/mcp --header "Authorization: Bearer <buyer key>"` and call `marketplace_info`.
 - Free plan scales to zero and bills `tools/call` ($5 credit ≈ 50k calls): daemons polling every 3 s are fine for the demo window; tell C and E to raise `--poll-ms` to 5000 against the hosted URL.

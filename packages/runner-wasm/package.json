@@ -17,7 +17,9 @@
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.23.0",
     "@bytecodealliance/jco": "^1.39.0",
-    "@napi-rs/lzma-darwin-arm64": "1.5.1",
     "esbuild": "^0.28.2"
+  },
+  "optionalDependencies": {
+    "@napi-rs/lzma-darwin-arm64": "1.5.1"
   }
 }
