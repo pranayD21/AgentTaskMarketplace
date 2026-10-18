@@ -38,8 +38,9 @@ for(const meta of metafiles)for(const input of Object.keys(meta.inputs)){
  }
 }
 fs.cpSync(path.join(root,'apps/agent-daemon/ui'),path.join(staging,'ui'),{recursive:true});
+fs.copyFileSync(path.join(root,'apps/agent-daemon/src/viewer/page.html'),path.join(staging,'page.html'));
 fs.writeFileSync(path.join(staging,'THIRD_PARTY_NOTICES.txt'),[...packages].sort().map(([name,license])=>`${name}\n${license}`).join('\n\n'));
-execFileSync('tar',['-czf',path.join(output,'seller-bundle.tgz'),'-C',staging,'daemon.mjs','control.mjs','package.json','pnpm-lock.yaml','THIRD_PARTY_NOTICES.txt','ui'],{env:{...process.env,COPYFILE_DISABLE:'1'}});
+execFileSync('tar',['-czf',path.join(output,'seller-bundle.tgz'),'-C',staging,'daemon.mjs','control.mjs','package.json','pnpm-lock.yaml','THIRD_PARTY_NOTICES.txt','page.html','ui'],{env:{...process.env,COPYFILE_DISABLE:'1'}});
 fs.copyFileSync(path.join(root,'packages/runner-wasm/dist/runner.wasm'),path.join(output,'runner.wasm'));
 fs.copyFileSync(path.join(root,'apps/agent-daemon/install.sh'),path.join(output,'install.sh'));
 const artifacts={};
