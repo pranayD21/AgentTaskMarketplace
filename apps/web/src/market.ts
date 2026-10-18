@@ -10,6 +10,9 @@ export const Market = z.object({
 export type MarketData = z.infer<typeof Market>;
 // Public discovery only: never send a buyer key from the browser.
 export async function fetchMarket(base:string, signal:AbortSignal):Promise<MarketData> {
+  // Prefer the CORS-enabled REST route; fall back to MCP for servers deployed before it existed.
+  const rest=await fetch(dashboardUrl(base).replace(/\/api\/dashboard$/, '/api/market'),{signal,cache:'no-store',credentials:'omit',redirect:'error'}).catch(()=>null);
+  if(rest?.ok) return Market.parse(await rest.json());
   const endpoint=dashboardUrl(base).replace(/\/api\/dashboard$/, '/mcp');
   let session:string|null=null;
   async function rpc(id:number|undefined,method:string,params:unknown) {
