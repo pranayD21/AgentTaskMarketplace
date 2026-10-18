@@ -55,4 +55,30 @@ describe('buyer client', () => {
     expect(replacement.replacement_answer).toBe('judge replacement');
     expect(replacement.seller_answer_withheld).toBe(true);
   });
+  it.each(['interrupted body', 'truncated JSON', 'unmatched response'])(
+    'preserves uncertain-post recovery without replaying after %s', async (failure) => {
+      const requests = [];
+      const client = createClient('http://fixture/mcp', 'atm_sk_fixture', async (_, init) => {
+        const request = JSON.parse(init.body);
+        requests.push(request);
+        if (request.method === 'initialize') return new Response(JSON.stringify({ id: request.id, result: {} }));
+        if (request.method === 'notifications/initialized') return new Response(null, { status: 202 });
+        if (failure === 'interrupted body') return {
+          ok: true,
+          headers: new Headers(),
+          text: async () => { throw new Error('synthetic interrupted response'); },
+        };
+        return new Response(failure === 'truncated JSON' ? '{"id":' : '{"id":999,"result":{}}', {
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      await client.initialize();
+      await expect(client.tool('post_task', {})).rejects.toMatchObject({
+        code: failure === 'interrupted body' ? 'CONNECTION_FAILED' : 'PROTOCOL_ERROR',
+        nextAction: expect.stringContaining('use tasks to check whether it succeeded'),
+        retryable: false,
+      });
+      expect(requests.filter(request => request.method === 'tools/call')).toHaveLength(1);
+    },
+  );
 });
