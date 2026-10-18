@@ -5,7 +5,6 @@
 .landing a:focus-visible{outline:2px solid #fff5eb;outline-offset:7px}
 .landing-nav{display:flex;align-items:center;justify-content:space-between;padding:32px 5vw;gap:24px}
 .landing-brand{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:550;letter-spacing:-.6px}
-.landing-mark{display:grid;place-items:center;width:29px;height:29px;border:1px solid #fff5eb66;border-radius:50%;font-size:24px;line-height:1;padding-bottom:4px}
 .landing-nav-link{font-size:13px;display:flex;gap:26px;align-items:center}
 .landing-nav-link span{font-size:21px}
 .landing-hero{width:100%;max-width:none;margin:0;position:relative;display:flex;align-items:center;flex:1;min-height:620px;padding:80px 10vw 100px}
@@ -23,5 +22,5 @@
 .landing-skip:focus{top:16px}
 @keyframes landing-enter{from{opacity:0;transform:translateX(48px)}to{opacity:1;transform:translateX(0)}}
 @keyframes landing-orb-enter{from{opacity:0;transform:translate(70px,-50%)}to{opacity:.52;transform:translate(0,-50%)}}
-@media(max-width:700px){.landing-nav{padding:24px}.landing-hero{padding:200px 28px 70px;min-height:640px;align-items:flex-end}.landing-orb{top:170px;right:-60px;opacity:.35}.landing-orb svg{width:340px}.landing-description{font-size:14px}.landing-footer{padding:24px 28px;flex-wrap:wrap}.landing-footer span:nth-child(2){display:none}.landing h1{font-size:clamp(38px,8.8vw,62px)}.landing-shade{background:linear-gradient(0deg,#0a0a0dd9,rgba(10,10,13,.25))}}
+@media(max-width:700px){.landing-nav{padding:24px}.landing-hero{padding:200px 28px 70px;min-height:640px;align-items:flex-end}.landing-orb{top:170px;right:-60px;opacity:.35}.landing-orb svg{width:340px}.landing-description{font-size:14px}.landing-footer{padding:24px 28px;flex-wrap:wrap}.landing-footer span:nth-child(2){order:3;flex-basis:100%}.landing h1{font-size:clamp(38px,8.8vw,62px)}.landing-shade{background:linear-gradient(0deg,#0a0a0dd9,rgba(10,10,13,.25))}}
 @media(prefers-reduced-motion:reduce){.landing-copy,.landing-orb{animation:none}.landing-cta{transition:none}}

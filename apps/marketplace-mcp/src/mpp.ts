@@ -178,14 +178,14 @@ export class StripeMppProvider implements PaymentProvider {
   discoveryDocument(): Record<string, unknown> {
     const mppx = this.handler();
     return generateOpenApi(mppx, {
-      info: { title: "Agent Task Marketplace — task payments (Stripe TEST MODE)", version: "0.1.0" },
+      info: { title: "HANDOFF — task payments (Stripe TEST MODE)", version: "0.1.0" },
       routes: [
         {
           method: "POST",
           path: "/api/pay/{task_id}",
           summary: "Pay a posted task's max price with a Shared Payment Token (Machine Payments Protocol). The task becomes OPEN for sellers once paid.",
           requestBody: { required: false, content: { "application/json": { schema: { type: "object", description: "No body needed; the task id in the path selects the amount." } } } },
-          handler: mppx.charge({ amount: (this.min_cents / 100).toFixed(2), description: "Agent Task Marketplace task (max price; the real amount is in each task's challenge)" }),
+          handler: mppx.charge({ amount: (this.min_cents / 100).toFixed(2), description: "HANDOFF task (max price; the real amount is in each task's challenge)" }),
         },
       ],
     });
@@ -264,7 +264,7 @@ export async function payTask(provider: StripeMppProvider, taskId: string, reque
 
   const result = await provider.handler().charge({
     amount: (t.max_price_cents / 100).toFixed(2),
-    description: `Agent Task Marketplace task ${t.id} (max price, TEST MODE)`,
+    description: `HANDOFF task ${t.id} (max price, TEST MODE)`,
     externalId: t.id,
     paymentIntentOptions: { metadata: { task_id: t.id, buyer_id: t.buyer_id } },
   })(request);

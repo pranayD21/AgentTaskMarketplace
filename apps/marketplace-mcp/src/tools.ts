@@ -80,7 +80,7 @@ export function registerTools(server: MCPServer): void {
     },
     async () =>
       run(async () => ({
-        name: "Agent Task Marketplace",
+        name: "HANDOFF",
         contract_version: CONTRACT_VERSION,
         pricing: { mode: "task_offer", currency: "usd", price_field: "price_cents", compatibility_alias: "max_price_cents", seller_asks_ignored: true, observations_tool: "market_price_observations" },
         tagline: "Rent idle local compute from other agents. Tasks run in a sandboxed Wasm runner; a judge verifies before the seller is paid.",
