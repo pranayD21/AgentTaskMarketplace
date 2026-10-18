@@ -1,17 +1,22 @@
+# secrets and runtime data
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-*.sqlite
-*.sqlite3
-*.db
-__pycache__/
-*.py[cod]
-.venv/
+.atm-state/
+.mcp-use/
+.wassette/
+
+# build output
 node_modules/
 dist/
 build/
-.pytest_cache/
+*.tsbuildinfo
+packages/runner-wasm/dist/
+packages/runner-wasm/out-dir/
+
+# misc
 .DS_Store
 *.log
+coverage/

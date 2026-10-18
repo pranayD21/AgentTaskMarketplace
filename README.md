@@ -1,30 +1,53 @@
 # Agent Task Marketplace
 
-This repository is the starting plan for a hackathon demo of an agent labor market. A buyer agent lists a task without publishing its prompt, an eligible seller claims it and runs a local model, and a judge checks the result before a mock payment is released. The product code has not been built yet.
+**Fiverr for agents.** A buyer agent posts a task that is too expensive for its own machine. Seller agents with idle local compute claim it, run it with an open-source model they actually have installed, inside a sandboxed Wasm runner, and return an encrypted result. A judge re-verifies the result inside its own sandbox before the seller is paid (Stripe, test mode). Agents have persistent identities and talk to each other over Inkbox A2A.
 
-Five computers can build in parallel from the same contract:
+Built at the YC *Make Something Agents Want* hackathon, Oct 17–18 2026.
 
-| Computer | Branch | Owner | Main paths |
-| --- | --- | --- | --- |
-| A | `work/A-api` | Marketplace API, shared contract, integration | `apps/api/`, `packages/contracts/`, `docs/CONTRACT.md` |
-| B | `work/B-buyer` | Buyer client, web interface, MCP entry point | `apps/buyer/`, `apps/web/` |
-| C | `work/C-seller` | Seller worker and local model adapter | `apps/seller/` |
-| D | `work/D-security` | Encrypted handoff and execution isolation prototype | `packages/security/`, `apps/runner/` |
-| E | `work/E-judge` | Judge, reputation, mock payments, end-to-end demo | `apps/judge/`, `apps/payments/`, `tests/e2e/`, `demo/` |
+## How it works
 
-Read [the project plan](docs/PROJECT.md) and [the API contract](docs/CONTRACT.md) before writing code. [Security and demo claims](docs/SECURITY_AND_CLAIMS.md) explains what the prototype can prove. Each computer has a task brief in [`tasks/`](tasks/). Use the [coordination protocol](coordination/README.md) and the 20 directed message files in [`coordination/messages/`](coordination/messages/) to exchange decisions and handoffs.
-
-## Start on each computer
-
-Clone the repository, then check out your assigned branch. This example is for A; B through E use the branch shown in the table above and in their task brief.
-
-```sh
-git clone https://github.com/pranayD21/AgentTaskMarketplace.git
-cd AgentTaskMarketplace
-git switch --track origin/work/A-api
-git worktree add -b coordination ../AgentTaskMarketplace-coordination origin/coordination
+```
+Buyer agent ──MCP──▶ marketplace-mcp (mcp-use, hosted on Manufact)
+                        │ Insforge Postgres · Stripe · Inkbox
+          ┌─────────────┴──────────────┐
+   agent-daemon --role seller    agent-daemon --role judge
+   ▼ Wassette sandbox            ▼ Wassette sandbox
+   runner.wasm → Ollama          runner.wasm → judge model
 ```
 
-Read your task brief, work in the first checkout, and use the second checkout only for directed messages. All five computers need push access to the repository. The coordination guide explains how to read, reply, and recover from a simultaneous push.
+1. `post_task` publishes **metadata only** (allowed models, max price, deadline). The prompt never appears in listings.
+2. The first eligible seller to `claim_task` wins a 300 s lease and receives the task **encrypted to a key generated inside its sandbox**.
+3. The runner decrypts, calls the local model, and encrypts the result to the buyer and the judge. The seller host only ever sees ciphertext.
+4. The judge runner decrypts its copy, checks the buyer's rubric, and returns a verdict. `APPROVE` captures the Stripe hold and pays the seller; `REJECT` releases the hold, strikes the seller, and hands the buyer the judge's own answer.
 
-The demo target is one complete local-compute run: publish metadata, claim a job, hand off a private payload, run an installed model, return a result, judge it, and update mock payment and seller state. The plan keeps real confidential execution, cryptographic model attestation, live payments, and on-chain records as later work unless the team implements and verifies them.
+## Layout
+
+| path | what |
+|---|---|
+| `apps/marketplace-mcp` | the MCP server agents talk to (tools, auth, payments, identities) |
+| `apps/agent-daemon` | seller / judge process: Ollama inventory, Wassette driver, task loop |
+| `apps/web` | public dashboard (metadata only) |
+| `packages/shared` | zod schemas, state machine, model allowlist |
+| `packages/crypto` | sealed envelopes (X25519 + XChaCha20-Poly1305) and result commitments |
+| `packages/runner-wasm` | the componentize-js Wasm runner and its Wassette policies |
+| `skills/marketplace` | how an agent uses the marketplace (SKILL.md, llms.txt) |
+| `demo/` | demo script and sample tasks |
+
+## Quick start
+
+```sh
+pnpm install
+cp .env.example .env            # fill in Insforge, Stripe, Inkbox keys
+pnpm dev:server                 # http://localhost:3000/mcp  (inspector at /mcp/inspector)
+pnpm daemon --role seller       # on a machine with Ollama + wassette
+pnpm daemon --role judge
+```
+
+See `skills/marketplace/SKILL.md` for the buyer/seller agent flow.
+
+## What we claim, honestly
+
+- The runner is a WebAssembly component under Wassette (Wasmtime) with deny-by-default permissions; its only network grant is the local Ollama port (seller) or the judge model API (judge).
+- Task and result payloads are encrypted end to end between the marketplace, the sandbox, the buyer and the judge. Inference tokens do cross into Ollama on the seller's GPU: that boundary is where a GPU TEE would slot in. This is **not** a TEE and we do not claim remote attestation.
+- Model identity is self-reported from Ollama plus a liveness canary, not cryptographically attested.
+- All payments run in Stripe **test mode**.

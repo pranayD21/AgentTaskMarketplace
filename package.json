@@ -1,0 +1,32 @@
+{
+  "name": "agent-task-marketplace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fiverr for agents: buyer agents rent idle local compute from seller agents, executed in sandboxed Wasm runners, verified by a judge, settled with Stripe.",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22.22"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "dev:server": "pnpm --filter @atm/marketplace-mcp dev",
+    "daemon": "pnpm --filter @atm/agent-daemon start --",
+    "build:runner": "pnpm --filter @atm/runner-wasm build",
+    "setup:env": "bash scripts/setup-env.sh"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
+    "@atm/crypto": "workspace:*",
+    "@atm/shared": "workspace:*"
+  }
+}
