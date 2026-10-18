@@ -118,7 +118,7 @@ pnpm daemon --role seller --runtime wassette --display-name mac-seller-1 --poll-
 pnpm daemon --role seller --runtime wassette --display-name mac-seller-2 --poll-ms 5000
 ```
 
-For an isolated memory/mock server, leave `AGENT_API_KEY` unset to create separate identities. New hosted identities must complete the dashboard onboarding. The first accepted claim wins; another claimant reports `CLAIM_CONFLICT` and continues polling. With `--once`, a lost race exits with status 1. This is expected contention, not a second task execution.
+For an isolated memory/mock server, leave `AGENT_API_KEY` unset to create separate identities. New hosted identities must complete the dashboard onboarding. The first accepted claim wins. Another claimant reports that another agent took the task, then continues polling. With `--once`, a lost race ends normally. Only the winning agent executes the task.
 
 Inference is capped at the smaller of the task limit, 180 seconds and the remaining lease minus a submission buffer. The 300-second lease does not need host renewal in cycle mode. HTTP calls have a 20-second deadline and the host stops a sandbox call after 260 seconds. Ollama timeouts and other post-claim failures attempt `release_task` inside the sandbox. If Wassette crashes, the daemon closes the dead process, uses task metadata to release any active claim and reconnects on the next cycle. A submitted result is never released by recovery. If the marketplace is unreachable, lease expiry eventually reopens or expires the claim. Mutations are not blindly retried after a lost response.
 

@@ -12,6 +12,22 @@ export interface ChatMessage {
 export interface AgentEvent { type: string; at: string; [key: string]: unknown }
 
 type ParsedAction={action:'final';answer:string}|{action:'tool';tool:string;arguments:Record<string,unknown>};
+const latexCommands = new Set(['frac','text','times','begin','end','right','left','nabla','beta','theta','rho','alpha','gamma','delta','epsilon','lambda','mu','pi','sigma','phi','omega','sum','int','partial','cdot','cdots','ldots','mathbb','mathrm','mathbf','overline','underline','sqrt','hat','vec','rightarrow','infty','leq','geq','neq','approx','tan','sin','cos','log','ln','lim','operatorname','displaystyle']);
+/** A model may put single LaTeX backslashes into its JSON action. Keep JSON escapes intact while preserving TeX commands. */
+function preserveLatexInAction(json:string):string{
+  let out='',quoted=false;
+  for(let i=0;i<json.length;i++){
+    const c=json[i]!;
+    if(c==='"'){quoted=!quoted;out+=c;continue;}
+    if(!quoted||c!=='\\'){out+=c;continue;}
+    const next=json[i+1];
+    if(next==='\\'||next==='"'||next==='/'){out+=c+next;i++;continue;}
+    const word=/^[A-Za-z]+/.exec(json.slice(i+1))?.[0];
+    const validJsonEscape=next==='b'||next==='f'||next==='n'||next==='r'||next==='t'||(next==='u'&&/^[a-fA-F0-9]{4}$/.test(json.slice(i+2,i+6)));
+    out+=word&&latexCommands.has(word)||!validJsonEscape?'\\\\':'\\';
+  }
+  return out;
+}
 /** Reads a structured action, tolerating code fences or prose around the JSON. Anything else asks for a repair. */
 export function parseAction(text:string):ParsedAction|null{
   const candidates=[text];
@@ -19,7 +35,7 @@ export function parseAction(text:string):ParsedAction|null{
   const first=text.indexOf('{'),last=text.lastIndexOf('}');if(first>=0&&last>first)candidates.push(text.slice(first,last+1));
   for(const candidate of candidates){
     try{
-      const action=JSON.parse(candidate);
+      const action=JSON.parse(preserveLatexInAction(candidate));
       if(action&&action.action==='final'&&typeof action.answer==='string'&&action.answer.trim())return {action:'final',answer:action.answer};
       if(action&&action.action==='tool'&&typeof action.tool==='string'&&action.arguments&&typeof action.arguments==='object'&&!Array.isArray(action.arguments))return {action:'tool',tool:action.tool,arguments:action.arguments};
     }catch{/* try the next form */}

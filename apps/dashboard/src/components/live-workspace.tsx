@@ -1,13 +1,14 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Check, CircleAlert, Loader2, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { STAGES, describe, fmtClock, fmtMs, type ChatMsg, type LiveModel, type LiveRun, type NetCall } from "@/lib/live";
+import { STAGES, TASK_TAKEN, describe, fmtClock, fmtMs, type ChatMsg, type LiveModel, type LiveRun, type NetCall } from "@/lib/live";
 import type { LiveConnection } from "@/hooks/live";
 import { Badge } from "@/components/ui/badge";
 import { Orb } from "@/components/ui/thinking-orbs";
 import { ChatMessage, ChatMessageAvatar, ChatMessageContent } from "@/components/ui/chat-message";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData } from "@/components/ui/tool-invocation";
 import { ToolGroup } from "@/components/tool-group";
+import { Markdown } from "@/components/markdown";
 
 /**
  * The worker's current task, drawn like the buyer chat: the task prompt as a
@@ -33,7 +34,7 @@ export function LiveWorkspace({ model, connection, running, blocked }: { model: 
           {head.state === "base" ? <span className={cn("size-2 rounded-full", head.tone === "danger" ? "bg-danger" : head.tone === "success" ? "bg-success" : "bg-muted-foreground")} aria-hidden /> : <Orb state={head.state} label={head.label} />}
           <span className={cn("truncate", head.tone === "danger" ? "text-danger" : head.tone === "success" ? "text-foreground" : "text-muted-foreground")}>{head.label}</span>
         </div>
-        {vm && <VmMeta vm={vm} />}
+        {vm && <VmMeta vm={vm} missed={run?.status === "missed"} />}
       </div>
       {running && run && !blocked ? <RunBody run={run} role={vm?.role ?? "seller"} /> : <Idle vm={vm} running={running} connection={connection} blocked={blocked} />}
       {running && model.log.length > 0 && (
@@ -51,13 +52,13 @@ export function LiveWorkspace({ model, connection, running, blocked }: { model: 
   );
 }
 
-function VmMeta({ vm }: { vm: LiveModel["vm"] & object }) {
+function VmMeta({ vm, missed }: { vm: LiveModel["vm"] & object; missed: boolean }) {
   const cpu = vm.cpu.at(-1), rss = vm.rss.at(-1);
   const up = (vm.closedAt ?? Date.now()) - vm.startedAt;
-  const tone = vm.state === "crashed" ? "danger" : vm.state === "busy" ? "info" : vm.state === "ready" ? "success" : "muted";
+  const tone = missed ? "muted" : vm.state === "crashed" ? "danger" : vm.state === "busy" ? "info" : vm.state === "ready" ? "success" : "muted";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted-foreground">
-      <Badge tone={tone} dot={vm.state === "busy" || vm.state === "ready"}>{vm.runtime === "node-unsandboxed" ? "UNSANDBOXED" : "Wasm sandbox"} · {vm.state}</Badge>
+      <Badge tone={tone} dot={!missed && (vm.state === "busy" || vm.state === "ready")}>{vm.runtime === "node-unsandboxed" ? "UNSANDBOXED" : "Wasm sandbox"} · {missed && vm.state === "crashed" ? "closed" : vm.state}</Badge>
       <span className="font-mono">{vm.id}{vm.pid ? ` · pid ${vm.pid}` : ""} · {fmtClock(up)}</span>
       {cpu != null && <span className="font-mono">CPU {cpu.toFixed(0)}%</span>}
       {rss != null && <span className="font-mono">{(rss / 1048576).toFixed(0)} MB</span>}
@@ -122,6 +123,7 @@ function RunBody({ run, role }: { run: LiveRun; role: string }) {
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden /><span>This task failed with <code className="font-mono">{run.error ?? "an unknown error"}</code>. The worker released it and keeps watching for the next one.</span>
           </div>
         )}
+        {run.status === "missed" && <p role="status" className="text-[13px] text-muted-foreground">{TASK_TAKEN} The worker is watching for the next task.</p>}
         {run.status === "done" && run.result && <Outcome run={run} role={role} />}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-muted-foreground">{meta}</div>
@@ -182,7 +184,7 @@ function Message({ m }: { m: ChatMsg }) {
       <ChatMessageAvatar role="assistant" />
       <ChatMessageContent role="assistant" className="max-w-[92%]">
         {m.thinking && <ToolGroup summary="Reasoning" className="mb-2 max-w-none"><pre className="scroll-thin max-h-72 overflow-auto whitespace-pre-wrap break-words p-3 font-sans text-[13px] leading-relaxed text-muted-foreground">{m.thinking}</pre></ToolGroup>}
-        {m.content && <div className="whitespace-pre-wrap">{m.content}</div>}
+        {m.content && <Markdown text={m.content} />}
         {m.tool_calls?.length ? (
           <div className="mt-2 flex flex-col gap-1.5">
             {m.tool_calls.map((c, i) => (
@@ -207,8 +209,8 @@ function Streamed({ text, live }: { text: string; live: boolean }) {
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40 - 24) el.scrollTop = el.scrollHeight;
   }, [text]);
   return (
-    <div ref={ref} className="scroll-thin max-h-[480px] overflow-auto whitespace-pre-wrap break-words">
-      {text}{live && <span className="ml-0.5 inline-block h-[1em] w-[7px] translate-y-[2px] animate-pulse rounded-[2px] bg-foreground/70" aria-hidden />}
+    <div ref={ref} className="scroll-thin max-h-[480px] overflow-auto break-words">
+      <Markdown text={text} />{live && <span className="ml-0.5 inline-block h-[1em] w-[7px] translate-y-[2px] animate-pulse rounded-[2px] bg-foreground/70" aria-hidden />}
     </div>
   );
 }
@@ -234,10 +236,10 @@ function Outcome({ run, role }: { run: LiveRun; role: string }) {
 }
 
 function NetRow({ n }: { n: NetCall }) {
-  const type = n.status == null ? "input-available" : n.ok ? "output-available" : "output-error";
+  const type = n.status == null ? "input-available" : n.missed ? "output-neutral" : n.ok ? "output-available" : "output-error";
   return (
     <ToolInvocation className="rounded-none border-0 bg-transparent">
-      <ToolInvocationContentCollapsible header={<ToolInvocationName name={`${n.target} · ${n.ms != null ? fmtMs(n.ms) : "…"}`} label={n.call} type={type} />}>
+      <ToolInvocationContentCollapsible header={<ToolInvocationName name={`${n.target} · ${n.ms != null ? fmtMs(n.ms) : "…"}`} label={n.missed ? TASK_TAKEN : n.call} type={type} />}>
         <ToolInvocationRawData title="Request" data={n.req} />
         <ToolInvocationRawData title="Response" data={n.res ?? n.error} />
       </ToolInvocationContentCollapsible>

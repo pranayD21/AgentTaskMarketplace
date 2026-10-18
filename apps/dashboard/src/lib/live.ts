@@ -16,11 +16,13 @@ export const STAGES: { key: StageKey; label: string; call: string }[] = [
   { key: "submit", label: "Submit", call: "submit_result" },
 ];
 const CYCLES = new Set(["run-cycle", "run-cycle-measured", "judge-cycle", "model-canary", "run-task", "judge-task"]);
+export const TASK_TAKEN = "Another agent took the task before you.";
+const claimTaken = (value: unknown) => typeof value === "string" && value.includes("CLAIM_CONFLICT");
 
 export interface ChatMsg { role: string; content?: string; thinking?: string; tool_calls?: { function?: { name?: string; arguments?: unknown } }[]; tool_name?: string }
-export interface NetCall { id: string; target: string; call: string; method?: string; startAt: number; status?: number; ms?: number; ok?: boolean; req?: unknown; res?: unknown; error?: string }
+export interface NetCall { id: string; target: string; call: string; method?: string; startAt: number; status?: number; ms?: number; ok?: boolean; missed?: boolean; req?: unknown; res?: unknown; error?: string }
 export interface LiveRun {
-  n: number; kind: string; status: "running" | "done" | "failed"; startedAt: number; endedAt?: number; ms?: number;
+  n: number; kind: string; status: "running" | "done" | "failed" | "missed"; startedAt: number; endedAt?: number; ms?: number;
   taskId?: string; stages: Record<StageKey, { state: StageState; ms?: number }>;
   model?: string; prompt?: ChatMsg[]; inferId?: string; inferStart?: number;
   output: string; thinking: string; chunks: number; firstAt?: number; lastAt?: number;
@@ -79,10 +81,14 @@ export function apply(m: LiveModel, e: LiveEvent) {
         if (e.state === "ready" && !vm.readyAt) vm.readyAt = at;
         if (e.state === "closed" || e.state === "crashed") {
           vm.closedAt = at; vm.reason = str(e.reason);
-          if (m.run?.status === "running") { m.run.status = "failed"; m.run.error = str(e.reason) ?? e.state; m.run.endedAt = at; }
+          if (m.run?.status === "running") {
+            const missed = m.run.nets.some((n) => n.missed);
+            m.run.status = missed ? "missed" : "failed"; m.run.error = missed ? undefined : str(e.reason) ?? e.state; m.run.endedAt = at;
+          }
         }
       }
-      pushLog(m, at, "vm", [e.state ? `state → ${e.state}` : "instance", e.pid ? `pid ${e.pid}` : "", e.reason && e.reason !== "closed" ? `(${e.reason})` : ""].filter(Boolean).join(" "));
+      pushLog(m, at, "vm", m.run?.status === "missed" && (e.state === "closed" || e.state === "crashed") ? TASK_TAKEN
+        : [e.state ? `state → ${e.state}` : "instance", e.pid ? `pid ${e.pid}` : "", e.reason && e.reason !== "closed" ? `(${e.reason})` : ""].filter(Boolean).join(" "));
       break;
     }
     case "step": {
@@ -100,14 +106,15 @@ export function apply(m: LiveModel, e: LiveEvent) {
           const result = e.result as Record<string, unknown> | undefined;
           if (result?.idle === true) { m.run = undefined; m.runs--; break; }
           run.endedAt = at; run.ms = typeof e.ms === "number" ? e.ms : undefined;
-          run.status = e.ok ? "done" : "failed"; run.result = result; run.error = str(e.error);
+          const missed = !e.ok && (claimTaken(e.error) || run.nets.some((n) => n.missed));
+          run.status = missed ? "missed" : e.ok ? "done" : "failed"; run.result = result; run.error = missed ? undefined : str(e.error);
           const inner = result?.result as Record<string, unknown> | undefined;
           run.taskId ??= str(inner?.task_id ?? result?.task_id);
           for (const st of Object.values(run.stages)) {
-            if (st.state === "active") st.state = e.ok ? "done" : "failed";
+            if (st.state === "active") st.state = missed ? "skipped" : e.ok ? "done" : "failed";
             else if (st.state === "pending" && e.ok) st.state = "skipped";
           }
-          pushLog(m, at, "cycle", `${name} ${e.ok ? "finished" : "failed"}${run.ms != null ? ` in ${run.ms} ms` : ""}${run.error ? ` · ${run.error}` : ""}`);
+          pushLog(m, at, "cycle", missed ? TASK_TAKEN : `${name} ${e.ok ? "finished" : "failed"}${run.ms != null ? ` in ${run.ms} ms` : ""}${run.error ? ` · ${run.error}` : ""}`);
         }
       } else if (e.phase === "end") {
         const args = e.args as Record<string, unknown> | undefined;
@@ -139,13 +146,14 @@ export function apply(m: LiveModel, e: LiveEvent) {
         const rec = run?.nets.find((n) => n.id === id);
         if (!run || !rec) break;
         rec.status = typeof e.status === "number" ? e.status : undefined; rec.ms = typeof e.ms === "number" ? e.ms : undefined;
-        rec.ok = Boolean(e.ok); rec.res = e.res; rec.error = str(e.error);
+        rec.missed = rec.call === "claim_task" && (claimTaken(e.error) || claimTaken(JSON.stringify(e.res ?? "")));
+        rec.ok = Boolean(e.ok); rec.res = rec.missed ? { message: TASK_TAKEN } : e.res; rec.error = rec.missed ? undefined : str(e.error);
         const st = stageFor(rec.call);
-        if (st) run.stages[st] = { state: e.ok ? "done" : "failed", ms: rec.ms };
+        if (st) run.stages[st] = { state: rec.missed ? "skipped" : e.ok ? "done" : "failed", ms: rec.ms };
         if (st === "infer" && e.res && typeof e.res === "object") run.inferRes = e.res as Record<string, unknown>;
         if (rec.call === "claim_task" && e.ok) { const claim = (e.res as { claim?: { task_id?: string } } | undefined)?.claim; run.taskId = str(claim?.task_id) ?? run.taskId; }
         if (rec.call === "release_task") { run.status = "failed"; run.error ??= "released"; }
-        pushLog(m, at, rec.target, `← ${rec.call} ${rec.status ?? ""}${rec.error ? ` ${rec.error}` : ""}${rec.ms != null ? ` (${rec.ms} ms)` : ""}`);
+        pushLog(m, at, rec.target, rec.missed ? TASK_TAKEN : `← ${rec.call} ${rec.status ?? ""}${rec.error ? ` ${rec.error}` : ""}${rec.ms != null ? ` (${rec.ms} ms)` : ""}`);
       }
       break;
     }
@@ -162,8 +170,8 @@ export function apply(m: LiveModel, e: LiveEvent) {
       if (m.vm.cpu.length > 60) { m.vm.cpu.shift(); m.vm.rss.shift(); }
       break;
     }
-    case "stderr": pushLog(m, at, "stderr", String(e.line ?? "")); break;
-    case "log": pushLog(m, at, "log", String(e.line ?? "")); break;
+    case "stderr": pushLog(m, at, claimTaken(e.line) ? "log" : "stderr", claimTaken(e.line) ? TASK_TAKEN : String(e.line ?? "")); break;
+    case "log": pushLog(m, at, "log", claimTaken(e.line) ? TASK_TAKEN : String(e.line ?? "")); break;
   }
 }
 
@@ -175,6 +183,7 @@ export function describe(m: LiveModel, connected: boolean): { label: string; sta
   if (vm.state === "booting") return { label: "Booting the sandbox…", state: "working", tone: "info" };
   if (vm.closedAt && !run) return { label: vm.state === "crashed" ? `Sandbox crashed · ${vm.reason ?? ""}` : "Sandbox closed", state: "base", tone: vm.state === "crashed" ? "danger" : "muted" };
   if (!run) return { label: "Waiting for an eligible task…", state: "waiting", tone: "muted" };
+  if (run.status === "missed") return { label: TASK_TAKEN, state: "base", tone: "muted" };
   if (run.status === "failed") return { label: `Task failed · ${run.error ?? "unknown"}`, state: "base", tone: "danger" };
   if (run.status === "done") return { label: vm.role === "judge" ? "Verdict submitted" : "Output submitted · awaiting review", state: "base", tone: "success" };
   if (run.stages.infer.state === "active") return { label: run.thinking && !run.output ? "Reasoning…" : run.output ? "Writing the answer…" : "Loading the model…", state: run.thinking && !run.output ? "reasoning" : "working", tone: "info" };

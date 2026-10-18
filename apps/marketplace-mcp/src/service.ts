@@ -402,8 +402,8 @@ export async function postTask(buyer: AgentRow, raw: PostTaskInput): Promise<{ t
     });
   }
   if (payments().mode !== "mock") {
-    if (!input.client_request_id || input.rubric.kind !== "contains_text" || (input.max_tokens ?? 512) > 4096 || Buffer.byteLength(JSON.stringify({prompt:input.prompt,context:input.context??"",rubric:input.rubric}),"utf8") > 2500)
-      throw new MarketplaceError("VALIDATION_ERROR","Use a saved request ID, contains-text grading, and at most 2500 UTF-8 bytes of task/context/grading text and 4096 output tokens.");
+    if (!input.client_request_id || input.rubric.kind !== "contains_text" || (input.max_tokens ?? 512) > 4096)
+      throw new MarketplaceError("VALIDATION_ERROR","Use a saved request ID, contains-text grading, and at most 4096 output tokens.");
     if (buyer.owner_user_id) {
       const payment=await humanBuyerPayment(buyer);
       if(payment.buyer_payment_status!=="READY")throw new MarketplaceError("PAYMENT_REQUIRED","Complete your Stripe payment setup in the dashboard first.");

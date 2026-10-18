@@ -61,7 +61,6 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
     if(typeof args.prompt!=='string'||!args.prompt.trim())throw Error('Provide a self-contained subtask prompt.');
     // The model supplies the task. The host supplies bounded format acceptance, identity and idempotency.
     const payload=taskInput(args.prompt+(typeof args.context==='string'?'\n\n'+args.context:''));
-    if(Buffer.byteLength(JSON.stringify(payload))>2500)throw Error('Shorten the subtask: prompt/context/rubric must fit 2500 bytes.');
     const base=createHash('sha256').update(JSON.stringify({prompt:payload.prompt,models:args.allowed_models,price})).digest('hex').slice(0,20);
     const same=Object.entries(run.posts).filter(([k])=>k===base||k.startsWith(base+'#'));
     // Within one call, identical prompts are distinct workers, never retries of each other.
@@ -219,13 +218,14 @@ export function createDashboardChat(options:{root:string;marketplaceUrl:string;o
    if(!inventory.models?.some((m:any)=>m.name===input.model))throw Error('Choose a local model installed on this computer.');
    const metadata=await fetch('http://localhost:11434/api/show',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:input.model}),signal:AbortSignal.timeout(5000)});
    const modelInfo=metadata.ok?await metadata.json():{};
-   // Structured actions are decoded under a JSON schema. Models that only offer thinking *levels*
-   // (gpt-oss reports low/medium/high and no "off") emit broken JSON when a level is set together
-   // with that schema, so the orchestrator always runs them with thinking off.
    const preferred=modelThinkingControl(modelInfo);
-   const native_tools=Array.isArray(modelInfo.capabilities)&&modelInfo.capabilities.includes('tools')&&(String(modelInfo.details?.family??'').toLowerCase().replace(/[^a-z]/g,'')==='gptoss'||/^gpt-oss\b/i.test(input.model));
-   // Native tool mode keeps the model's preferred (cheapest) thinking level; the schema loop needs thinking off.
-   const thinking_control=native_tools?preferred:typeof preferred==='string'?false:preferred;
+   // gpt-oss (harmony format) emits tool calls natively; under the JSON action schema Ollama's
+   // parser cannot map them and the request fails, and with thinking forced off it returns an
+   // empty message. So gpt-oss runs with native tools at its preferred thinking level; every other
+   // model keeps the schema-validated action loop, with thinking off when it only offers levels.
+   const architecture=String(modelInfo.model_info?.['general.architecture']??modelInfo.details?.family??'').toLowerCase().replace(/[^a-z]/g,'');
+   const native_tools=Array.isArray(modelInfo.capabilities)&&modelInfo.capabilities.includes('tools')&&(architecture==='gptoss'||/^gpt-oss\b/i.test(input.model));
+   const thinking_control=native_tools?(preferred??'low'):typeof preferred==='string'?false:preferred;
    const run:Run={id:randomUUID(),owner_id:buyer.owner.user_id,buyer_id:buyer.agent_id,prompt:input.prompt,thinking_control,native_tools,mode:'agent',conversation_id,model:input.model,status:'running',events:[],task_ids:[],posts:{},jobs:[]};
    runs.push(run);if(runs.length>30)runs.shift();persist();const controller=new AbortController();active.set(run.id,controller);void execute(run,buyer,controller);json(202,{id:run.id});
   }catch(error){json(400,{error:error instanceof Error&&/^(Sign in|Message|Enter |Choose a local)/.test(error.message)?error.message:'Chat is unavailable. Check your account and marketplace connection.'});}
