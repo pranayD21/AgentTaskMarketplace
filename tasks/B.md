@@ -2,7 +2,7 @@
 
 ## Current handoff (2026-10-17, 19:47 PDT)
 
-The dashboard and buyer kit are merged. Armature’s accepted-task case passed through the hosted endpoint; use docs/ARMATURE-RESULTS.md for evidence. The other four prepared Armature cases are explicitly unrun. Finish your hosted recipes and incorporate that report, then hand off your tested commit to C.
+The dashboard, buyer kit, hosted connection recipes and accepted-case evidence are merged through your handoff `22c771f` / PR #2 (`a0b4c37` on main). Armature’s accepted-task case passed through the hosted endpoint; use docs/ARMATURE-RESULTS.md for evidence. The other four prepared Armature cases are unrun; C is continuing the checks that fit the existing buyer budget. Incorporate C's next redacted report when it arrives.
 
 Shared MCP endpoint: `https://warm-cloud-4hh5i.run.mcp-use.com/mcp`. Application health: `https://warm-cloud-4hh5i.run.mcp-use.com/api/health`. Public dashboard on C’s LAN: `http://192.168.4.163:5173`. Set `MARKETPLACE_URL` to the hosted endpoint in your private environment. Local agents need `--poll-ms 5000`. All payments are Stripe TEST mode.
 

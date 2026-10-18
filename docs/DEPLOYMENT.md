@@ -34,6 +34,7 @@ Use the endpoint returned by the deployment, then repeat the health and MCP disc
 - Public task metadata: https://warm-cloud-4hh5i.run.mcp-use.com/api/dashboard
 - Manufact server ID: `1cb4bcbc-3f2a-4ae3-8d7b-6c86aaa5624a`
 - First successful deployment: `4df23d0c-9188-449e-9033-256c3b2fff2b`, 2026-10-18 02:37 UTC.
+- Current deployment: `eaba52dd-79b3-4853-8988-2ba57132b53d`, running since 02:48:52 UTC. It includes `/api/health` and D's pinned MPP challenge follow-up. Application health passed at 02:51 UTC: contract 0.2, card mode, Insforge Postgres and the correct hosted origin. B independently verified hosted discovery and health from its computer.
 
 The CLI-returned deployment was superseded by a webhook deployment of the same uploaded commit. If its status is `stopped`, inspect `servers get` for the newest deployment before treating the release as failed. Remote `marketplace_info` and `/api/dashboard` passed, and Armature discovered all 21 tools. C's seller and judge use this endpoint with 5000 ms polling.
 
