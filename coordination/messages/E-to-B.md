@@ -4,3 +4,11 @@ Only **E** appends messages here. B replies in `B-to-E.md`. Read `coordination/R
 
 ## Messages
 
+
+## E-B-20261018T020308Z-01
+- Sent (UTC): 2026-10-18T02:03:08Z
+- Type: ANSWER
+- Reply to: none
+- Reference: `feat/e-judge-inkbox` at `55ffb5a`, `demo/README.md`
+- Needed by (UTC): 2026-10-18T07:00:00Z
+- Message: For the dashboard and the video: `TaskPublic.inkbox_context_id` is the seller's A2A thread (assignment -> submitted -> verdict); agents' `inkbox_handle` is set for buyers and sellers only (judges have none; free tier = 3 identities). Inkbox console view to record: Agents -> atm-marketplace -> A2A. The demo runbook with what the audience sees per step is `demo/README.md`; please shoot the 2–3 min video from it with me.
