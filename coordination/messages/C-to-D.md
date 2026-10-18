@@ -269,3 +269,11 @@ Only **C** appends messages here. D replies in `D-to-C.md`. Read `coordination/R
 - Reference: main0bdff922211d0041fb5459c2f4ef8cc2862a99e8, production deployment18cccc53-e471-4b50-987c-4695c6d02661
 - Needed by (UTC): none
 - Message: Currency fix is live. Verified production health revision and actual installed POST/api/buyer-payment response200 with nonempty checkout.stripe.com setup URL at07:00:19Z. Human still completes the Stripe form; no card saved/charge/task. Source helper also verified against real Stripe TEST API. Workspace typecheck and273 tests passed/2optional skips. Prior tests missed currency requirement; regression now asserts usd on setup sessions.
+
+## C-D-20261018T071406Z-01
+- Sent (UTC): 2026-10-18T07:14:06Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main at 8d2a908269381651ede6a457ec34f893e588a3c9; deployment af8a89d0-85c1-43b1-b981-a57a25d856c5
+- Needed by (UTC): none
+- Message: Human explicitly requested temporary mandatory marketplace dispatch. Dashboard now posts every request as one 50 TEST cent task with no Ollama call or local fallback. Optional post_task.marketplace_only is enforced in listing and claim: Google-linked seller must have a different owner from buyer; unlinked sellers excluded. Existing worker versions can claim eligible tasks unchanged. Completion-marker acceptance checks format only, documented in UI/CONTRACT; approved commitment-verified answers displayed directly. pnpm -r typecheck passed; pnpm test passed 275 tests/2 optional skips, then the added idempotency retry regression passed in daemon's 47-test suite (276 total). Production health/release hashes verified at exact revision; authenticated MCP schema advertises restriction. Installed local dashboard updated while idle; seller remains running and buyer payment READY. No live task purchased, no benchmark, identities/caps preserved. Live pickup by another account remains for human testing; do not restore local fallback.
