@@ -6,7 +6,7 @@
  * the injected `fetch` and `getSecret`, so the sandbox policy decides what
  * it can reach.
  */
-import { commitment, fromUtf8, generateKeypair, keyIdFor, open, randomB64, seal, toB64, type Keypair } from "@atm/crypto";
+import { commitment, fromUtf8, generateKeypair, keyIdFor, keypairFromSecretB64, open, randomB64, seal, toB64, type Keypair } from "@atm/crypto";
 import {
   JudgePayload,
   JudgeTaskOutput,
@@ -17,6 +17,9 @@ import {
   type KeyDescriptor,
   type Rubric,
 } from "@atm/shared";
+import { McpFetchClient } from "./mcp.js";
+
+export { McpFetchClient } from "./mcp.js";
 
 export interface RunnerHost {
   fetch: typeof fetch;
@@ -37,6 +40,8 @@ export interface JudgeTaskOpts {
   buyer_public_key: KeyDescriptor;
   judge_model?: string;
   anthropic_url?: string;
+  /** The commitment the seller submitted; checked against the decrypted bytes. */
+  commitment_sha256?: string;
 }
 
 export interface Runner {
@@ -88,6 +93,9 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
       const result = ResultPlaintext.parse(JSON.parse(fromUtf8(resultBytes)));
       // The judge recomputes the commitment over the canonical bytes it decrypted.
       const expected = commitment(result).sha256_hex;
+      if (opts.commitment_sha256 && opts.commitment_sha256 !== expected) {
+        return JudgeTaskOutput.parse({ verdict: "REJECT", reason_code: "COMMITMENT_MISMATCH", reason_public: "Result does not match the commitment the seller submitted." });
+      }
       if (result.task_id !== task.task_id) {
         return JudgeTaskOutput.parse({ verdict: "REJECT", reason_code: "COMMITMENT_MISMATCH", reason_public: "Result was produced for a different task." });
       }
@@ -102,8 +110,73 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
         score: graded.score,
       };
       if (!graded.pass) out.replacement_enc_buyer = await replacement(host, opts, task);
-      return JudgeTaskOutput.parse({ ...out, commitment_checked: expected } as unknown as JudgeTaskOutput);
+      return JudgeTaskOutput.parse(out);
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Judge cycle: fetch → judge → submit inside one sandbox instance
+// ---------------------------------------------------------------------------
+
+export interface JudgeCycleOpts {
+  marketplace_url: string; // e.g. http://localhost:3000/mcp
+  judge_model?: string;
+  anthropic_url?: string;
+}
+
+export type JudgeCycleOutput =
+  | { idle: true }
+  | { idle: false; task_id: string; result_id: string; verdict: JudgeTaskOutput["verdict"]; reason_code: JudgeTaskOutput["reason_code"]; reason_public: string; score?: number; seller_status: string | null; seller_payout_cents: number | null; settlement_note: string | null };
+
+interface ReviewPackage {
+  task_id: string;
+  result_id: string;
+  payload_enc_judge: Envelope;
+  result_enc_judge: Envelope;
+  commitment_sha256: string;
+  buyer_public_key: KeyDescriptor;
+}
+
+/**
+ * One full judge round with no host round trip: the agent key, judge private
+ * key and model key come from the sandbox's secret store, the marketplace is
+ * reached over the sandbox's own network grant, and only the public verdict
+ * summary leaves.
+ */
+export async function judgeCycle(host: RunnerHost, opts: JudgeCycleOpts): Promise<JudgeCycleOutput> {
+  const [agentKey, judgeSecret] = await Promise.all([host.getSecret("AGENT_API_KEY"), host.getSecret("JUDGE_PRIVATE_KEY_B64")]);
+  if (!agentKey) throw new Error("AGENT_API_KEY is not available inside the judge sandbox");
+  if (!judgeSecret) throw new Error("JUDGE_PRIVATE_KEY_B64 is not available inside the judge sandbox");
+  const mp = new McpFetchClient(host.fetch, opts.marketplace_url, agentKey);
+  const { package: pkg } = await mp.call<{ package: ReviewPackage | null }>("fetch_review_package");
+  if (!pkg) return { idle: true };
+  const verdict = await createRunner(host).judgeTask(
+    pkg.payload_enc_judge,
+    pkg.result_enc_judge,
+    { buyer_public_key: pkg.buyer_public_key, judge_model: opts.judge_model, anthropic_url: opts.anthropic_url, commitment_sha256: pkg.commitment_sha256 },
+    keypairFromSecretB64(judgeSecret),
+  );
+  const res = await mp.call<{ seller_status: string | null; settlement?: { seller_payout_cents: number; note: string | null } }>("submit_verdict", {
+    task_id: pkg.task_id,
+    result_id: pkg.result_id,
+    verdict: verdict.verdict,
+    reason_code: verdict.reason_code,
+    reason_public: verdict.reason_public,
+    score: verdict.score,
+    replacement_enc_buyer: verdict.replacement_enc_buyer,
+  });
+  return {
+    idle: false,
+    task_id: pkg.task_id,
+    result_id: pkg.result_id,
+    verdict: verdict.verdict,
+    reason_code: verdict.reason_code,
+    reason_public: verdict.reason_public,
+    score: verdict.score,
+    seller_status: res.seller_status ?? null,
+    seller_payout_cents: res.settlement?.seller_payout_cents ?? null,
+    settlement_note: res.settlement?.note ?? null,
   };
 }
 
