@@ -162,3 +162,11 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: main 1d99b4f / deployment source 8fd6dd1
 - Needed by (UTC): next integration
 - Message: A/C source is merged and pushed at 1d99b4f. Task offers, atomic pending-post reservation, hold recovery, settlement retry leases, price preservation, observations, parent jobs and C capability gating are integrated. Workspace typecheck and 189 tests including actual Wassette passed before the final D provider merge; the combined server suite then passed 104 tests and smoke passed (two APPROVED 100c task offers, verified commitments, reserved 0 / spent 200c MOCK). Additive Insforge migration and real Postgres posting/budget test passed with synthetic fixtures removed. Deploying source 8fd6dd1 now. C is taking A server/deploy responsibilities under the human’s latest instruction; please avoid overlapping edits.
+
+## C-A-20261018T041011Z-01
+- Sent (UTC): 2026-10-18T04:10:11Z
+- Type: HANDOFF
+- Reply to: latest handoff
+- Reference: hosted source 920c052; job_6487101b45b433f1
+- Needed by (UTC): next owner handoff
+- Message: A/C delivery verified. Hosted source 920c052, contract 0.3/task_offer. Typecheck + 201 tests (including actual Wassette), task-offer smoke, real Insforge posting/budget transaction passed. Live job job_6487101b45b433f1: C task_2e401d3bac3419a5 and D task_d7e2992aa0951f46 both APPROVED, commitment_verified true, 60c captured/transferred each. Same-claim execution overlap 75.1s; job COMPLETE/spent120/reserved0; existing buyer cap2000/spent555/reserved0/available1445. C general seller and judge remain running with existing identities. docs/LIVE-C-D.md and apps/agent-daemon/evidence/cd-live-20261018-* contain redacted evidence. A/C implementation and hosted integration are complete. Shared remaining gates are B workflow/UI/full cost comparison, E final fault/Inkbox/recording checks and later X1 confidential inference. Do not repeat the old checklist or reset identities.

@@ -1,10 +1,10 @@
 # Computer A — marketplace server, contract, integration, Manufact deployment
 
-## Current A handoff, October 17, 21:05 PDT
+## Current A handoff, October 17, 21:08 PDT
 
-The human assigned A and C to the same integrator. A's server, shared contract/schema, task pricing, durable posting, settlement recovery, jobs, usage schema, public-verdict privacy and Manufact deployment are complete and integrated. Hosted health verifies source `920c052`, contract 0.3 and task-offer pricing. Typecheck and 201 tests passed, including actual Wassette; real Insforge transactional posting and task-offer smoke passed. Keep the existing service and identities running.
+The human assigned A and C to the same integrator. A's server, shared contract/schema, task pricing, durable posting, settlement recovery, jobs, usage schema, public-verdict privacy and Manufact deployment are complete and integrated. Hosted health verifies source `920c052`, contract 0.3 and task-offer pricing. The [C/D live run](../docs/LIVE-C-D.md) completed two approved parts with verified commitments and 75.1 seconds of overlap, at 60c each. Typecheck and 201 tests passed, including actual Wassette; real Insforge transactional posting and task-offer smoke passed. Keep the existing service and identities running.
 
-Remaining shared gates: B's decomposition/aggregation and grouped UI; D joining the general worker pool for C/D overlap proof; E's final live fault/Inkbox/recording evidence; B/D's full cost comparison. X1 confidential inference remains later scope. Read [the current audit](../docs/COMPLETION-AUDIT.md) before the historical checklist. Do not rebuild the delivered slices or duplicate the deployment.
+Remaining shared gates: B's decomposition/aggregation and grouped UI; E's final live fault/Inkbox/recording evidence; B/D's full cost comparison. X1 confidential inference remains later scope. Read [the current audit](../docs/COMPLETION-AUDIT.md) before the historical checklist. Do not rebuild the delivered slices or duplicate the deployment.
 
 
 ## Latest product change: price tasks (2026-10-17, 20:25 PDT)

@@ -1,0 +1,271 @@
+{
+  "before": {
+    "at": "2026-10-18T04:05:16.213Z",
+    "buyer_id": "buyer_fcb622d0211a304d",
+    "spend": {
+      "cap_cents": 2000,
+      "reserved_cents": 0,
+      "spent_cents": 435,
+      "available_cents": 1565
+    }
+  },
+  "job_id": "job_6487101b45b433f1",
+  "parts": {
+    "1": {
+      "task_id": "task_2e401d3bac3419a5",
+      "price_cents": 60,
+      "status": "APPROVED",
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "claim_id": "claim_548203da224aa5d8",
+      "job_id": "job_6487101b45b433f1",
+      "part_key": "1-part",
+      "commitment_verified": true,
+      "verdict": {
+        "verdict": "APPROVE",
+        "reason_code": "RUBRIC_MATCH",
+        "reason_public": "The answer contained the buyer's expected text.",
+        "score": 1,
+        "created_at": "2026-10-18T04:07:04.462519+00:00"
+      },
+      "settlement": {
+        "id": "settle_a3f5b88a5a7cb83a",
+        "task_id": "task_2e401d3bac3419a5",
+        "kind": "STRIPE_TEST",
+        "state": "RECORDED",
+        "seller_payout_cents": 60,
+        "buyer_refund_cents": 0,
+        "stripe_capture_id": "ch_3URlLWF42f8esBiW0udqdXVf",
+        "stripe_transfer_id": "tr_3URlLWF42f8esBiW0H50dCyU",
+        "note": "captured 60c of the 60c hold (pi_3URlLWF42f8esBiW0uUyXlSf); remainder released; transferred 60c to acct_1URjlMF42fAKqm0N (tr_3URlLWF42f8esBiW0H50dCyU)",
+        "created_at": "2026-10-18T04:07:01.982368+00:00",
+        "outcome": "APPROVE",
+        "result_id": "result_711960284e7d9b2b",
+        "verdict_reason_code": "RUBRIC_MATCH",
+        "payment_state": "CAPTURED",
+        "finalized_at": "2026-10-18T04:07:05.88+00:00",
+        "updated_at": "2026-10-18T04:07:05.88+00:00",
+        "payout_owed_cents": 60,
+        "payout_transferred_cents": 60,
+        "transfer_state": "TRANSFERRED",
+        "transfer_attempts": 0,
+        "transfer_retry_at": null,
+        "transfer_lease_token": null,
+        "transfer_lease_until": null,
+        "transfer_key_attempt": 0,
+        "transfer_key_created_at": "2026-10-18T04:07:01.982368+00:00",
+        "transfer_retry_safe_to_advance": false,
+        "transfer_manual_review": false,
+        "transfer_pending_reason": null
+      }
+    },
+    "2": {
+      "task_id": "task_d7e2992aa0951f46",
+      "price_cents": 60,
+      "status": "APPROVED",
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "claim_id": "claim_68bdb47e956f2fb6",
+      "job_id": "job_6487101b45b433f1",
+      "part_key": "2-part",
+      "commitment_verified": true,
+      "verdict": {
+        "verdict": "APPROVE",
+        "reason_code": "RUBRIC_MATCH",
+        "reason_public": "The answer contained the buyer's expected text.",
+        "score": 1,
+        "created_at": "2026-10-18T04:07:56.630708+00:00"
+      },
+      "settlement": {
+        "id": "settle_269c1ceaa055db0f",
+        "task_id": "task_d7e2992aa0951f46",
+        "kind": "STRIPE_TEST",
+        "state": "RECORDED",
+        "seller_payout_cents": 60,
+        "buyer_refund_cents": 0,
+        "stripe_capture_id": "ch_3URlLYF42f8esBiW0DGg1h0E",
+        "stripe_transfer_id": "tr_3URlLYF42f8esBiW0UY48E0R",
+        "note": "captured 60c of the 60c hold (pi_3URlLYF42f8esBiW008iX1L7); remainder released; transferred 60c to acct_1URkfmF42fU7L7jc (tr_3URlLYF42f8esBiW0UY48E0R)",
+        "created_at": "2026-10-18T04:07:54.047796+00:00",
+        "outcome": "APPROVE",
+        "result_id": "result_928478d3cbd506b1",
+        "verdict_reason_code": "RUBRIC_MATCH",
+        "payment_state": "CAPTURED",
+        "finalized_at": "2026-10-18T04:07:57.48+00:00",
+        "updated_at": "2026-10-18T04:07:57.48+00:00",
+        "payout_owed_cents": 60,
+        "payout_transferred_cents": 60,
+        "transfer_state": "TRANSFERRED",
+        "transfer_attempts": 0,
+        "transfer_retry_at": null,
+        "transfer_lease_token": null,
+        "transfer_lease_until": null,
+        "transfer_key_attempt": 0,
+        "transfer_key_created_at": "2026-10-18T04:07:54.047796+00:00",
+        "transfer_retry_safe_to_advance": false,
+        "transfer_manual_review": false,
+        "transfer_pending_reason": null
+      }
+    }
+  },
+  "job": {
+    "job": {
+      "job_id": "job_6487101b45b433f1",
+      "buyer_id": "buyer_fcb622d0211a304d",
+      "label_public": "C/D physical rehearsal",
+      "budget_cents": 120,
+      "reserved_cents": 0,
+      "spent_cents": 120,
+      "status": "COMPLETE",
+      "created_at": "2026-10-18T04:05:17.282006+00:00",
+      "progress": {
+        "parts": 2,
+        "approved": 2,
+        "rejected": 0,
+        "in_progress": 0,
+        "open": 0,
+        "failed_latest": 0
+      }
+    },
+    "progress": {
+      "parts": 2,
+      "approved": 2,
+      "rejected": 0,
+      "in_progress": 0,
+      "open": 0,
+      "failed_latest": 0
+    },
+    "parts": [
+      {
+        "task_id": "task_2e401d3bac3419a5",
+        "buyer_id": "buyer_fcb622d0211a304d",
+        "allowed_models": [
+          "qwen3:8b"
+        ],
+        "max_price_cents": 60,
+        "max_runtime_s": 180,
+        "status": "APPROVED",
+        "created_at": "2026-10-18T04:05:18.304+00:00",
+        "expires_at": "2026-10-18T05:05:18.304+00:00",
+        "claim_id": "claim_548203da224aa5d8",
+        "seller_id": "seller_07a57bbbd50fd91e",
+        "model_id": "qwen3:8b",
+        "price_cents": 60,
+        "lease_expires_at": "2026-10-18T04:10:28.281+00:00",
+        "payment": {
+          "mode": "card",
+          "state": "CAPTURED",
+          "stripe_payment_intent_id": "pi_3URlLWF42f8esBiW0uUyXlSf",
+          "payment_link": null
+        },
+        "inkbox_context_id": null,
+        "review": {
+          "status": "FINAL",
+          "attempts": 0,
+          "retry_at": null
+        },
+        "replacement_status": "NOT_NEEDED",
+        "job_id": "job_6487101b45b433f1",
+        "part_key": "1-part",
+        "part_label": "Rehearsal part 1",
+        "attempt": 1
+      },
+      {
+        "task_id": "task_d7e2992aa0951f46",
+        "buyer_id": "buyer_fcb622d0211a304d",
+        "allowed_models": [
+          "qwen3:8b"
+        ],
+        "max_price_cents": 60,
+        "max_runtime_s": 180,
+        "status": "APPROVED",
+        "created_at": "2026-10-18T04:05:20.644+00:00",
+        "expires_at": "2026-10-18T05:05:20.644+00:00",
+        "claim_id": "claim_68bdb47e956f2fb6",
+        "seller_id": "seller_0213ff3d1ffc3278",
+        "model_id": "qwen3:8b",
+        "price_cents": 60,
+        "lease_expires_at": "2026-10-18T04:10:41.504+00:00",
+        "payment": {
+          "mode": "card",
+          "state": "CAPTURED",
+          "stripe_payment_intent_id": "pi_3URlLYF42f8esBiW008iX1L7",
+          "payment_link": null
+        },
+        "inkbox_context_id": null,
+        "review": {
+          "status": "FINAL",
+          "attempts": 0,
+          "retry_at": null
+        },
+        "replacement_status": "NOT_NEEDED",
+        "job_id": "job_6487101b45b433f1",
+        "part_key": "2-part",
+        "part_label": "Rehearsal part 2",
+        "attempt": 1
+      }
+    ]
+  },
+  "after": {
+    "at": "2026-10-18T04:08:09.196Z",
+    "spend": {
+      "cap_cents": 2000,
+      "reserved_cents": 0,
+      "spent_cents": 555,
+      "available_cents": 1445
+    }
+  },
+  "market_observations": {
+    "mode": "task_offer",
+    "generated_at": "2026-10-18T04:08:09.038Z",
+    "sample_limit": 500,
+    "sample_count": 2,
+    "coverage": "Most recent 500 task-offer listings; at most 5000 claim events. Legacy seller-ask rows excluded.",
+    "limitation": "Model set and runtime limit do not measure prompt complexity. These observations do not establish market equilibrium or authorize spending.",
+    "groups": [
+      {
+        "allowed_models": [
+          "qwen3:8b"
+        ],
+        "max_runtime_s": 180,
+        "sample_count": 2,
+        "accepted_count": 2,
+        "sample_status": "insufficient_data",
+        "posted_price_cents": {
+          "p25": 60,
+          "median": 60,
+          "p75": 60
+        },
+        "accepted_price_cents": {
+          "p25": 60,
+          "median": 60,
+          "p75": 60
+        },
+        "fill_time_ms": {
+          "p25": 10238,
+          "median": 10238,
+          "p75": 10238
+        },
+        "fill_time_sample_count": 2,
+        "claim_rate": 1,
+        "expiry_rate": 0,
+        "approved_count": 2,
+        "open_count": 0
+      }
+    ]
+  },
+  "server_source_revision": "920c0525fb7f688b2c0699db83fac853d779e32b",
+  "payment_mode": "Stripe TEST",
+  "buyer_orchestration": "Two explicit bounded parts prepared by integration script; not automatic decomposition",
+  "machine_mapping": {
+    "C": {
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "hardware": "Apple M5 Pro, 18 CPU cores, 48 GiB",
+      "component_sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34"
+    },
+    "D": {
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "hardware": "Apple M4 Pro, 12 CPU cores, 24 GB",
+      "component_sha256": "94c8b1ca616bb367b63333955b5ec549392804e101b91e5d9b9550596aed713d"
+    }
+  },
+  "provenance": "Server events plus operator-reported physical machine mapping; not attestation"
+}

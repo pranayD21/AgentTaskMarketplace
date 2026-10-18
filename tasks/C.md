@@ -1,10 +1,10 @@
 # Computer C — seller runtime and the Wasm sandbox
 
-## Current C handoff, October 17, 21:05 PDT
+## Current C handoff, October 17, 21:08 PDT
 
 Task pricing, usage capture, safe job/part correlation, the local model canary and the direct-local benchmark arm are delivered. A/C code and tested B/D/E slices are merged; hosted source `920c052` reports contract 0.3 and task-offer pricing. The final workspace run passed typecheck and 201 tests including actual Wassette. Component SHA-256: `a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34`.
 
-The human requested that C's general worker stay running. It resumed at 04:03 UTC as existing seller `seller_07a57bbbd50fd91e`, with task-offer pricing, Wassette and 5000 ms polling. C's existing judge `judge_00b762de5b57f6fa` resumed with the updated component at 04:04 UTC. Preserve both identities. D has been asked to start its general worker before a two-part 120c rehearsal; the C/D execution overlap is still unverified. Do not pause C for a pinned-part experiment.
+The human requested that C's general worker stay running. It resumed at 04:03 UTC as existing seller `seller_07a57bbbd50fd91e`, with task-offer pricing, Wassette and 5000 ms polling. C's existing judge `judge_00b762de5b57f6fa` resumed with the updated component at 04:04 UTC. Preserve both identities. The [C/D live run](../docs/LIVE-C-D.md) is verified: two different physical sellers completed one 120c job, both results APPROVED with verified commitments, 75.1 seconds of overlapping execution, and 60c transferred to each. Job and buyer reservations returned to zero. Do not pause C for a pinned-part experiment.
 
 B still owns automatic decomposition/aggregation, grouped UI and the full paired cost comparison. E owns final recording and Inkbox live evidence. See [C verification](../apps/agent-daemon/VERIFICATION.md) and [the current audit](../docs/COMPLETION-AUDIT.md); the older checklists below are history.
 
