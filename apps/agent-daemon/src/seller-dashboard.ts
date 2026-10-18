@@ -16,6 +16,7 @@ export interface DashboardActions {
   prepare(update: (message: string) => void): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
+  openTaskViewer?(url:string):void;
   payout(): Promise<Record<string, unknown>>;
 }
 const equal = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -46,6 +47,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
   const tokenFile = path.join(root, "dashboard-open.json");
   writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
   const sessions = new Set<string>();
+  const viewerTokens = new Map<string,{task:string;until:number}>();
   const pending = new Map<string, { state: string; verifier: string; until: number; insforge: string }>();
   let phase = "Ready to set up your account", lastError: string | null = null, busy = false;
   let cache: { at: number; value: Record<string, unknown> } | undefined;
@@ -73,7 +75,13 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
     journalDir: path.join(root, "buyer-drafts"), humanAccount: true, getSession: async () => {
       const saved = buyerIdentity(); return { owner: { user_id: saved.owner.user_id } };
     } });
-  const chat = createDashboardChat({ root, marketplaceUrl: options.marketplaceUrl });
+  const chat = createDashboardChat({ root, marketplaceUrl: options.marketplaceUrl,onAccepted(taskId){
+    if(!/^task_[A-Za-z0-9_-]+$/.test(taskId))return;
+    const token=randomBytes(32).toString("hex");
+    for(const [key,value] of viewerTokens)if(value.until<Date.now())viewerTokens.delete(key);
+    viewerTokens.set(token,{task:taskId,until:Date.now()+60000});
+    actions.openTaskViewer?.(`${origin()}/open?token=${encodeURIComponent(token)}&task=${encodeURIComponent(taskId)}`);
+  } });
   let buyerCache: { at: number; value: Record<string, unknown> } | undefined;
   const origin = () => `http://127.0.0.1:${(server.address() as any).port}`;
   const redirect = (res: http.ServerResponse, to: string) => { res.writeHead(303, { Location: to }); res.end(); };
@@ -89,11 +97,14 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
     try {
       if (req.method === "GET" && url.pathname === "/open") {
         const token = jsonFile(tokenFile)?.token ?? "";
-        if (!token || !equal(url.searchParams.get("token") ?? "", token)) return json(403, { error: "Run atm-seller dashboard to open this page." });
+        const supplied=url.searchParams.get("token")??"", viewer=viewerTokens.get(supplied);
+        const validViewer=viewer&&viewer.until>Date.now()&&viewer.task===url.searchParams.get("task");
+        if (!validViewer && (!token || !equal(supplied, token))) return json(403, { error: "Run atm-seller dashboard to open this page." });
         const session = randomBytes(32).toString("hex"); sessions.add(session);
-        writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
+        if(validViewer)viewerTokens.delete(supplied);else writePrivate(tokenFile, { token: randomBytes(32).toString("hex") });
         res.setHeader("Set-Cookie", `atm_local=${session}; HttpOnly; SameSite=Lax; Path=/`);
-        return redirect(res, "/");
+        const task=url.searchParams.get("task");
+        return redirect(res, task&&/^task_[A-Za-z0-9_-]+$/.test(task)?`/task.html?task=${encodeURIComponent(task)}`:"/");
       }
       if (!authorized) return json(401, { error: "Run atm-seller dashboard to open this page." });
       if (req.method === "POST" && (req.headers.origin !== origin() || (url.pathname !== "/api/buyer" && req.headers["x-atm-request"] !== "1"))) return json(403, { error: "Invalid local request" });
@@ -208,7 +219,7 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
         else { await actions.stop(); phase = "Seller stopped. Your identity and models are saved."; }
         cache = undefined; return json(200, { ok: true });
       }
-      if (req.method === "GET" && ["/", "/seller.css", "/seller.js"].includes(url.pathname)) {
+      if (req.method === "GET" && ["/", "/seller.css", "/seller.js", "/task.html", "/task.js", "/task-cards.js"].includes(url.pathname)) {
         const name = url.pathname === "/" ? "seller.html" : url.pathname.slice(1);
         res.writeHead(200, { "Content-Type": name.endsWith(".html") ? "text/html; charset=utf-8" : name.endsWith(".css") ? "text/css" : "text/javascript" });
         return res.end(fs.readFileSync(path.join(options.assets, name)));

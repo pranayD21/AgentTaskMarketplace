@@ -98,3 +98,13 @@ it('requires buying setup before starting a seller but always permits stopping',
  expect((await f.request('/api/stop','POST')).status).toBe(200);expect(f.actions.stop).toHaveBeenCalledOnce();
  paymentState.status='READY';expect((await f.request('/api/start','POST')).status).toBe(200);expect(f.actions.start).toHaveBeenCalledOnce();
 });
+
+it('serves task output pages only to authenticated local sessions',async()=>{
+ const f=await fixture();
+ expect((await realFetch(f.origin+'/task.html?task=task_example')).status).toBe(401);
+ expect((await f.request('/task.html?task=task_example')).status).toBe(200);
+ expect(await (await f.request('/')).text()).toContain('/task-cards.js');
+ const token=JSON.parse(fs.readFileSync(path.join(f.root,'dashboard-open.json'),'utf8')).token;
+ const redirected=await realFetch(f.origin+'/open?token='+token+'&task=task_example',{redirect:'manual'});
+ expect(redirected.headers.get('location')).toBe('/task.html?task=task_example');
+});

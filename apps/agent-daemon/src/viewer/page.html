@@ -146,6 +146,7 @@ const CYCLES = new Set(["run-cycle", "run-cycle-measured", "judge-cycle", "model
 const BOOT = [["spawn", "spawn wassette"], ["load-component", "load runner.wasm"], ["grant-network-permission", "network grants"], ["grant-environment-variable-permission", "env grants"], ["ready", "ready"]];
 
 const S = { hello: null, vms: new Map(), selected: null, follow: true, nets: new Map(), expanded: new Set(), selectedRun: null };
+const routeTask = new URLSearchParams(location.search).get("task");
 const routeVm = location.pathname.match(/^\/vm\/([\w-]+)/)?.[1] || null;
 if (routeVm) { S.selected = routeVm; S.follow = false; document.getElementById("follow").checked = false; }
 
@@ -355,7 +356,8 @@ function renderContent() {
   const vm = S.vms.get(S.selected) || [...S.vms.values()].filter((v) => v.id !== "daemon").at(-1);
   if (!vm) return;
   $("welcome")?.remove();
-  const run = S.selectedRun != null ? vm.runs[S.selectedRun] : vm.runs.at(-1);
+  const pinnedRun=routeTask?vm.runs.find(r=>r.opts?.task_id===routeTask||r.result?.task_id===routeTask||r.nets.some(n=>n.req?.task_id===routeTask)):null;
+  const run = S.selectedRun != null ? vm.runs[S.selectedRun] : pinnedRun??vm.runs.at(-1);
   const up = (vm.closedAt || Date.now()) - vm.startedAt;
   const cpu = vm.cpu.at(-1), rss = vm.rss.at(-1);
   const stages = vm.role === "judge" ? JUDGE_STAGES : SELLER_STAGES;
@@ -369,7 +371,7 @@ function renderContent() {
   const outScroll = outEl?.scrollTop, tlScroll = tlEl?.scrollTop;
 
   const summary = !run ? "" : run.status === "running" ? `<b>running</b> · ${fmtDur(Date.now() - run.startedAt)} elapsed` :
-    `<b class="${run.status === "done" ? "" : ""}">${run.status === "done" ? "completed" : "failed"}</b> in ${fmtMs(run.ms ?? (run.endedAt - run.startedAt))}` +
+    `<b class="${run.status === "done" ? "" : ""}">${run.status === "done" ? (vm.role === "seller" ? "Output submitted — awaiting marketplace review" : "completed") : "failed"}</b> in ${fmtMs(run.ms ?? (run.endedAt - run.startedAt))}` +
     (run.result?.result_id ? ` · result ${esc(run.result.result_id)}` : "") +
     (run.result?.price_cents ? ` · ${run.result.price_cents}c` : "") +
     (run.result?.tokens_out != null ? ` · ${run.result.tokens_out} tokens` : "") +

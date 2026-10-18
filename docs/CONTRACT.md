@@ -249,3 +249,27 @@ successful commitment verification. Existing payment readiness, account caps,
 and the shared provider allowance still apply. Requests exceeding the server's
 2500-byte prompt/context/rubric limit are rejected before posting. Network
 retries use the same persisted client_request_id to avoid duplicate purchases.
+
+### Dashboard output and task viewers (2026-10-18 follow-up)
+
+A request may contain one to four self-contained tasks separated by `---TASK---`
+on its own line. Multiple tasks share an idempotent job with a 50-cent-per-task
+budget (at most 200 TEST cents). Each task retains its own idempotency key and
+output. They are posted without waiting for previous tasks to finish; available
+workers may run them concurrently. Shared provider and buyer limits still apply,
+so posting later parts can fail without cancelling already posted parts.
+
+SUBMITTED/JUDGING answers with verified commitments are now visible as pending
+review. REJECTED output is labelled rejected. Only APPROVED output is presented
+as final, and the request completes only when all tasks have approved results.
+The completion marker remains a format check, not a correctness test.
+
+Each confirmed claim opens an authenticated local task-progress tab on the buyer
+computer. Task IDs and single-use viewer tokens are validated locally; no buyer
+credentials reach the page. On installed seller workers, the existing Wassette
+live viewer is enabled and opens in the default browser after a successful claim,
+not on startup or failed claims. It shows local sandbox activity and model output;
+submission is labelled as awaiting marketplace review. The buyer's viewer shows
+remote task state/output, not remote CPU measurements. Existing remote installs
+need the updated installer to enable their seller viewer; deployment cannot
+restart or update another person's computer.

@@ -58,7 +58,7 @@ function refreshAccount() {
  const names=data?.allowed_models??[];
  if(JSON.stringify(names)!==select.dataset.models){select.replaceChildren(...names.map(name=>new Option(name,name)));select.dataset.models=JSON.stringify(names);if(names.includes(previous))select.value=previous;}
  $('chat-send').disabled=!linked||!ready||!names.length||chatSending;
- $('chat-notice').textContent=!linked?(data?.owner?'Your seller login needs one upgrade. Select Enable chat with Google below; your worker can keep running.':'Continue with Google below to start.'):!names.length?'No marketplace models are available.':!ready?'Complete required Stripe buying setup below to unlock Send request.':'Every request is sent to another account’s worker for 50 TEST cents.';
+ $('chat-notice').textContent=!linked?(data?.owner?'Your seller login needs one upgrade. Select Enable chat with Google below; your worker can keep running.':'Continue with Google below to start.'):!names.length?'No marketplace models are available.':!ready?'Complete required Stripe buying setup below to unlock Send request.':'Each task costs 50 TEST cents. Separate up to four tasks with ---TASK---.';
 }
 const originalRefresh=refresh;
 refresh=async()=>{await originalRefresh();refreshAccount();await refreshChats();};
@@ -72,15 +72,16 @@ async function refreshChats(){
  const fragment=document.createDocumentFragment();
  for(const run of [...(j.runs??[])].reverse()){
   const section=document.createElement('section');section.className='chat-run';
-  const title=document.createElement('h3');title.textContent=`Request ${run.id} · ${run.status}`;section.append(title);
-  if(!['complete','completed','done','failed','error','stopped','cancelled','finished','interrupted'].includes(String(run.status).toLowerCase())){const stop=document.createElement('button');stop.textContent='Stop agent';stop.className='secondary';stop.onclick=async()=>{try{stop.disabled=true;await chatPost('/api/chat/stop',{id:run.id});await refreshChats();}catch(e){error(e.message);stop.disabled=false;}};title.append(stop);}
+  const title=document.createElement('h3');title.textContent=`${run.status==='finished'?'✓ Completed':run.status==='failed'?'Needs attention':'In progress'} · ${run.task_ids?.length??0} task(s)`;section.append(title);
+  if(run.status==='running'){const stop=document.createElement('button');stop.textContent='Stop waiting';stop.className='secondary';stop.onclick=async()=>{try{stop.disabled=true;await chatPost('/api/chat/stop',{id:run.id});await refreshChats();}catch(e){error(e.message);stop.disabled=false;}};title.append(stop);}
+  if(typeof renderTaskCards==='function')renderTaskCards(section,run);
   if(run.prompt) bubble(section,'You',run.prompt,'user');
   for(const event of run.events??[]){
    if(event.type==='model'){
     if(event.message?.content)bubble(section,'Your agent',event.message.content,'assistant');
     if(event.message?.tool_calls?.length)eventDetails(section,'Requested tools',event.message.tool_calls);
-   }else if(event.type==='remote_answer'){
-    bubble(section,'Worker answer · '+String(event.seller_id??'Marketplace'),event.answer,'assistant');
+   }else if(event.type==='remote_answer'||event.type==='remote_preview'){
+    // Outputs are presented once in the task cards above the activity history.
    }else if(event.type==='task_status'){
     const task=event.task??{};const item=document.createElement('div');item.className='chat-event';
     const label=document.createElement('strong');label.textContent=`${task.status??'Status unavailable'} · ${task.task_id??'Task'}`;
@@ -100,3 +101,10 @@ async function refreshChats(){
 $('chat-form').onsubmit=async event=>{event.preventDefault();if(chatSending)return;chatSending=true;refreshAccount();error(null);try{await chatPost('/api/chat',{prompt:$('chat-prompt').value,model:$('chat-model').value});$('chat-prompt').value='';await refreshChats();}catch(e){error(e.message);}finally{chatSending=false;refreshAccount();}};
 $('buyer-payment').onclick=()=>{const popup=window.open('about:blank','atm-buyer-payment');return act(async()=>{try{const r=await post('/api/buyer-payment');if(r.setup_url){if(popup){popup.opener=null;popup.location=r.setup_url;}else window.location.assign(r.setup_url);}else{popup?.close();if(!['READY','MOCK'].includes(r.buyer_payment_status))throw Error('Payment setup is unavailable. Please try again.');}}catch(e){popup?.close();throw e;}});};
 setInterval(()=>{refreshAccount();void refreshChats();},3000);
+
+$('two-task-example').onclick=()=>{
+ $('chat-prompt').value=`Reconcile the East branch invoices against payments. Return a table with invoice, expected amount, paid amount, balance, and discrepancy, then a branch total. Currency USD. Invoices: E-101 Alice 85; E-102 Ben 120; E-103 Carla 60. Payments: E-101 85; E-102 100; E-103 60; E-103 60. Flag the duplicate payment instead of silently removing it.
+---TASK---
+Reconcile the West branch invoices against payments. Return a table with invoice, expected amount, paid amount, balance, and discrepancy, then a branch total. Currency USD. Invoices: W-201 Dan 90; W-202 Elena 140; W-203 Finn 75. Payments: W-201 90; W-202 140; W-999 20. Flag missing and unmatched payments.`;
+ $('chat-notice').textContent='Two independent reconciliation tasks, 100 TEST cents total. Review the text, then select Send request.';
+};

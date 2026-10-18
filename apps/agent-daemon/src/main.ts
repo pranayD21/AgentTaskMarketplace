@@ -38,9 +38,9 @@ const { values: args } = parseArgs({
     "deny-ollama": { type: "boolean", default: false },
     "deny-marketplace": { type: "boolean", default: false },
     once: { type: "boolean", default: false },
-    viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" },
-    "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? "4700" },
-    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? "each" },
+    viewer: { type: "boolean", default: process.env.ATM_VIEWER === "1" || process.env.ATM_HUMAN_SELLER_REQUIRED === "1" },
+    "viewer-port": { type: "string", default: process.env.ATM_VIEWER_PORT ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "0" : "4700") },
+    "viewer-open": { type: "string", default: process.env.ATM_VIEWER_OPEN ?? (process.env.ATM_HUMAN_SELLER_REQUIRED === "1" ? "claim" : "each") },
     "viewer-no-tap": { type: "boolean", default: false },
   },
 });
@@ -52,7 +52,7 @@ if ((args.canary || args["canary-only"] || args["measurement-file"]) && args.rol
 if (args["measurement-file"] && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(args["computer-id"] ?? "")) throw new Error("measurement-file requires a computer-id of 1–64 letters, digits, dots, dashes or underscores");
 if (args["register-only"] && args.role !== "seller") throw new Error("register-only requires seller role");
 if (args["estimated-watts"] && (!args["measurement-file"] || !Number.isFinite(Number(args["estimated-watts"])) || Number(args["estimated-watts"]) <= 0)) throw new Error("estimated-watts requires a measurement file and positive watts");
-if (!["each", "first", "never"].includes(args["viewer-open"])) throw new Error("viewer-open must be each|first|never");
+if (!["each", "first", "never", "claim"].includes(args["viewer-open"])) throw new Error("viewer-open must be each|first|never|claim");
 if (!Number.isInteger(Number(args["viewer-port"])) || Number(args["viewer-port"]) < 0) throw new Error("viewer-port must be a port number (0 picks a free one)");
 const role = args.role as "seller" | "judge";
 const MARKETPLACE_URL = process.env.MARKETPLACE_URL ?? "http://localhost:3000/mcp";
@@ -205,7 +205,7 @@ async function closeViewer() {
 }
 
 try {
-  if (args.viewer) await startViewer();
+  if (args.viewer && !args["canary-only"] && !args["register-only"]) await startViewer();
   log(`marketplace ${MARKETPLACE_URL}`);
   if (args["canary-only"]) {
     rt = await makeRuntime("local-canary-no-marketplace-identity");

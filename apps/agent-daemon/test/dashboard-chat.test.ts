@@ -4,7 +4,7 @@ const call=vi.hoisted(()=>vi.fn());
 vi.mock('../src/marketplace.js',()=>({Marketplace:class{call=call;async listTools(){return [{name:'post_task',inputSchema:{type:'object',properties:{marketplace_only:{type:'boolean'}}}},{name:'register_agent',inputSchema:{}}];}async close(){}}}));
 import {createDashboardChat} from '../src/dashboard-chat.js';
 let root='';afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();if(root)fs.rmSync(root,{recursive:true,force:true});});
-function setup(){root=fs.mkdtempSync(path.join(os.tmpdir(),'atm-chat-'));fs.writeFileSync(path.join(root,'seller.json'),JSON.stringify({owner:{user_id:'human'},buyer_payment:{buyer_payment_status:'READY'}}));fs.writeFileSync(path.join(root,'buyer.json'),JSON.stringify({agent_id:'buyer',api_key:'private-key',owner:{user_id:'human'},marketplace_url:'http://market/mcp'}));return createDashboardChat({root,marketplaceUrl:'http://market/mcp'});}
+function setup(onAccepted?:(id:string)=>void){root=fs.mkdtempSync(path.join(os.tmpdir(),'atm-chat-'));fs.writeFileSync(path.join(root,'seller.json'),JSON.stringify({owner:{user_id:'human'},buyer_payment:{buyer_payment_status:'READY'}}));fs.writeFileSync(path.join(root,'buyer.json'),JSON.stringify({agent_id:'buyer',api_key:'private-key',owner:{user_id:'human'},marketplace_url:'http://market/mcp'}));return createDashboardChat({root,marketplaceUrl:'http://market/mcp',onAccepted});}
 async function request(chat:ReturnType<typeof setup>,method:string,input?:unknown){let status=0,body='';const req=Readable.from(input?[JSON.stringify(input)]:[]) as any;req.method=method;req.url='/api/chat';await chat.handle(req,{writeHead(n:number){status=n;},end(s:string){body=s;}} as any);return {status,body:JSON.parse(body)};}
 const account={kind:'buyer',agent_id:'buyer',owner:{user_id:'human'},buyer_payment:{buyer_payment_status:'READY'}};
 it('always posts even a trivial request and returns only the verified worker answer without calling Ollama',async()=>{
@@ -45,3 +45,27 @@ it('retries an uncertain post with the same persisted idempotency key',async()=>
  await vi.waitFor(async()=>expect((await request(chat,'GET')).body.runs[0].status).toBe('finished'),{timeout:3000});
  const posts=call.mock.calls.filter(c=>c[0]==='post_task');expect(posts).toHaveLength(2);expect(posts[0][1].client_request_id).toBe(posts[1][1].client_request_id);chat.close();
 });
+
+it('shows submitted output as pending and opens the confirmed claim once',async()=>{
+ const open=vi.fn(),chat=setup(open);
+ call.mockImplementation(async(name:string)=>name==='whoami'?account:name==='get_result'?{task:{status:'SUBMITTED'},result:{answer:'Pending answer\n[ATM_TASK_COMPLETE]',commitment_verified:true}}:{task:{task_id:'task_pending',status:name==='post_task'?'OPEN':'SUBMITTED',seller_id:'other',claim_id:'claim-1'}});
+ await request(chat,'POST',{prompt:'Invoice extraction',model:'qwen3:8b'});
+ await vi.waitFor(async()=>expect((await request(chat,'GET')).body.runs[0].events.some((e:any)=>e.type==='remote_preview')).toBe(true));
+ const run=(await request(chat,'GET')).body.runs[0];expect(run.status).toBe('running');expect(run.events).toContainEqual(expect.objectContaining({type:'remote_preview',answer:'Pending answer',status:'SUBMITTED'}));expect(run.events.some((e:any)=>e.type==='remote_answer')).toBe(false);expect(open).toHaveBeenCalledExactlyOnceWith('task_pending');
+ chat.close();await new Promise(r=>setTimeout(r,20));
+});
+it('posts two independent tasks under one capped job and completes only with both outputs',async()=>{
+ const chat=setup();const posts:any[]=[];
+ call.mockImplementation(async(name:string,args:any)=>{
+  if(name==='whoami')return account;
+  if(name==='create_job'){expect(args.budget_cents).toBe(100);return {job:{job_id:'job-two'}};}
+  if(name==='post_task'){posts.push(args);return {task:{task_id:'task_'+posts.length,status:'OPEN'}};}
+  if(name==='get_result')return {task:{status:'APPROVED'},result:{answer:'Output '+args.task_id,commitment_verified:true}};
+  return {task:{task_id:args.task_id,status:'APPROVED',seller_id:'other'}};
+ });
+ await request(chat,'POST',{prompt:'Reconcile East invoices\n---TASK---\nReconcile West invoices',model:'qwen3:8b'});
+ await vi.waitFor(async()=>expect((await request(chat,'GET')).body.runs[0].status).toBe('finished'));
+ expect(posts).toHaveLength(2);expect(new Set(posts.map(p=>p.client_request_id)).size).toBe(2);expect(posts.every(p=>p.job_id==='job-two'&&p.price_cents===50&&p.marketplace_only)).toBe(true);
+ expect((await request(chat,'GET')).body.runs[0].events.filter((e:any)=>e.type==='remote_answer')).toHaveLength(2);chat.close();
+});
+it('rejects more than four parts before posting',async()=>{const chat=setup();expect((await request(chat,'POST',{prompt:Array(5).fill('task').join('\n---TASK---\n'),model:'qwen3:8b'})).status).toBe(400);expect(call).not.toHaveBeenCalled();chat.close();});
