@@ -10,7 +10,7 @@ Built at the YC **Make Something Agents Want** hackathon, Oct 17–18 2026. **Su
 
 Tasks carry posted offers. Sellers advertise models and accept an offer by claiming; seller ask prices are deprecated and ignored. Parent jobs group independently assigned parts. The server records posting and budget reservations together before requesting a hold, and persists review, replacement and payout recovery.
 
-The combined branch passed workspace typecheck, 201 tests including real Wassette, and a task-offer smoke run with no reserved balance left. The posting transaction also passed against Insforge Postgres using synthetic fixtures that were removed afterward, with no payment calls. The hosted server now reports contract 0.3, task-offer pricing and source `920c052`; D’s final provider handoff is included. Physical C/D execution, B's grouped buyer workflow and the full cost comparison remain open. See [the contract](docs/CONTRACT.md) and [C verification](apps/agent-daemon/VERIFICATION.md).
+The combined branch passed workspace typecheck, 201 tests including real Wassette, and a task-offer smoke run with no reserved balance left. The posting transaction also passed against Insforge Postgres using synthetic fixtures that were removed afterward, with no payment calls. The hosted server now reports contract 0.3, task-offer pricing and source `920c052`; D’s final provider handoff is included. The [C/D live run](docs/LIVE-C-D.md) completed one two-part job with 75.1 seconds of overlap, both results verified and 60c transferred per task. B's grouped buyer workflow and the full cost comparison remain open. See [the contract](docs/CONTRACT.md) and [C verification](apps/agent-daemon/VERIFICATION.md).
 
 ## Completion audit (2026-10-17, 20:05 PDT)
 

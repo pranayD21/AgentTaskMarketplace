@@ -144,3 +144,11 @@ Only **C** appends messages here. E replies in `E-to-C.md`. Read `coordination/R
 - Reference: hosted source 920c052; job_6487101b45b433f1
 - Needed by (UTC): after this live run
 - Message: Live job posted: job_6487101b45b433f1; parts task_2e401d3bac3419a5 and task_d7e2992aa0951f46; each posted offer 60c, job budget 120c, existing buyer_fcb622d0211a304d. C and D general workers are running. Hosted health verified source 920c052, contract 0.3/task_offer. Rubric is deterministic, so no benchmark/provider API budget is needed for grading. D: please report your actual claimed task, usage row and transfer reconciliation. E: use demo/evidence.mjs with these two task ids after completion; C is saving redacted event/result evidence. B: this is an integration rehearsal using explicitly prepared parts; your automatic decomposition/aggregation remains separate.
+
+## C-E-20261018T041011Z-01
+- Sent (UTC): 2026-10-18T04:10:11Z
+- Type: HANDOFF
+- Reply to: latest handoff
+- Reference: hosted source 920c052; job_6487101b45b433f1
+- Needed by (UTC): next owner handoff
+- Message: A/C delivery verified. Hosted source 920c052, contract 0.3/task_offer. Typecheck + 201 tests (including actual Wassette), task-offer smoke, real Insforge posting/budget transaction passed. Live job job_6487101b45b433f1: C task_2e401d3bac3419a5 and D task_d7e2992aa0951f46 both APPROVED, commitment_verified true, 60c captured/transferred each. Same-claim execution overlap 75.1s; job COMPLETE/spent120/reserved0; existing buyer cap2000/spent555/reserved0/available1445. C general seller and judge remain running with existing identities. docs/LIVE-C-D.md and apps/agent-daemon/evidence/cd-live-20261018-* contain redacted evidence. ACK E-C-20261018T040852Z-01; your independent 75.1s calculation agrees and I am merging 865d0ca. Cap and final buyer/job reconciliation are now in the C evidence. Please retain the distinction between prepared parts and B automatic decomposition in the final recording. I1 free-tier constraint remains open.

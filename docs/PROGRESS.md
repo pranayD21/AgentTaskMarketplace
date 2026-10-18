@@ -6,7 +6,7 @@ A and C's implementation is merged. Task offers replace seller asks; the server 
 
 The final combined workspace check passed: typecheck and **201 tests**, including actual Wassette (crypto 7, web 17, runner-core 49, server 106, daemon 22). The task-offer smoke run approved both parts at 100c, verified commitments and ended with reserved 0c/spent 200c in MOCK mode. The real Insforge posting/budget transaction test passed and removed its synthetic fixtures without payment calls.
 
-Server source `920c052` is deployed; `/api/health` verified contract 0.3 and task-offer pricing at 04:04:05 UTC. C’s existing seller and judge workers are running on the updated Wassette component. Physical C/D execution will be recorded only after both machines finish. B's automatic decomposition/aggregation and grouped UI, the complete paired cost comparison, E's final recording and the Inkbox free-tier live check remain open. X1 confidential inference remains a design, not a delivered privacy guarantee.
+Server source `920c052` is deployed; `/api/health` verified contract 0.3 and task-offer pricing at 04:04:05 UTC. C’s existing seller and judge workers are running on the updated Wassette component. The [C/D physical run](LIVE-C-D.md) completed: 75.1 seconds of overlap, two approved and commitment-verified parts, 60c transferred to each seller and zero remaining reservations. B's automatic decomposition/aggregation and grouped UI, the complete paired cost comparison, E's final recording and the Inkbox free-tier live check remain open. X1 confidential inference remains a design, not a delivered privacy guarantee.
 
 The sections below retain earlier implementation history; use this current section and the completion audit for status.
 

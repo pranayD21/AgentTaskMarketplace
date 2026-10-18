@@ -1,6 +1,6 @@
 # Completion audit and remaining assignments
 
-## A/C delivery status, October 17, 21:05 PDT
+## A/C delivery status, October 17, 21:08 PDT
 
 A and C's code is merged and deployed. Health at 04:04:05 UTC verified contract `0.3`, pricing `task_offer` and source `920c0525fb7f688b2c0699db83fac853d779e32b`. Workspace typecheck and all 201 tests passed, including actual Wassette. The Insforge posting/budget transaction and the task-offer smoke check passed.
 
@@ -10,12 +10,12 @@ A and C's code is merged and deployed. Health at 04:04:05 UTC verified contract 
 | J1/J2/J3 | Fixed public explanations including historical rows; infrastructure deferral; bounded replacement recovery. Tests cover privacy, outages and settlement effects. | E's final live fault/replacement rehearsal and B's status presentation. |
 | P1/P2 | Atomic pending-post reservation, idempotent hold recovery, resumable settlement, transfer leases and provider reconciliation. D's MPP payment reservation fixes are included. | No production crash was injected; operate with the documented reconciliation limits. |
 | F1 | Job/part contract, private payload boundaries, idempotent posting, job budgets and runtime correlation. | B's automatic decomposition/aggregation and grouped dashboard. |
-| B1 | Shared usage schema, C runtime/hardware measurements and direct-local benchmark arm. | B/D complete paired closed-source and marketplace runs, accounting and comparison. |
-| L1/D1 | Hosted v0.3 and updated C seller/judge are running; D's physical-machine setup was verified earlier. | New two-part C/D overlap and final recording are pending D's general-worker readiness reply. |
+| B1 | Shared usage schema, C runtime/hardware measurements and direct-local benchmark arm. | B's closed-source baseline is complete; B/D still need the marketplace arm and full accounting/comparison. |
+| L1/D1 | [Hosted C/D proof](LIVE-C-D.md): one job, two physical sellers, 75.1s overlap, both APPROVED/verified, 60c transferred each, zero remaining reservation. | E's final fault/replacement rehearsal and recording. |
 | I1 | Inkbox state/context persistence is integrated. | E's restart/live seller-thread proof remains limited by the three-identity free tier. |
 | X1 | Confidential-compute design and honest security boundaries. Local model canary implemented. | Attested confidential inference is later scope; Wasm and model hashes do not hide inputs from the host owner. |
 
-C's general seller remains running at the human's request. The two-part rehearsal will use the existing C buyer and 120 cents of its existing cap. No Armature cap bypass, replacement buyer or paid benchmark run is authorized by this plan.
+C's general seller remains running at the human's request. The completed two-part rehearsal used 120 cents of the existing C buyer cap. No Armature cap bypass, replacement buyer or paid benchmark run is authorized by this plan.
 
 ## Historical audit, October 17 at 20:05 PDT
 

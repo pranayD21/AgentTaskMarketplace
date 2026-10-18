@@ -1,0 +1,63 @@
+{
+  "marketplace": "https://warm-cloud-4hh5i.run.mcp-use.com",
+  "generated_at": "2026-10-18T04:08:18.269Z",
+  "tasks": [
+    {
+      "task_id": "task_2e401d3bac3419a5",
+      "status": "APPROVED",
+      "evidence": "OK",
+      "problem": null,
+      "claim_id": "claim_548203da224aa5d8",
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "seller_name": "computer-c-v02",
+      "runtime": "wassette",
+      "model_id": "qwen3:8b",
+      "price_cents": 60,
+      "claimed": "2026-10-18T04:05:28.542853+00:00",
+      "running": "2026-10-18T04:05:29.636654+00:00",
+      "submitted": "2026-10-18T04:06:58.029099+00:00",
+      "execution_s": 88.393,
+      "verdict": "APPROVE RUBRIC_MATCH",
+      "verdict_at": "2026-10-18T04:07:04.462519+00:00",
+      "settlement": {
+        "kind": "STRIPE_TEST",
+        "state": "RECORDED",
+        "payout": 60,
+        "refund": 0,
+        "capture": "ch_3URlLWF42f8esBiW0udqdXVf",
+        "transfer": "tr_3URlLWF42f8esBiW0H50dCyU"
+      }
+    },
+    {
+      "task_id": "task_d7e2992aa0951f46",
+      "status": "APPROVED",
+      "evidence": "OK",
+      "problem": null,
+      "claim_id": "claim_68bdb47e956f2fb6",
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "seller_name": "computer-d-wasm",
+      "runtime": "wassette",
+      "model_id": "qwen3:8b",
+      "price_cents": 60,
+      "claimed": "2026-10-18T04:05:41.761126+00:00",
+      "running": "2026-10-18T04:05:42.929383+00:00",
+      "submitted": "2026-10-18T04:07:45.539704+00:00",
+      "execution_s": 122.61,
+      "verdict": "APPROVE RUBRIC_MATCH",
+      "verdict_at": "2026-10-18T04:07:56.630708+00:00",
+      "settlement": {
+        "kind": "STRIPE_TEST",
+        "state": "RECORDED",
+        "payout": 60,
+        "refund": 0,
+        "capture": "ch_3URlLYF42f8esBiW0DGg1h0E",
+        "transfer": "tr_3URlLYF42f8esBiW0UY48E0R"
+      }
+    }
+  ]
+}
+EXECUTION (task.running → result.submitted, same claim) OVERLAP on distinct sellers:
+  task_2e401d3bac3419a5 (seller_07a57bbbd50fd91e) ∩ task_d7e2992aa0951f46 (seller_0213ff3d1ffc3278): 75.1s
+reservation (task.claimed → result.submitted; not execution) OVERLAP on distinct sellers:
+  task_2e401d3bac3419a5 (seller_07a57bbbd50fd91e) ∩ task_d7e2992aa0951f46 (seller_0213ff3d1ffc3278): 76.3s
+Seller IDs map to machines only through the team's recorded mapping (C: seller_07a57bbbd50fd91e, D: seller_0213ff3d1ffc3278); this script does not identify computers.

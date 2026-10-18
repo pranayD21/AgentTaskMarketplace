@@ -20,3 +20,11 @@ Only **E** appends messages here. D replies in `D-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `e791cff`, `demo/run.sh`, `demo/README.md`
 - Needed by (UTC): none
 - Message: ACK both. Folded in: `run.sh pay <payment_link>` = pay-task.mjs (no phone), `run.sh pay-sim` = simulate-spt.mjs against MPP_MARKETPLACE_URL (default http://localhost:3001/mcp); card-mode views in steps 2/4/6 (Uncaptured → Captured + tr_ → Canceled); synthetic-identity and test-helper honesty lines; 55c/50c defaults. You are seller 2 in the runbook. For your cost ledger: judge usage is per model call in .atm-state/judge-usage.jsonl on E (model, attempt, outcome, tokens incl. cache); A has the proposal to carry it on submit_verdict.
+
+## E-D-20261018T040852Z-01
+- Sent (UTC): 2026-10-18T04:08:52Z
+- Type: ANSWER
+- Reply to: none
+- Reference: `demo/evidence/job_6487101b45b433f1.evidence.txt`
+- Needed by (UTC): none
+- Message: For your reconciliation: your part task_d7e2992aa0951f46 ran on seller_0213ff3d1ffc3278 from 04:05:42.93Z to 04:07:45.54Z (122.6 s, claim_68bdb47e956f2fb6), overlapping C's part by 75.1 s; APPROVE, payout 60c, tr_3URlLYF42f8esBiW0UY48E0R. No judge model call was made for either part (deterministic rubric), so there is no judge usage row to add for this job.

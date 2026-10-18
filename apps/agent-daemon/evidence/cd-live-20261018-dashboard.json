@@ -1,0 +1,393 @@
+{
+  "generated_at": "2026-10-18T04:08:18.269Z",
+  "tasks": [
+    {
+      "task_id": "task_d7e2992aa0951f46",
+      "buyer_id": "buyer_fcb622d0211a304d",
+      "allowed_models": [
+        "qwen3:8b"
+      ],
+      "max_price_cents": 60,
+      "max_runtime_s": 180,
+      "status": "APPROVED",
+      "created_at": "2026-10-18T04:05:20.644+00:00",
+      "expires_at": "2026-10-18T05:05:20.644+00:00",
+      "claim_id": "claim_68bdb47e956f2fb6",
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "model_id": "qwen3:8b",
+      "price_cents": 60,
+      "lease_expires_at": "2026-10-18T04:10:41.504+00:00",
+      "payment": {
+        "mode": "card",
+        "state": "CAPTURED",
+        "stripe_payment_intent_id": "pi_3URlLYF42f8esBiW008iX1L7",
+        "payment_link": null
+      },
+      "inkbox_context_id": null,
+      "review": {
+        "status": "FINAL",
+        "attempts": 0,
+        "retry_at": null
+      },
+      "replacement_status": "NOT_NEEDED",
+      "job_id": "job_6487101b45b433f1",
+      "part_key": "2-part",
+      "part_label": "Rehearsal part 2",
+      "attempt": 1
+    },
+    {
+      "task_id": "task_2e401d3bac3419a5",
+      "buyer_id": "buyer_fcb622d0211a304d",
+      "allowed_models": [
+        "qwen3:8b"
+      ],
+      "max_price_cents": 60,
+      "max_runtime_s": 180,
+      "status": "APPROVED",
+      "created_at": "2026-10-18T04:05:18.304+00:00",
+      "expires_at": "2026-10-18T05:05:18.304+00:00",
+      "claim_id": "claim_548203da224aa5d8",
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "model_id": "qwen3:8b",
+      "price_cents": 60,
+      "lease_expires_at": "2026-10-18T04:10:28.281+00:00",
+      "payment": {
+        "mode": "card",
+        "state": "CAPTURED",
+        "stripe_payment_intent_id": "pi_3URlLWF42f8esBiW0uUyXlSf",
+        "payment_link": null
+      },
+      "inkbox_context_id": null,
+      "review": {
+        "status": "FINAL",
+        "attempts": 0,
+        "retry_at": null
+      },
+      "replacement_status": "NOT_NEEDED",
+      "job_id": "job_6487101b45b433f1",
+      "part_key": "1-part",
+      "part_label": "Rehearsal part 1",
+      "attempt": 1
+    }
+  ],
+  "events": [
+    {
+      "id": 302,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "judge_00b762de5b57f6fa",
+      "type": "verdict.recorded",
+      "meta": {
+        "outcome": "APPROVE",
+        "reason_code": "RUBRIC_MATCH",
+        "transfer_state": "TRANSFERRED",
+        "seller_payout_cents": 60
+      },
+      "created_at": "2026-10-18T04:07:57.628237+00:00"
+    },
+    {
+      "id": 301,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "judge_00b762de5b57f6fa",
+      "type": "task.judging",
+      "meta": {
+        "result_id": "result_928478d3cbd506b1"
+      },
+      "created_at": "2026-10-18T04:07:52.633609+00:00"
+    },
+    {
+      "id": 300,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "seller_0213ff3d1ffc3278",
+      "type": "result.submitted",
+      "meta": {
+        "claim_id": "claim_68bdb47e956f2fb6",
+        "result_id": "result_928478d3cbd506b1",
+        "runtime_ms": 121209,
+        "commitment_sha256": "09d3cbb26f47af422f7b9d65d4c52b5efc93c892eca1fda9a33a48bf815b8bc7"
+      },
+      "created_at": "2026-10-18T04:07:45.539704+00:00"
+    },
+    {
+      "id": 299,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "judge_00b762de5b57f6fa",
+      "type": "verdict.recorded",
+      "meta": {
+        "outcome": "APPROVE",
+        "reason_code": "RUBRIC_MATCH",
+        "transfer_state": "TRANSFERRED",
+        "seller_payout_cents": 60
+      },
+      "created_at": "2026-10-18T04:07:06.029579+00:00"
+    },
+    {
+      "id": 298,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "judge_00b762de5b57f6fa",
+      "type": "task.judging",
+      "meta": {
+        "result_id": "result_711960284e7d9b2b"
+      },
+      "created_at": "2026-10-18T04:07:00.561691+00:00"
+    },
+    {
+      "id": 297,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "seller_07a57bbbd50fd91e",
+      "type": "result.submitted",
+      "meta": {
+        "claim_id": "claim_548203da224aa5d8",
+        "result_id": "result_711960284e7d9b2b",
+        "runtime_ms": 86900,
+        "commitment_sha256": "764becfeef0a6518359b1a7935fefa951ad995629c792062e690a8b5d692a86a"
+      },
+      "created_at": "2026-10-18T04:06:58.029099+00:00"
+    },
+    {
+      "id": 296,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "seller_0213ff3d1ffc3278",
+      "type": "task.running",
+      "meta": {
+        "claim_id": "claim_68bdb47e956f2fb6"
+      },
+      "created_at": "2026-10-18T04:05:42.929383+00:00"
+    },
+    {
+      "id": 295,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "seller_0213ff3d1ffc3278",
+      "type": "task.claimed",
+      "meta": {
+        "claim_id": "claim_68bdb47e956f2fb6",
+        "model_id": "qwen3:8b",
+        "price_cents": 60,
+        "runner_key_id": "runner-8ae6ec003256300e",
+        "lease_expires_at": "2026-10-18T04:10:41.504Z",
+        "runner_key_source": "per-claim"
+      },
+      "created_at": "2026-10-18T04:05:41.761126+00:00"
+    },
+    {
+      "id": 294,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "seller_07a57bbbd50fd91e",
+      "type": "task.running",
+      "meta": {
+        "claim_id": "claim_548203da224aa5d8"
+      },
+      "created_at": "2026-10-18T04:05:29.636654+00:00"
+    },
+    {
+      "id": 293,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "seller_07a57bbbd50fd91e",
+      "type": "task.claimed",
+      "meta": {
+        "claim_id": "claim_548203da224aa5d8",
+        "model_id": "qwen3:8b",
+        "price_cents": 60,
+        "runner_key_id": "runner-7e7b12a71a0919d4",
+        "lease_expires_at": "2026-10-18T04:10:28.281Z",
+        "runner_key_source": "per-claim"
+      },
+      "created_at": "2026-10-18T04:05:28.542853+00:00"
+    },
+    {
+      "id": 292,
+      "task_id": "task_d7e2992aa0951f46",
+      "agent_id": "buyer_fcb622d0211a304d",
+      "type": "task.posted",
+      "meta": {
+        "job_id": "job_6487101b45b433f1",
+        "attempt": 1,
+        "part_key": "2-part",
+        "rubric_kind": "contains_text",
+        "payment_state": "HELD",
+        "allowed_models": [
+          "qwen3:8b"
+        ],
+        "max_price_cents": 60
+      },
+      "created_at": "2026-10-18T04:05:21.847254+00:00"
+    },
+    {
+      "id": 291,
+      "task_id": "task_2e401d3bac3419a5",
+      "agent_id": "buyer_fcb622d0211a304d",
+      "type": "task.posted",
+      "meta": {
+        "job_id": "job_6487101b45b433f1",
+        "attempt": 1,
+        "part_key": "1-part",
+        "rubric_kind": "contains_text",
+        "payment_state": "HELD",
+        "allowed_models": [
+          "qwen3:8b"
+        ],
+        "max_price_cents": 60
+      },
+      "created_at": "2026-10-18T04:05:19.761679+00:00"
+    }
+  ],
+  "settlements": [
+    {
+      "id": "settle_269c1ceaa055db0f",
+      "task_id": "task_d7e2992aa0951f46",
+      "kind": "STRIPE_TEST",
+      "state": "RECORDED",
+      "seller_payout_cents": 60,
+      "buyer_refund_cents": 0,
+      "stripe_capture_id": "ch_3URlLYF42f8esBiW0DGg1h0E",
+      "stripe_transfer_id": "tr_3URlLYF42f8esBiW0UY48E0R",
+      "note": "captured 60c of the 60c hold (pi_3URlLYF42f8esBiW008iX1L7); remainder released; transferred 60c to acct_1URkfmF42fU7L7jc (tr_3URlLYF42f8esBiW0UY48E0R)",
+      "created_at": "2026-10-18T04:07:54.047796+00:00",
+      "outcome": "APPROVE",
+      "result_id": "result_928478d3cbd506b1",
+      "verdict_reason_code": "RUBRIC_MATCH",
+      "payment_state": "CAPTURED",
+      "finalized_at": "2026-10-18T04:07:57.48+00:00",
+      "updated_at": "2026-10-18T04:07:57.48+00:00",
+      "payout_owed_cents": 60,
+      "payout_transferred_cents": 60,
+      "transfer_state": "TRANSFERRED",
+      "transfer_attempts": 0,
+      "transfer_retry_at": null,
+      "transfer_lease_token": null,
+      "transfer_lease_until": null,
+      "transfer_key_attempt": 0,
+      "transfer_key_created_at": "2026-10-18T04:07:54.047796+00:00",
+      "transfer_retry_safe_to_advance": false,
+      "transfer_manual_review": false,
+      "transfer_pending_reason": null
+    },
+    {
+      "id": "settle_a3f5b88a5a7cb83a",
+      "task_id": "task_2e401d3bac3419a5",
+      "kind": "STRIPE_TEST",
+      "state": "RECORDED",
+      "seller_payout_cents": 60,
+      "buyer_refund_cents": 0,
+      "stripe_capture_id": "ch_3URlLWF42f8esBiW0udqdXVf",
+      "stripe_transfer_id": "tr_3URlLWF42f8esBiW0H50dCyU",
+      "note": "captured 60c of the 60c hold (pi_3URlLWF42f8esBiW0uUyXlSf); remainder released; transferred 60c to acct_1URjlMF42fAKqm0N (tr_3URlLWF42f8esBiW0H50dCyU)",
+      "created_at": "2026-10-18T04:07:01.982368+00:00",
+      "outcome": "APPROVE",
+      "result_id": "result_711960284e7d9b2b",
+      "verdict_reason_code": "RUBRIC_MATCH",
+      "payment_state": "CAPTURED",
+      "finalized_at": "2026-10-18T04:07:05.88+00:00",
+      "updated_at": "2026-10-18T04:07:05.88+00:00",
+      "payout_owed_cents": 60,
+      "payout_transferred_cents": 60,
+      "transfer_state": "TRANSFERRED",
+      "transfer_attempts": 0,
+      "transfer_retry_at": null,
+      "transfer_lease_token": null,
+      "transfer_lease_until": null,
+      "transfer_key_attempt": 0,
+      "transfer_key_created_at": "2026-10-18T04:07:01.982368+00:00",
+      "transfer_retry_safe_to_advance": false,
+      "transfer_manual_review": false,
+      "transfer_pending_reason": null
+    }
+  ],
+  "verdicts": [
+    {
+      "id": "verdict_settle_269c1ceaa055db0f",
+      "task_id": "task_d7e2992aa0951f46",
+      "verdict": "APPROVE",
+      "reason_code": "RUBRIC_MATCH",
+      "score": 1,
+      "created_at": "2026-10-18T04:07:56.630708+00:00",
+      "reason_public": "The answer contained the buyer's expected text."
+    },
+    {
+      "id": "verdict_settle_a3f5b88a5a7cb83a",
+      "task_id": "task_2e401d3bac3419a5",
+      "verdict": "APPROVE",
+      "reason_code": "RUBRIC_MATCH",
+      "score": 1,
+      "created_at": "2026-10-18T04:07:04.462519+00:00",
+      "reason_public": "The answer contained the buyer's expected text."
+    }
+  ],
+  "sellers": [
+    {
+      "seller_id": "seller_0213ff3d1ffc3278",
+      "display_name": "computer-d-wasm",
+      "status": "ACTIVE",
+      "models": [
+        {
+          "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+          "model_id": "qwen3:8b"
+        }
+      ],
+      "runner": {
+        "public_key": {
+          "key_id": "runner-8ae6ec003256300e",
+          "public_key_b64": "K56fGCw3jiFsfqNoye2vSoz4Lpz2RAas/zJWe2spqS0="
+        },
+        "key_source": "per-claim",
+        "wasm_sha256": "94c8b1ca616bb367b63333955b5ec549392804e101b91e5d9b9550596aed713d",
+        "runtime": "wassette",
+        "wassette_version": "0.8.0"
+      },
+      "reputation": {
+        "approvals": 2,
+        "rejections": 0,
+        "strikes": 0
+      },
+      "inkbox_handle": null,
+      "last_seen": "2026-10-18T04:07:45.389+00:00"
+    },
+    {
+      "seller_id": "seller_07a57bbbd50fd91e",
+      "display_name": "computer-c-v02",
+      "status": "ACTIVE",
+      "models": [
+        {
+          "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+          "model_id": "qwen3:8b"
+        }
+      ],
+      "runner": {
+        "public_key": {
+          "key_id": "runner-7e7b12a71a0919d4",
+          "public_key_b64": "En+y7x2BVKvGG4JPLW9h/klH0a20+hC8oytA+JCApk0="
+        },
+        "key_source": "per-claim",
+        "wasm_sha256": "a3662f2c2b4358d213c22923683e98f2579e7789e04df2eba7632ee898360e34",
+        "runtime": "wassette",
+        "wassette_version": "0.8.0"
+      },
+      "reputation": {
+        "approvals": 3,
+        "rejections": 0,
+        "strikes": 0
+      },
+      "inkbox_handle": null,
+      "last_seen": "2026-10-18T04:06:57.88+00:00"
+    }
+  ],
+  "jobs": [
+    {
+      "job_id": "job_6487101b45b433f1",
+      "buyer_id": "buyer_fcb622d0211a304d",
+      "label_public": "C/D physical rehearsal",
+      "budget_cents": 120,
+      "reserved_cents": 0,
+      "spent_cents": 120,
+      "status": "COMPLETE",
+      "created_at": "2026-10-18T04:05:17.282006+00:00",
+      "progress": {
+        "parts": 2,
+        "approved": 2,
+        "rejected": 0,
+        "in_progress": 0,
+        "open": 0,
+        "failed_latest": 0
+      }
+    }
+  ]
+}
