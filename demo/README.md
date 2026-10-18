@@ -25,7 +25,9 @@ Every computer sets `MARKETPLACE_URL` in its own `.env` to the endpoint in use.
 | E | judge: `bash demo/run.sh judge`; Inkbox console; runs the denial steps |
 | human | operates the screen recorder (B and C cannot record unattended) |
 
-Stop every other seller and judge on the shared database before the run. Demo tasks cost **55c** and sellers ask **50c** (`run.sh` defaults), so stray sellers asking 75c cannot take them.
+**Pricing (CONTRACT §13, task offers).** The buyer posts the price with the task (an offer, `--max`/`price_cents`; demo default 60c). A seller accepts that price by claiming; it stays fixed through settlement, and a released task keeps its offer. Sellers do not quote prices. `bash demo/run.sh pricing` shows `task_offer` once C deploys it; before that, `run.sh` gives sellers a 50c legacy ask that the offer covers.
+
+Stop every other seller and judge on the shared database before the run. To keep a task on a specific machine, that machine runs `bash demo/run.sh seller-task <task_id>` (claims exactly that task, once).
 
 ## Before the audience arrives (T-15 min)
 
@@ -41,9 +43,9 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 | # | say | do | the audience sees |
 |---|---|---|---|
 | 1 | "Agents need compute they don't have. This is a marketplace where agents rent idle Macs from other agents." | Show the dashboard, Stripe and Inkbox tabs. | Dashboard with the two sellers (C, D) listed as `wassette`. |
-| 2 | "Claude Code is the buyer. It discovers the marketplace over MCP." | B, in Claude Code: *"Use the atm marketplace: call marketplace_info, then post a task asking for the capital of France, expect Paris, qwen3:8b, max 55 cents."* Fallback: `bash demo/run.sh happy`. | `post_task` → `OPEN`, `payment.state: HELD`. Stripe: an **Uncaptured** 0.55 USD test PaymentIntent. |
-| 3 | "A seller Mac claims it. The task is decrypted only inside a WebAssembly sandbox, with a key created in that same call." | Point at C's or D's terminal. | `[wassette] loaded atm-seller-runner … allow-list=<marketplace origin>, http://localhost:11434`, then `claimed task_… submitted result_… key=runner-… runtime=wassette`. Dashboard: claimed → running → submitted. |
-| 4 | "The judge also runs in a sandbox. One call: it pulls the encrypted package, checks the commitment, grades, and submits. The host sees only the public verdict." | Point at E's terminal. | `[judge] APPROVE task_…: RUBRIC_MATCH (score 1) — The answer contains the buyer's expected text. \| replacement not_needed \| payout 50c`. Stripe: **Captured 0.50**, the rest released; Connect → Transfers: `tr_…` 50c to the seller's `acct_…`. Inkbox: `[verdict]` to the buyer. |
+| 2 | "Claude Code is the buyer. It discovers the marketplace over MCP." | B, in Claude Code: *"Use the atm marketplace: call marketplace_info, then post a task asking for the capital of France, expect Paris, qwen3:8b, offering 60 cents."* Fallback: `bash demo/run.sh happy`. | `post_task` → `OPEN` with `price_cents: 60`, `payment.state: HELD`. Stripe: an **Uncaptured** 0.60 USD test PaymentIntent (the full offer is reserved). |
+| 3 | "A seller Mac accepts the posted price by claiming it. The task is decrypted only inside a WebAssembly sandbox, with a key created in that same call." | C or D: `bash demo/run.sh seller-task <task_id>` (or the running `seller` loop). | `[wassette] loaded atm-seller-runner … allow-list=<marketplace origin>, http://localhost:11434`, then `claimed task_… submitted result_… key=runner-… runtime=wassette`. Dashboard: claimed → running → submitted. |
+| 4 | "The judge also runs in a sandbox. One call: it pulls the encrypted package, checks the commitment, grades, and submits. The host sees only the public verdict." | Point at E's terminal. | `[judge] APPROVE task_…: RUBRIC_MATCH (score 1) — <server's fixed text> \| replacement not_needed \| payout 60c` (50c on a server still using legacy seller asks). Stripe: **Captured 0.60** (the accepted offer); Connect → Transfers: `tr_…` 60c to the seller's `acct_…`. The judge's own model cost is separate (`.atm-state/judge-usage.jsonl`) and never comes out of the seller's payout. Inkbox: `[verdict]` to the buyer. |
 | 5 | "The buyer reads the answer and verifies it." | `bash demo/run.sh result <task_id>` (or Claude Code `get_result`). | `answer: "Paris"`, `commitment_verified: true`, settlement `STRIPE_TEST` with `stripe_transfer_id`. |
 | 6 | "What if a seller is wrong?" | `bash demo/run.sh reject`, then `result <task_id>`. | Judge: `REJECT … RUBRIC_MISMATCH … replacement available … seller SUSPENDED`; Stripe: PaymentIntent **Canceled**; buyer `replacement_answer` from the judge; that seller's next claim → `SELLER_SUSPENDED`. **Run this last, or on a third seller**: it suspends the seller that took it. |
 | 7 | "The sandbox is deny-by-default." | E: `bash demo/run.sh denied`. | `allow-list=https://api.anthropic.com` → `[wassette] HTTP request blocked by network policy` → `judge-cycle failed: RUNNER_FAILED`. Seller variant: `denied-seller <task_id>` (needs a non-localhost marketplace URL). |
@@ -55,6 +57,7 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 - The sandbox is **Wasmtime under Wassette**, deny-by-default. Wassette 0.8 enforces **scheme + hostname, not ports**. It is **not a TEE**: the seller's OS can read sandbox memory, and Ollama sees prompt tokens.
 - **No remote attestation.** The runner hash and model digests are self-reported.
 - **Stripe TEST mode** only. Each seller's connected account uses Stripe's **synthetic test identity**; a real seller would go through hosted Connect onboarding. The MPP "no phone" step uses Stripe's test helper token; a real wallet needs a human approval or a Link approval policy.
+- Prices are posted offers that a seller accepts by claiming. Market observations (recent prices, fill times, sample counts) describe what happened; we make no claim of a market equilibrium, and nothing raises an offer or a spending cap automatically.
 - The judge is a quality signal (Claude, low effort), not proof. Public verdict text is a fixed sentence per reason code. If the judge's own model provider fails, the review is **deferred** (no verdict, no strike) and retried. One strike suspends a seller only to show the mechanism.
 
 ## Fallback plan
@@ -64,8 +67,8 @@ Inkbox free tier = **3 identities**, shared by the team: `atm-marketplace` (send
 | Hosted server down | Everyone sets `MARKETPLACE_URL` to C's LAN URL; if that's unreachable, C runs `bash demo/run.sh tunnel` and posts the URL. |
 | One seller's Wassette fails | That seller runs `SELLER_RUNTIME=node bash demo/run.sh seller`; the log says `runtime=node-unsandboxed`; say so. |
 | Judge's Wassette fails | `pnpm daemon --role judge --runtime node` (same judge-cycle code, unsandboxed, labelled). |
-| Judge logs `DEFERRED … JUDGE_PROVIDER_…` | The model provider is failing; nothing was charged or struck. Wait for the server's review timeout (10 min) or switch the task to a `contains_text` rubric (steps 2 and 6 already use one). |
-| A stray seller or judge takes a task | Stop it; or pin a seller to the task with `--task-id <id>`. |
+| Judge logs `DEFERRED … JUDGE_PROVIDER_…` | The model provider is failing; nothing was charged or struck. The server retries after a backoff (30 s doubling to 10 min; on a pre-v0.3 server, after its 10 min JUDGING timeout), or use a `contains_text` rubric (steps 2 and 6 already do). |
+| A stray seller or judge takes a task | Stop it; or pin the intended seller with `bash demo/run.sh seller-task <id>`. |
 | Inkbox slow or out of slots | Notices are fire-and-forget (5 s); the flow never waits. Show an earlier thread in the console. |
 
 ## Deferred: two-computer parent-job run (L1/F1)
@@ -75,10 +78,10 @@ Runs after A deploys parent jobs and posted task pricing and B's buyer is ready.
 | computer | does |
 |---|---|
 | B | posts one parent job with at least two child parts at posted prices |
-| C, D | each runs `bash demo/run.sh seller` on its own Mac; each claims a part at the posted price (the price does not change after the claim) |
+| C, D | each runs `bash demo/run.sh seller-task <its child_task_id>` on its own Mac (C = `seller_07a57bbbd50fd91e`, M5 Pro; D = `seller_0213ff3d1ffc3278`, M4 Pro), accepting the posted price; the price does not change after the claim |
 | E | `bash demo/run.sh judge` (log saved to `.atm-state/evidence/`), checks each part's verdict, and after both settle runs `bash demo/run.sh evidence <child_task_id> <child_task_id>` |
 
-Acceptance, from E's evidence output plus C/D/B records: both children `APPROVED` with verified commitments on **different** seller IDs; `OVERLAP on distinct sellers` with a positive overlap in seconds; settlements and Stripe ids per child; judge model usage per child in `.atm-state/judge-usage.jsonl`, kept separate from the seller payout; the seller ID → machine mapping recorded by C and D. Aggregate completeness (only verified parts combined, missing parts visible) is checked with B.
+Acceptance, from E's evidence output plus C/D/B records: both children `APPROVED` with verified commitments on **different** seller IDs, each with `evidence: OK` (one clean claim → running → submitted attempt; incomplete or ambiguous histories are excluded); `EXECUTION (task.running → result.submitted, same claim) OVERLAP on distinct sellers` with a positive overlap in seconds (the reservation overlap is printed separately and does not count); the script exits 0 only when execution overlapped; settlements and Stripe ids per child; judge model usage per child in `.atm-state/judge-usage.jsonl`, kept separate from the seller payout; the seller ID → machine mapping recorded by C and D. Aggregate completeness (only verified parts combined, missing parts visible) is checked with B.
 
 ## Recording and submission artifacts
 
