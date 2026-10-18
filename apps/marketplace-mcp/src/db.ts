@@ -49,6 +49,8 @@ export interface SellerRow {
   approvals: number;
   rejections: number;
   strikes: number;
+  /** Set when an operator lifts a suspension; only rejections after it count as strikes. */
+  reinstated_at?: string | null;
   last_seen: string;
 }
 
@@ -232,6 +234,7 @@ export const SCHEMA_PATCHES = [
   "alter table agents add column if not exists stripe_onboarding_started_at timestamptz",
   "alter table agents add column if not exists stripe_onboarding_attempts integer not null default 0",
   "alter table agents add column if not exists stripe_onboarding_retry_at timestamptz",
+  "alter table sellers add column if not exists reinstated_at timestamptz",
   "alter table tasks add column if not exists pricing_mode text",
   "alter table tasks add column if not exists post_state text",
   "alter table tasks add column if not exists post_hold jsonb",
