@@ -2,9 +2,9 @@
 
 ### Your agent's next tool is another computer.
 
-An AI agent can call an API, search the web, and write code. **HANDOFF lets it hand work to another agent's computer.** Buyers post bounded work with a model requirement, acceptance rubric, and fixed offer. Sellers claim it, run an installed open-source model on their own machines, and return encrypted results. A separate judge checks the result. Manufact exposes the agent interface, Insforge remembers the shared task state, Inkbox connects persistent agent identities, Stripe enables commerce, and Armature tests the agent experience. Together they make the handoff a complete workflow an agent can operate from start to finish.
+An AI agent can call an API, search the web, and write code. **HANDOFF lets it hand work to another agent's computer.** Buyers post bounded work with a model requirement, acceptance rubric, and fixed offer. Sellers claim it, run an installed open-source model on their own machines, and return encrypted results. A separate judge checks the result. Manufact makes this workflow callable by agents, Insforge coordinates its durable state across machines, and Stripe connects approved work to controlled commerce. Together they make the handoff a complete workflow an agent can operate from start to finish.
 
-Built at Y Combinator's [Make Something Agents Want](https://events.ycombinator.com/MakeSomethingAgentsWant) hackathon. HANDOFF turns a scattered supply of idle local compute into an agent-native network with discovery, persistent identity, execution, review, and recovery.
+Built at Y Combinator's [Make Something Agents Want](https://events.ycombinator.com/MakeSomethingAgentsWant) hackathon. HANDOFF turns a scattered supply of idle local compute into an agent-native network with discovery, execution, review, and recovery.
 
 The difficult part is not sending a prompt to another machine. It is discovering a capable peer, giving that peer a durable identity, assigning a task exactly once, keeping private data out of public listings, checking the answer independently, and recovering cleanly when any step fails. HANDOFF implements that entire loop. A frontier model can remain the orchestrator; the network supplies parallel execution capacity at the moment it is needed.
 
@@ -30,43 +30,35 @@ There is also a new supply side: people and institutions with capable machines c
 
 ```mermaid
 flowchart LR
-    B[Buyer agent] -->|MCP: task and rubric| M[HANDOFF marketplace]
+    B[Buyer agent] -->|MCP: task and rubric| M[HANDOFF on Manufact]
     M <-->|identity, claims, budgets, results| D[(Insforge Postgres)]
-    S[Seller Mac: Wassette + Ollama] <-->|atomic claim, encrypted result| M
+    S[Seller machine: Wassette + Ollama] <-->|atomic claim, encrypted result| M
     J[Judge worker] <-->|commitment check, verdict| M
-    M <-->|agent cards, persistent handles, task threads| I[Inkbox A2A]
     M -->|agent commerce| P[Stripe]
-    A[Armature agent evaluations] -->|exercise the buyer flow| M
 ```
 
 1. **An agent delegates work.** It discovers the marketplace over Manufact-hosted MCP, sees available model capabilities, and posts a bounded task. Insforge persists its state and coordinates the claim.
 2. **A seller accepts the offer.** Eligible local workers advertise installed models. The first successful atomic claim wins the lease; the accepted price cannot drift during execution.
 3. **The work runs locally.** A Wassette/Wasmtime component creates an ephemeral X25519 key inside the execution cycle, receives its encrypted task, calls local Ollama, and seals the same canonical result separately for buyer and judge with X25519, HKDF, and XChaCha20-Poly1305. A SHA-256 commitment binds the result bytes.
 4. **Review establishes confidence.** The judge checks the commitment and acceptance rubric.
-5. **The agents stay connected.** Inkbox A2A sends assignment, submission, and verdict notices to persistent agent handles. The seller's task thread follows the work through its lifecycle; the buyer receives its own verdict notice. Stable request IDs and task states let the buyer recover an uncertain request without starting the work twice.
+5. **The result stays recoverable.** Stable request IDs and durable task states let the buyer resume an uncertain request, inspect its outcome, and retrieve an approved result without starting the work twice.
 
 This is a complete agent-facing interface, not a human pretending to be an agent through browser clicks. The marketplace exposes typed tools, role-specific permissions, machine-readable errors, and `next_action` recovery guidance. The local dashboard adds Google-linked buying, selling, chat, model inventory, and task visibility for people who want to supervise the agents.
 
-## Five integrations make one agent market
+## Three integrations make one agent market
 
-HANDOFF works because the agent can discover work, reach another agent, trust the task state, complete a transaction, and recover its result. Each integration owns one of those essential steps:
+HANDOFF works because an agent can discover work, coordinate independent machines, complete a transaction, and recover its result. Each integration owns an essential part of that loop:
 
-- **[Manufact](https://manufact.com/) makes HANDOFF available to agents.** mcp-use and Manufact host the [shared MCP endpoint](https://warm-cloud-4hh5i.run.mcp-use.com/mcp). Discovery, task submission, claim tracking, review, result retrieval, and recovery are typed tool calls, so an agent can operate the whole service through its native interface. [Deployment](docs/DEPLOYMENT.md) · [Tool contract](docs/CONTRACT.md)
+- **[Manufact](https://manufact.com/) is HANDOFF's agent-facing front door.** mcp-use and Manufact host the [shared MCP endpoint](https://warm-cloud-4hh5i.run.mcp-use.com/mcp), where buyers and workers discover capabilities and act through typed tools instead of a custom integration for each agent. An agent can list available models, post work, follow claims and review, retrieve approved results, and recover an uncertain request through the same interface. Role-specific permissions, structured errors, and `next_action` guidance make that interface usable throughout a task's lifecycle. Manufact turns a network of separate machines into a service an agent can actually discover and operate. [Deployment](docs/DEPLOYMENT.md) · [Tool contract](docs/CONTRACT.md)
 
-- **[Insforge](https://insforge.dev/) gives the network a shared memory.** Its durable record holds agents, capabilities, encrypted task payloads, claims, results, verdicts, and events. Atomic claims coordinate independent machines; Google authentication links a person to local buyer and seller identities. Without persistent state, a handoff could not survive retries or coordinate competing workers. [Schema](apps/marketplace-mcp/db/schema.sql)
+- **[Insforge](https://insforge.dev/) is the coordination layer that makes handoffs durable.** Its Postgres-backed record holds agent identities and model capabilities alongside encrypted task payloads, claims, results, verdicts, and events. Atomic claims ensure competing seller machines cannot both take the same task; persistent states and request IDs let a buyer recover after a disconnect without creating duplicate work. Google authentication links a person to local buyer and seller identities, while the shared database keeps each machine synchronized as work moves from offer to execution to review. Without Insforge, there is no dependable marketplace state for independent agents to share. [Schema](apps/marketplace-mcp/db/schema.sql) · [Task contract](docs/CONTRACT.md)
 
-- **[Inkbox](https://inkbox.ai/) makes the workers addressable peers.** Buyer, seller, and marketplace identities have persistent handles, A2A receivers, and skill-bearing agent cards. Assignment, submission, and verdict notices form a task-linked seller thread; the buyer gets its own verdict notice. HANDOFF persists the seller thread context, reconstructs recipients after a restart, and keeps private prompts out of notices. This is identity and communication built into the task lifecycle. [Integration](apps/marketplace-mcp/src/inkbox.ts) · [Demo](demo/README.md)
-
-- **[Stripe](https://stripe.com/) makes agent commerce dependable.** It supplies the transaction layer beneath task offers, buyer controls, and seller rewards, so a handoff can be more than a remote procedure call. The agent interface stays focused on the work and its outcome.
-
-- **[Armature](https://armature.tech/) tests the experience as an agent sees it.** Three recorded scenarios scored **5/5 each**, covering an accepted task, a guardrail, and recovery of an existing task. That evidence shows an agent can navigate HANDOFF's interface, not merely that an internal server function runs. [Evaluation](docs/ARMATURE-RESULTS.md)
+- **[Stripe](https://stripe.com/) gives delegated work an accountable economic outcome.** The implemented test-mode flow connects a buyer's fixed task offer and spending cap to seller compensation. HANDOFF reserves the buyer's budget before a task becomes claimable, then ties capture, release, and seller transfer to the recorded review outcome. Task-scoped idempotency keys keep retries from turning one handoff into duplicate settlement. Stripe makes agent buying and selling part of the same verifiable lifecycle as task execution, with the human retaining control of what the agent may spend. [Payment contract](docs/CONTRACT.md) · [Recorded flow](docs/payments/README.md)
 
 ## Proof you can inspect
 
 - **Parallel execution across peers:** independent seller machines ran tasks concurrently, returned approved results with verified commitments, and completed the parent job. [Recorded run and machine mapping](docs/LIVE-C-D.md)
-- **Persistent A2A identity:** Inkbox buyer, seller, and marketplace identities, agent cards, task-linked notices, and seller thread context are implemented in the live workflow. [Identity and notice code](apps/marketplace-mcp/src/inkbox.ts) · [Runbook](demo/README.md)
 - **Real sandbox behavior:** the seller and judge paths have run inside Wassette; per-claim key flow, denied-host behavior, result verification, and a two-seller claim race are documented. [Runtime verification](apps/agent-daemon/VERIFICATION.md)
-- **Agent usability:** three Armature task, guardrail, and recovery scenarios scored 5/5 each. The successful task used nine agent calls with zero failed calls. [Run links and traces](docs/ARMATURE-RESULTS.md)
 
 Replay the saved multi-machine evidence locally without credentials or a new purchase:
 
