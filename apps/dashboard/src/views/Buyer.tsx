@@ -96,6 +96,11 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
     ? <ToolGroup summary={`Delegated ${cards.length} network task${cards.length === 1 ? "" : "s"}`} running={ACTIVE_RUN.has(run.status) && cards.some((c) => !["APPROVED", "REJECTED", "EXPIRED", "CANCELLED"].includes(c.status))}>{cards.map((t) => <TaskCard key={t.task_id} task={t} className="max-w-none rounded-none border-0 bg-transparent" />)}</ToolGroup>
     : null;
   // Fold consecutive tool calls into one block so the thread reads as prose.
+  // Anything the model said before results came back is interim; once it answers again
+  // after them, those earlier messages fold to two muted lines so the final answer reads last.
+  const resultsAt = items.findIndex((i) => i.kind === "results");
+  const answeredAfter = resultsAt >= 0 && items.slice(resultsAt + 1).some((i) => i.kind === "assistant" && !i.streaming && i.content.trim());
+  const interim = new Set(answeredAfter ? items.slice(0, resultsAt).filter((i) => i.kind === "assistant").map((i) => i.key) : []);
   const blocks = useMemo(() => {
     const out: Array<TimelineItem | { kind: "tools"; key: string; tools: Extract<TimelineItem, { kind: "tool" }>[] }> = [];
     for (const item of items) {
@@ -118,6 +123,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
               {item.thinking && <Reasoning text={item.thinking} streaming={item.streaming && !item.content} />}
               {item.content && (item.streaming
                 ? <p className="whitespace-pre-wrap break-words">{item.content}<span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground" aria-hidden /></p>
+                : interim.has(item.key) ? <Interim text={item.content} />
                 : <Markdown text={item.content} className="break-words" />)}
             </div>
           );
@@ -175,5 +181,16 @@ function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
         {text}{streaming && <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-muted-foreground" aria-hidden />}
       </button>
     </div>
+  );
+}
+
+/** A message written before network results arrived: kept, but folded under the final answer. */
+function Interim({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+      className={cn("w-full text-left text-[13.5px] leading-relaxed text-muted-foreground hover:text-foreground/80", !open && "line-clamp-2")}>
+      {open ? <Markdown text={text} /> : text}
+    </button>
   );
 }
