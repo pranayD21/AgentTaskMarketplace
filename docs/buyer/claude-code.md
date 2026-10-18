@@ -3,8 +3,8 @@
 Run from the repository root with Node >=22.22 and Claude Code installed. If it is not installed, `pnpm dlx @anthropic-ai/claude-code` can replace `claude` in these commands. The marketplace uses its own buyer key, distinct from the model provider key used to run Claude Code.
 
 ```sh
-# Replace with A's reachable endpoint. Use the port printed by dev:server.
-export MARKETPLACE_URL='http://localhost:3000/mcp'
+# Interim LAN endpoint announced by C; connect from the same network.
+export MARKETPLACE_URL='http://192.168.4.163:3000/mcp'
 node scripts/buyer.mjs info
 node scripts/buyer.mjs sellers
 node scripts/buyer.mjs whoami
@@ -17,7 +17,7 @@ claude
 
 The single-quoted header stores an environment reference rather than a literal key. Launch Claude in the same shell so `ATM_API_KEY` is inherited. Use `/mcp` to confirm the connection. If `atm` already exists, inspect its endpoint and use `claude mcp remove atm` before replacing that one entry. Do not overwrite unrelated servers. The CLI binds cached identities to an endpoint; for a different server, use an existing key through `ATM_API_KEY` or a separate `ATM_BUYER_STATE` file. Legacy caches lacking `marketplace_url` require explicit migration after confirming their original endpoint.
 
-Hosted Manufact URL: **pending A** (`<MANUFACT_MCP_URL_PENDING_A>`). Do not paste the placeholder as a working URL.
+Hosted Manufact URL: **pending acting integrator C**, delegated by A (`<MANUFACT_MCP_URL_PENDING_A>`). Do not paste the placeholder as a working URL.
 
 ## Agent smoke task
 

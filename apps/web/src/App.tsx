@@ -82,6 +82,12 @@ export function DashboardView({
     statuses.reduce((n, s) => n + (data.counts[s] ?? 0), 0);
   return (
     <>
+      {data.db === "memory" && (
+        <div role="status" className="error">
+          <strong>MEMORY · TEMPORARY DEMO DATA</strong>
+          <span>Development and test data only. Records disappear when this server restarts.</span>
+        </div>
+      )}
       <div className="stats">
         {[
           ["Total tasks", total, "Across the marketplace"],
@@ -246,6 +252,14 @@ export function DashboardView({
                     <dd>
                       <code>{s.runner.public_key.key_id}</code>
                     </dd>
+                  </div>
+                  <div>
+                    <dt>Key source</dt>
+                    <dd>{s.runner.key_source === "per-claim"
+                      ? "Latest claim"
+                      : s.runner.key_source === "registered"
+                        ? "Seller registration"
+                        : "No claim key yet"}</dd>
                   </div>
                   <div>
                     <dt>Wasm SHA-256</dt>

@@ -9,6 +9,7 @@ function fixture() {
   return {
     generated_at: stamp,
     payments: { mode: "card", label: privateMarker },
+    db: privateMarker,
     counts: { RUNNING: 1, APPROVED: 2 },
     tasks: [
       {
@@ -45,7 +46,7 @@ function fixture() {
         status: "ACTIVE",
         models: [{ model_id: "qwen3:8b", ask_cents: 75 }],
         runner: {
-          key_source: "registered",
+          key_source: "per-claim",
           public_key: {
             key_id: "runner_synthetic",
             public_key_b64: "x".repeat(44),
@@ -110,6 +111,7 @@ describe("public dashboard boundary", () => {
     expect(html).not.toContain(privateMarker);
     for (const visible of [
       "UNSANDBOXED",
+      "Latest claim",
       "STRIPE_TEST",
       "PENDING_ONBOARDING",
       "$0.75",
@@ -122,6 +124,7 @@ describe("public dashboard boundary", () => {
   it("labels simulated payments and sandbox runtime", () => {
     const raw = fixture();
     raw.payments.mode = "mock";
+    raw.db = "MEMORY — in-process tables, dev/test only, lost on restart";
     raw.tasks[0]!.payment.mode = "mock";
     raw.settlements[0]!.kind = "MOCK";
     raw.sellers[0]!.runner.runtime = "wassette";
@@ -134,6 +137,7 @@ describe("public dashboard boundary", () => {
       />,
     );
     expect(html).toContain("MOCK");
+    expect(html).toContain("MEMORY · TEMPORARY DEMO DATA");
     expect(html).toContain("wassette");
     expect(html).not.toContain("UNSANDBOXED");
   });
@@ -152,6 +156,17 @@ describe("public dashboard boundary", () => {
     const raw = fixture();
     raw.events[0]!.type = privateMarker;
     expect(Dashboard.parse(raw).events[0]!.type).toBe("marketplace.event");
+  });
+  it("keeps the board available for an unfamiliar settlement rail without rendering arbitrary text", () => {
+    const raw = fixture();
+    raw.settlements[0]!.kind = privateMarker;
+    const data = Dashboard.parse(raw);
+    const html = renderToStaticMarkup(
+      <DashboardView data={data} now={Date.parse(stamp)} filter="ALL" search="" />,
+    );
+    expect(html).toContain("UNRECOGNIZED PAYMENT RAIL");
+    expect(html).toContain("Demo seller");
+    expect(html).not.toContain(privateMarker);
   });
   it("filters tasks and gives an empty state without hiding the rest of the network", () => {
     const html = renderToStaticMarkup(
