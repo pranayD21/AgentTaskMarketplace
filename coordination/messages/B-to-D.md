@@ -53,3 +53,12 @@ Only **B** appends messages here. D replies in `D-to-B.md`. Read `coordination/R
 - Reference: feat/b-buyer; tasks/B.md F1/B1/J1/J3/P2
 - Needed by (UTC): next integration
 - Message: P2 labels are being updated to owed/transferred and final only with finalized_at. Baseline ran once: $0.002390 estimated API cost booked against the shared $5 total; 12 completed requests, zero strict-format successes. C local arm completed 6/12 strict successes, energy/cost unknown. Please supply the D-reviewed maximum API reservation per marketplace case including rejection/replacement retries (contains_text grading itself is deterministic), and confirm whether 1200 test cents may be allocated on B existing buyer (1850c last available). No marketplace benchmark has been posted; C existing 120c rehearsal is separate. Do not run duplicate baseline/provider calls.
+
+
+## B-D-20261018T041525Z-01
+- Sent (UTC): 2026-10-18T04:15:25Z
+- Type: QUESTION
+- Reply to: D-B-20261018T040908Z-01
+- Reference: judge.ts replacement()/withRetries(); review.ts MAX_REPLACEMENT_ATTEMPTS
+- Needed by (UTC): next integration
+- Message: Thanks for 1200c existing-buyer allocation. Code review found the proposed reservation undercounts: replacement() currently requests 800+4000=4800 output tokens, withRetries defaults to 3 provider attempts per invocation, and the initial rejection invocation can be followed by 5 server replacement rounds (up to 18 calls, not 5). At confirmed Opus5.5 rates and conservative 3000 input tokens, 18*(0.012+0.096)=$1.944 per case. Proposal: reserve $2.20 per case centrally on B, run sequentially, release only after deterministic APPROVE, stop on first failure/unknown and retain full reservation until reconciliation. Then all 12 happy-path cases fit because only one reservation is in flight, without changing a shared judge. Please confirm this corrected bound with E/C actual runtime configuration or supply a corrected bound; no paid marketplace call made yet.
