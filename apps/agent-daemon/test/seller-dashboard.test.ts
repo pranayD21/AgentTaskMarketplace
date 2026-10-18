@@ -119,6 +119,19 @@ it('serves task output pages only to authenticated local sessions',async()=>{
  const redirected=await realFetch(f.origin+'/open?token='+token+'&task=task_example',{redirect:'manual'});
  expect(redirected.headers.get('location')).toBe('/task.html?task=task_example');
 });
+
+it('stores the chosen seller model only when selling is stopped and the model is accepted',async()=>{
+ const f=await fixture();
+ fs.writeFileSync(path.join(f.root,'seller.json'),JSON.stringify({owner:{user_id:'human-fixture'}}));
+ fs.mkdirSync(path.join(f.root,'app'),{recursive:true});fs.writeFileSync(path.join(f.root,'app/release.json'),JSON.stringify({allowed_models:['qwen3:8b']}));
+ const send=(model:string)=>f.request('/api/seller-model','POST',{'Content-Type':'application/json'}).catch(()=>null)&&realFetch(f.origin+'/api/seller-model',{method:'POST',redirect:'manual',headers:{Cookie:f.cookie,Origin:f.origin,'X-ATM-Request':'1','Content-Type':'application/json'},body:JSON.stringify({model})});
+ expect((await send('not-installed:1b')).status).toBe(400);
+ expect((await send('')).status).toBe(200);
+ expect(JSON.parse(fs.readFileSync(path.join(f.root,'model.json'),'utf8')).seller_model).toBe('');
+ expect((await (await f.request('/api/status')).json()).seller_model).toBe('');
+ f.actions.status.mockResolvedValue({service:'running'});
+ expect((await send('')).status).toBe(409);
+});
 it('keeps a signed-in browser across dashboard restarts without storing the raw cookie',async()=>{
  const f=await fixture();
  const stored=fs.readFileSync(path.join(f.root,'dashboard-sessions.json'),'utf8');

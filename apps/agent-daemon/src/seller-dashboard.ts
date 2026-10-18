@@ -202,9 +202,19 @@ export function createSellerDashboard(options: { root: string; marketplaceUrl: s
           catch { buyerCache = { at: Date.now(), value: { buyer_id: null, buyer_payment: null, provider_budget: null } }; }
         }
         return json(200, { ...buyerCache.value, machine, worker: cache.value, owner: saved?.owner ?? null, seller_id: saved?.agent_id ?? null,
+          seller_model: jsonFile(path.join(root, "model.json"))?.seller_model ?? null,
           allowed_models: release?.allowed_models ?? [], phase, error: lastError, busy, payments_label: "Stripe TEST MODE" });
       }
       if (req.method === "GET" && url.pathname === "/api/live") return liveEvents(res);
+      if (req.method === "POST" && url.pathname === "/api/seller-model") {
+        if ((await actions.status()).service === "running") return json(409, { error: "Stop selling before changing the model." });
+        let body = ""; for await (const chunk of req) { body += chunk; if (body.length > 4096) throw Error("Request is too large."); }
+        const model = String(JSON.parse(body).model ?? "");
+        const machine = await machineSnapshot(); const release = jsonFile(path.join(root, "app/release.json"));
+        if (model && !(machine.models.some((m: any) => m.name === model) && release?.allowed_models?.includes(model))) return json(400, { error: "Choose an installed model that the network accepts." });
+        writePrivate(path.join(root, "model.json"), { seller_model: model }); cache = undefined;
+        return json(200, { seller_model: model });
+      }
       if (req.method === "POST" && url.pathname === "/api/auth/google") {
         const configResponse = await fetch(new URL("/api/seller-auth-config", options.marketplaceUrl), { signal: AbortSignal.timeout(15000), redirect: "error" });
         if (!configResponse.ok) throw Error("Marketplace sign-in is unavailable. Please try again.");

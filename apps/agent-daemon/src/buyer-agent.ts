@@ -10,6 +10,22 @@ export interface ChatMessage {
   role: string; content: string; thinking?:string; tool_name?: string; tool_calls?: ToolCall[];
 }
 export interface AgentEvent { type: string; at: string; [key: string]: unknown }
+
+type ParsedAction={action:'final';answer:string}|{action:'tool';tool:string;arguments:Record<string,unknown>};
+/** Reads a structured action, tolerating code fences or prose around the JSON. Anything else asks for a repair. */
+export function parseAction(text:string):ParsedAction|null{
+  const candidates=[text];
+  const fenced=/```(?:json)?\s*([\s\S]*?)```/i.exec(text);if(fenced?.[1])candidates.push(fenced[1].trim());
+  const first=text.indexOf('{'),last=text.lastIndexOf('}');if(first>=0&&last>first)candidates.push(text.slice(first,last+1));
+  for(const candidate of candidates){
+    try{
+      const action=JSON.parse(candidate);
+      if(action&&action.action==='final'&&typeof action.answer==='string'&&action.answer.trim())return {action:'final',answer:action.answer};
+      if(action&&action.action==='tool'&&typeof action.tool==='string'&&action.arguments&&typeof action.arguments==='object'&&!Array.isArray(action.arguments))return {action:'tool',tool:action.tool,arguments:action.arguments};
+    }catch{/* try the next form */}
+  }
+  return null;
+}
 export async function runBuyerAgent(options: {
   model: string; ollamaUrl: string; system: string; prompt: string; history?: ChatMessage[];
   tools: AgentTool[]; signal: AbortSignal; deadline: number;
@@ -20,6 +36,8 @@ export async function runBuyerAgent(options: {
   onIdle?():Promise<ChatMessage[]|null>;
   /** Called before every model turn; returned messages (asynchronous results) are appended without waiting. */
   beforeTurn?():ChatMessage[]|null;
+  /** True while delegated work is still outstanding; an empty model turn then means "waiting", not "no action". */
+  hasPendingWork?():boolean;
   acquireModel?(signal:AbortSignal):Promise<()=>void>;
 }) {
   const messages: ChatMessage[] = [
@@ -65,16 +83,27 @@ export async function runBuyerAgent(options: {
     if (data.message?.role !== "assistant") throw new Error("Missing local assistant response");
     const rawMessage=data.message;
     if(options.structuredActions){
-      try{
-        const action=JSON.parse(rawMessage.content);
-        if(action.action==='final'&&typeof action.answer==='string'&&action.answer.trim())data.message={role:'assistant',content:action.answer};
-        else if(action.action==='tool'&&typeof action.tool==='string'&&action.arguments&&typeof action.arguments==='object'&&!Array.isArray(action.arguments))data.message={role:'assistant',content:'',tool_calls:[{function:{name:action.tool,arguments:action.arguments}}]};
-        else throw Error('Invalid action');
-        malformedActions=0;
-      }catch{
+      const text=String(rawMessage.content??'').trim();
+      // Some models (gpt-oss) reason and then stop without a message when they believe there is
+      // nothing to do yet. That is an idle turn, not a malformed action: hand it to the idle hook.
+      if(!text&&options.hasPendingWork?.()){
+        data.message={role:'assistant',content:''};
+        emit('idle_turn',{turn,reason:String(rawMessage.thinking??'').trim().slice(0,200)||'The model returned no action.'});
+      }else if(!text){
+        // Reasoned, then said nothing, with no work outstanding: ask for the action it decided on.
         if(++malformedActions>=3)throw Error('Repeated tool errors: model could not produce a valid action.');
-        emit('action_error',{turn,error:'Invalid action format; asking the model to repair it.'});
-        messages.push({role:'user',content:'Your response was not a valid action. Return only a tool action or final answer matching the provided JSON schema.'});continue;
+        emit('action_error',{turn,error:'The model returned no action; asking it to act.',sample:String(rawMessage.thinking??'').trim().slice(0,200)});
+        messages.push(rawMessage,{role:'user',content:'You reasoned but returned no action. Output the JSON action you decided on now: a tool action, or a final answer.'});continue;
+      }else{
+        const action=parseAction(text);
+        if(action&&action.action==='final')data.message={role:'assistant',content:action.answer};
+        else if(action&&action.action==='tool')data.message={role:'assistant',content:'',tool_calls:[{function:{name:action.tool,arguments:action.arguments}}]};
+        else{
+          if(++malformedActions>=3)throw Error('Repeated tool errors: model could not produce a valid action.');
+          emit('action_error',{turn,error:'Invalid action format; asking the model to repair it.',sample:text.slice(0,200)});
+          messages.push({role:'user',content:'Your response was not a valid action. Return only a tool action or final answer matching the provided JSON schema.'});continue;
+        }
+        malformedActions=0;
       }
     }
     messages.push(rawMessage);

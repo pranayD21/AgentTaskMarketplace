@@ -14,7 +14,7 @@ export const TOOL_LABELS: Record<string, string> = {
   mcp_list_sellers: "Looking for available workers", mcp_create_job: "Creating a shared job",
   mcp_post_task: "Posting a task for the network", mcp_get_task: "Checking task progress",
   mcp_get_result: "Reading task results", mcp_get_job: "Checking the shared job",
-  local_capacity: "Inspecting local compute", check_delegated_tasks: "Checking delegated tasks", wait_for_subagents: "Waiting for network workers", wait: "Waiting for workers",
+  delegate_tasks: "Delegating tasks to the network", local_capacity: "Inspecting local compute", check_delegated_tasks: "Checking delegated tasks", wait_for_subagents: "Waiting for network workers", wait: "Waiting for workers",
 };
 export const toolLabel = (name: string | undefined) => TOOL_LABELS[name ?? ""] ?? String(name ?? "Agent action").replaceAll("_", " ");
 
@@ -83,6 +83,8 @@ export function timeline(run: Run): TimelineItem[] {
       }
       case "remote_answer": case "remote_preview": break; // shown on task cards
       case "resumed": if (!items.some((i) => i.kind === "results")) items.push({ kind: "results", key }); break;
+      case "action_error": items.push({ kind: "note", key, text: String(event.error ?? "").startsWith("The model returned no action") ? "Model reasoned but gave no action; asked it to act." : "The model's reply was not a valid action; asked it to try again.", tone: "warning" }); break;
+      case "idle_turn": items.push({ kind: "note", key, text: "Model had nothing to do yet; waiting for delegated work." }); break;
       case "stopped":
         if (event.reason !== "model_finished")
           items.push({ kind: "note", key, text: `Agent stopped: ${String(event.reason ?? run.status).replaceAll("_", " ")}`, tone: "warning" });

@@ -138,6 +138,8 @@ alter table tasks add column if not exists claim_runner_key_id text;
 alter table tasks add column if not exists claim_runner_pubkey_b64 text;
 alter table sellers add column if not exists last_claim_key_id text;
 alter table sellers add column if not exists last_claim_pubkey_b64 text;
+-- Operator reinstatement: rejections before this moment no longer count as strikes.
+alter table sellers add column if not exists reinstated_at timestamptz;
 
 -- ---------------------------------------------------------------------------
 -- Contract v0.3 (docs/CONTRACT.md §8-§12). Mirrored in src/db.ts SCHEMA_PATCHES,

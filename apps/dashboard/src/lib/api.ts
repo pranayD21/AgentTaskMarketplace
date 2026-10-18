@@ -23,6 +23,8 @@ export interface Status {
   worker: Worker;
   owner: { user_id: string; email?: string } | null;
   seller_id: string | null;
+  /** Model this computer sells with; empty or null means every installed model the network accepts. */
+  seller_model?: string | null;
   allowed_models: string[];
   phase: string;
   error: string | null;
@@ -87,6 +89,7 @@ export const api = {
   stop: () => post("/api/stop"),
   send: (input: { prompt: string; model: string; conversation_id: string }) => post<{ id: string }>("/api/chat", input),
   stopRun: (id: string) => post("/api/chat/stop", { id }),
+  sellerModel: (model: string) => post<{ seller_model: string }>("/api/seller-model", { model }),
 };
 
 /** Opens a Stripe-hosted page in a popup the browser allowed synchronously. */

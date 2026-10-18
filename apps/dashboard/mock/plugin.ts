@@ -14,7 +14,7 @@ export function mockDashboardApi(): Plugin {
     owner: null as null | { user_id: string; email: string },
     buyerLinked: false, buying: "SETUP_REQUIRED", prepared: false, payout: "UNAVAILABLE", service: "stopped",
     busy: false, phase: "Ready to set up your account", error: null as string | null,
-    runs: [] as Run[],
+    runs: [] as Run[], sellerModel: "",
   };
   const models = [
     { name: "qwen3:8b", size: 5.2e9, parameters: "8.2B", quantization: "Q4_K_M" },
@@ -174,7 +174,7 @@ export function mockDashboardApi(): Plugin {
                 machine: { hostname: os.hostname(), chip: os.cpus()[0]?.model ?? "Apple M-series", cpu_cores: os.cpus().length, memory_bytes: os.totalmem(), free_memory_bytes: os.freemem(), load_average_1m: load, ollama_online: true,
                   models, loaded_models: state.service === "running" ? [{ name: "qwen3:8b", size: 5.2e9, size_vram: 5.6e9 }] : [] },
                 worker: { service: state.service, prepared: state.prepared, payout_status: state.payout, approvals: 7, server_reachable: true, viewer_url: state.service === "running" ? "http://127.0.0.1:0" : null, models: ["qwen3:8b"] },
-                owner: state.owner, seller_id: state.owner ? "seller_mock_identity" : null, allowed_models: ["qwen3:8b", "llama3.2:3b"],
+                owner: state.owner, seller_id: state.owner ? "seller_mock_identity" : null, seller_model: state.sellerModel, allowed_models: ["qwen3:8b", "llama3.2:3b"],
                 phase: state.phase, error: state.error, busy: state.busy, payments_label: "MOCK · LOCAL PREVIEW",
               });
             }
@@ -188,6 +188,7 @@ export function mockDashboardApi(): Plugin {
               return json(res, 202, { ok: true });
             }
             case "POST /api/start": if (state.buying !== "READY") return json(res, 402, { error: "Complete Stripe buying setup before starting to sell." }); state.service = "running"; state.phase = "Seller started. Waiting for a matching task."; void simulateWorker(); return json(res, 200, { ok: true });
+            case "POST /api/seller-model": { if (state.service === "running") return json(res, 409, { error: "Stop selling before changing the model." }); const { model } = await body(req); if (model && !models.some((m) => m.name === model)) return json(res, 400, { error: "Choose an installed model that the network accepts." }); state.sellerModel = String(model ?? ""); return json(res, 200, { seller_model: state.sellerModel }); }
             case "POST /api/stop": state.service = "stopped"; state.phase = "Seller stopped. Your identity and models are saved."; return json(res, 200, { ok: true });
             case "GET /api/live": {
               if (state.service !== "running") return json(res, 503, { error: "The worker is not running." });

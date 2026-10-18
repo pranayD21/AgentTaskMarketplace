@@ -144,17 +144,22 @@ async function moveMoney(task: TaskRow, s: SettlementRow, d: SettlementDecision)
 
 /**
  * Recompute a seller's counters from its final verdicts (contract §9). Judge
- * infrastructure codes never count. Suspension is applied, never lifted, here.
+ * infrastructure codes never count. `rejections` is lifetime; `strikes` counts
+ * only rejections after the seller's last reinstatement, so an operator's
+ * reinstateSeller() holds until the seller earns new strikes. Suspension is
+ * applied here, never lifted.
  */
 export async function recomputeReputation(sellerId: string): Promise<string | null> {
   for (let attempt = 0; attempt < REPUTATION_CAS_ATTEMPTS; attempt++) {
     const cur = await one<SellerRow>(await db().from("sellers").select("*").eq("agent_id", sellerId).limit(1));
     if (!cur) return null;
-    const verdicts = unwrap(await db().from("verdicts").select("task_id,verdict,reason_code").eq("seller_id", sellerId).limit(10_000)) as Pick<VerdictRow, "task_id" | "verdict" | "reason_code">[];
+    const verdicts = unwrap(await db().from("verdicts").select("task_id,verdict,reason_code,created_at").eq("seller_id", sellerId).limit(10_000)) as Pick<VerdictRow, "task_id" | "verdict" | "reason_code" | "created_at">[];
     const decisions = [...new Map(verdicts.map((v) => [v.task_id, v])).values()];
+    const rejected = decisions.filter((v) => v.verdict === "REJECT" && !isInfraReason(v.reason_code));
     const approvals = decisions.filter((v) => v.verdict === "APPROVE").length;
-    const rejections = decisions.filter((v) => v.verdict === "REJECT" && !isInfraReason(v.reason_code)).length;
-    const strikes = rejections;
+    const rejections = rejected.length;
+    const since = cur.reinstated_at ? Date.parse(cur.reinstated_at) : null;
+    const strikes = since === null ? rejections : rejected.filter((v) => Date.parse(v.created_at) > since).length;
     const status = cur.status === "SUSPENDED" || strikes >= env().SUSPEND_AFTER_STRIKES ? "SUSPENDED" : cur.status;
     if (approvals === cur.approvals && rejections === cur.rejections && strikes === cur.strikes && status === cur.status) return status;
     const rows = unwrap(
@@ -173,6 +178,20 @@ export async function recomputeReputation(sellerId: string): Promise<string | nu
     }
   }
   throw new MarketplaceError("INTERNAL_ERROR", "Seller reputation kept changing under concurrent calls.", { retryable: true });
+}
+
+/**
+ * Operator action: lift a suspension. Earlier rejections stay in the lifetime
+ * count but stop counting as strikes, so the next verdict does not re-suspend.
+ */
+export async function reinstateSeller(sellerId: string): Promise<SellerRow | null> {
+  const cur = await one<SellerRow>(await db().from("sellers").select("*").eq("agent_id", sellerId).limit(1));
+  if (!cur) return null;
+  const reinstated_at = nowIso();
+  const rows = unwrap(await db().from("sellers").update({ status: "ACTIVE", strikes: 0, reinstated_at }).eq("agent_id", sellerId).eq("strikes", cur.strikes).select()) as SellerRow[];
+  if (!rows.length) throw new MarketplaceError("INTERNAL_ERROR", "Seller reputation changed while reinstating.", { retryable: true });
+  await logEvent("seller.reinstated", { agent_id: sellerId, meta: { previous_status: cur.status, rejections: cur.rejections } });
+  return rows[0]!;
 }
 
 export interface Finalized {

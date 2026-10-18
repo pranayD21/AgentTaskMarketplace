@@ -10,6 +10,7 @@ import { useChatContext } from "@/hooks/chat-context";
 import { useLocalSetting } from "@/hooks/useChat";
 import { StatusLine } from "@/components/ui/status-orb";
 import { Orb } from "@/components/ui/thinking-orbs";
+import { Select } from "@/components/ui/input";
 import { ToolGroup } from "@/components/tool-group";
 import { ToolInvocation, ToolInvocationContentCollapsible, ToolInvocationName, ToolInvocationRawData } from "@/components/ui/tool-invocation";
 import { TaskCard } from "@/components/task-card";
@@ -19,7 +20,7 @@ import { Markdown } from "@/components/markdown";
 export function Buyer({ onOpenAccount }: { onOpenAccount: () => void }) {
   const { status, setup, busy } = useWorkspace();
   const { runs, loaded, refresh, conversation } = useChatContext();
-  const [model] = useLocalSetting("atm-chat-model", "");
+  const [model, setModel] = useLocalSetting("atm-chat-model", "");
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
@@ -68,14 +69,19 @@ export function Buyer({ onOpenAccount }: { onOpenAccount: () => void }) {
             </p>
           )}
           {error && <p className="mb-2 text-center text-[12.5px] text-danger" role="alert">{error}</p>}
-          <form onSubmit={(e) => void send(e)} className="flex items-end gap-2 rounded-[26px] border border-border bg-card py-2 pl-5 pr-2 shadow-card transition-colors focus-within:border-ring">
+          <form onSubmit={(e) => void send(e)} className="flex flex-col rounded-[26px] border border-border bg-card px-4 pb-2 pt-2.5 shadow-card transition-colors focus-within:border-ring">
             <textarea ref={box} rows={1} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onKey} maxLength={12000}
               placeholder={ready ? (active ? "Your agent is working…" : "Ask your agent") : "Finish setup to chat"} disabled={!ready || active}
-              aria-label="Message your agent" className="scroll-thin max-h-[180px] min-h-[24px] flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
-            <button type="submit" disabled={!canSend} aria-label="Send"
-              className="grid size-9 shrink-0 place-items-center rounded-full bg-chat-accent text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30">
-              <ArrowUp className="size-4.5" strokeWidth={2.5} aria-hidden />
-            </button>
+              aria-label="Message your agent" className="scroll-thin max-h-[180px] min-h-[24px] w-full resize-none bg-transparent px-1 py-1.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
+            <div className="flex items-center gap-2 pt-1">
+              <Select aria-label="Local model" className="w-auto min-w-[150px] max-w-[260px] text-muted-foreground [&>select]:h-8 [&>select]:border-0 [&>select]:bg-transparent [&>select]:text-[12.5px] [&>select]:shadow-none" value={selectedModel} disabled={!names.length} onChange={(e) => setModel(e.target.value)}>
+                {names.length ? names.map((n) => <option key={n} value={n}>{n}</option>) : <option value="">No local models</option>}
+              </Select>
+              <button type="submit" disabled={!canSend} aria-label="Send"
+                className="ml-auto grid size-9 shrink-0 place-items-center rounded-full bg-chat-accent text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30">
+                <ArrowUp className="size-4.5" strokeWidth={2.5} aria-hidden />
+              </button>
+            </div>
           </form>
           <p className="mt-2.5 text-center text-[11px] text-muted-foreground">Delegated work passes a format check, not a correctness check. Payments are Stripe TEST mode.</p>
         </div>
@@ -104,7 +110,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
   const blocks = useMemo(() => {
     const out: Array<TimelineItem | { kind: "tools"; key: string; tools: Extract<TimelineItem, { kind: "tool" }>[] }> = [];
     for (const item of items) {
-      if (item.kind === "task" || item.kind === "note") continue; // status rows are covered by the task block
+      if (item.kind === "task") continue; // status rows are covered by the task block
       const last = out.at(-1);
       if (item.kind === "tool") { if (last?.kind === "tools") last.tools.push(item); else out.push({ kind: "tools", key: item.key, tools: [item] }); }
       else out.push(item);
@@ -145,6 +151,7 @@ function RunView({ run, onStop }: { run: Run; onStop: () => void }) {
             );
           }
           if (item.kind === "results") return <div key={item.key}>{cardGrid}</div>;
+          if (item.kind === "note") return <p key={item.key} className={cn("text-[12.5px]", item.tone === "warning" ? "text-warning" : "text-muted-foreground")}>{item.text}</p>;
           return null;
         })}
         {live && !lastStreaming && <StatusLine state={run.status === "waiting" ? "waiting" : "working"} label={run.status === "waiting" ? "Waiting for network workers" : "Working"} />}
