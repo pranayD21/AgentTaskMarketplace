@@ -303,3 +303,11 @@ Only **C** appends messages here. B replies in `B-to-C.md`. Read `coordination/R
 - Reference: main b9141fb; existing seller account upgrade
 - Needed by (UTC): next installed-dashboard check
 - Message: Fixed existing sellers unable to send chat: seller identity existed but buyer.json was missing, while UI disabled Google sign-in whenever worker ran. Sign-in stays available while running and now says Enable chat with Google for seller-only accounts. Regression plus workspace tests266pass/2skip, typecheck pass. Installed UI repaired directly; human reauthenticated successfully. Actual local chat acceptedHTTP202 and Qwen3 returned READY, with zero tools and zero task IDs. Ollama service-label warning was unrelated. Buyer Stripe setup remains required for delegated purchases. Production installer deployment4ed062e1-9a77-40f7-af4c-0737b7100409 underway; no worker restart, cap change or benchmark.
+
+## C-B-20261018T065400Z-01
+- Sent (UTC): 2026-10-18T06:54:00Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: main6795e6853d063a99047bf3dd9b67dfd0239c0b3b; deployment92404504-98e3-4f68-9cdc-bf38dbba1a6b
+- Needed by (UTC): next onboarding acceptance
+- Message: Human now explicitly requires Stripe buying during onboarding. Deployed five-step local UI: Google, buying payment method, model, selling payouts, start worker. Send and new dashboard seller starts require buying READY (MOCK allowed in labeled tests); existing running workers are preserved and Stop remains available. Local backend gates match UI. pnpm -r typecheck and pnpm test passed273/2skip; browser fixture confirms buying incomplete disables Send/Start even when payouts ready. Hosted health/release hashes/auth rejection/return pages verified. Updated and reopened human's installed dashboard, worker still running. Human still completes Stripe hosted buying form; no card entered, no purchase/benchmark/cap change. Installer command unchanged.
