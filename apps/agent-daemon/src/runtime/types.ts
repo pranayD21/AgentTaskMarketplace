@@ -1,5 +1,5 @@
-import type { Envelope, JudgeTaskOutput, KeyDescriptor, RunTaskOutput } from "@atm/shared";
-import type { JudgeCycleOpts, JudgeCycleOutput, JudgeTaskOpts, RunTaskOpts, RunCycleOpts, RunCycleOutput } from "@atm/runner-core";
+import type { Envelope, JudgeTaskOutput, KeyDescriptor } from "@atm/shared";
+import type { CanaryOpts, CanaryOutput, SellerRunOutput, JudgeCycleOpts, JudgeCycleOutput, JudgeTaskOpts, RunTaskOpts, RunCycleOpts, RunCycleOutput } from "@atm/runner-core";
 
 export interface RuntimeInfo {
   runtime: "wassette" | "node-unsandboxed";
@@ -13,8 +13,9 @@ export interface Runtime {
   info(): RuntimeInfo;
   prepare?(): Promise<void>;
   runCycle?(opts: RunCycleOpts): Promise<RunCycleOutput>;
+  modelCanary?(opts: CanaryOpts): Promise<CanaryOutput>;
   getPublicKey(): Promise<KeyDescriptor>;
-  runTask(envelope: Envelope, opts: RunTaskOpts): Promise<RunTaskOutput>;
+  runTask(envelope: Envelope, opts: RunTaskOpts): Promise<SellerRunOutput>;
   judgeTask(taskEnvelope: Envelope, resultEnvelope: Envelope, opts: JudgeTaskOpts): Promise<JudgeTaskOutput>;
   /** fetch_review_package → judge → submit_verdict in one runner call; the runner talks to the marketplace itself. */
   judgeCycle(opts: JudgeCycleOpts): Promise<JudgeCycleOutput>;

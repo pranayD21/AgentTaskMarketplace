@@ -16,6 +16,9 @@ import {
   type KeyDescriptor,
 } from "@atm/shared";
 import { withDeadline } from "./deadline.js";
+import { ollamaUsage, type SellerUsage } from "./seller-measurements.js";
+export { measuredCycle, modelCanary, safeSellerUsage, type SellerUsage, type MeasuredCycleOutput, type CanaryOpts, type CanaryOutput } from "./seller-measurements.js";
+export type SellerRunOutput = RunTaskOutput & { seller_usage?: SellerUsage };
 
 export { FetchMarketplace, safeFailureCode } from "./marketplace.js";
 export { runCycle, type RunCycleOpts, type RunCycleOutput, type SellerRegistration } from "./seller-cycle.js";
@@ -28,6 +31,7 @@ export interface RunnerHost {
   /** Secret lookup (wasi:config/store inside Wassette, process.env in Node). */
   getSecret(name: string): Promise<string | undefined>;
   now(): number;
+  onSellerUsage?(usage: SellerUsage): void;
 }
 
 export interface RunTaskOpts {
@@ -43,7 +47,7 @@ export interface RunTaskOpts {
 
 export interface Runner {
   getPublicKey(): KeyDescriptor;
-  runTask(sellerEnvelope: Envelope, opts: RunTaskOpts): Promise<RunTaskOutput>;
+  runTask(sellerEnvelope: Envelope, opts: RunTaskOpts): Promise<SellerRunOutput>;
   judgeTask(taskEnvelope: Envelope, resultEnvelope: Envelope, opts: JudgeTaskOpts, judgeKey: Keypair): Promise<JudgeTaskOutput>;
 }
 
@@ -65,6 +69,7 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
       if ((opts.expected_task_id && opts.expected_task_id !== payload.task_id) ||
           (opts.expected_claim_id && opts.expected_claim_id !== payload.claim_id)) throw new Error("PAYLOAD_CLAIM_MISMATCH");
       const answer = await ollamaChat(host, opts, payload);
+      host.onSellerUsage?.(answer.usage);
       const result: ResultPlaintext = {
         answer: answer.text,
         task_id: payload.task_id,
@@ -73,14 +78,14 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
         salt_b64: randomB64(32),
       };
       const c = commitment(result);
-      return RunTaskOutput.parse({
+      return { ...RunTaskOutput.parse({
         result_enc_buyer: seal(opts.buyer_public_key, c.bytes),
         result_enc_judge: seal(opts.judge_public_key, c.bytes),
         commitment_sha256: c.sha256_hex,
         runtime_ms: Math.max(0, Math.round(host.now() - started)),
         model_id: opts.model_id,
         tokens_out: answer.tokens_out,
-      });
+      }), seller_usage: answer.usage };
     },
 
     async judgeTask(taskEnvelope, resultEnvelope, opts, judgeKey) {
@@ -96,7 +101,7 @@ export function createRunner(host: RunnerHost, existing?: Keypair): Runner {
 // Ollama (seller side)
 // ---------------------------------------------------------------------------
 
-async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPayload): Promise<{ text: string; tokens_out?: number }> {
+async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPayload): Promise<{ text: string; tokens_out?: number; usage: SellerUsage }> {
   const messages = [
     { role: "system", content: "You are a worker model executing a task for another agent. Follow the instruction precisely and answer directly without preamble." },
     { role: "user", content: payload.context ? `${payload.prompt}\n\n--- context ---\n${payload.context}` : payload.prompt },
@@ -117,9 +122,9 @@ async function ollamaChat(host: RunnerHost, opts: RunTaskOpts, payload: SellerPa
       signal,
     });
     if (!res.ok) throw new Error(`OLLAMA_HTTP_${res.status}`);
-    const json = (await res.json()) as { message?: { content?: string }; eval_count?: number };
+    const json = (await res.json()) as Record<string, unknown> & { message?: { content?: string }; eval_count?: number };
     const text = (json.message?.content ?? "").trim();
     if (host.now() - started >= timeout) throw new Error("TASK_TIMEOUT");
-    return { text, tokens_out: json.eval_count };
+    return { text, tokens_out: json.eval_count, usage: ollamaUsage(json) };
   }, timeout);
 }

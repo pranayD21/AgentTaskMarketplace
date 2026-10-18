@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { JudgeTaskOutput, RunTaskOutput, MarketplaceError, ERROR_CODES, type ErrorCode, type Envelope, type KeyDescriptor } from "@atm/shared";
+import { safeSellerUsage, safeFailureCode, type CanaryOpts, type CanaryOutput } from "@atm/runner-core";
 import type { JudgeCycleOpts, JudgeCycleOutput, JudgeTaskOpts, RunTaskOpts, RunCycleOpts, RunCycleOutput } from "@atm/runner-core";
 import { z } from "zod";
 import type { Runtime, RuntimeInfo } from "./types.js";
@@ -80,7 +81,14 @@ const JudgeCycleResult = z.union([
 const CycleOutput = z.object({
   task_id: z.string(), claim_id: z.string(), result_id: z.string(), runtime_ms: z.number().nonnegative(),
   tokens_out: z.number().nonnegative().optional(), key_id: z.string(),
+  seller_usage: z.unknown().transform(safeSellerUsage).optional(),
 });
+
+const MeasuredOutput = z.union([
+  z.object({ ok: z.literal(true), result: CycleOutput, seller_usage: z.unknown().transform(safeSellerUsage) }),
+  z.object({ ok: z.literal(false), error_code: z.string(), seller_usage: z.unknown().transform(safeSellerUsage) }),
+]);
+const CanaryResult = z.object({ passed: z.boolean(), runtime_ms: z.number().nonnegative(), seller_usage: z.unknown().transform(safeSellerUsage) });
 
 export class WassetteRuntime implements Runtime {
   private client: Client | null = null;
@@ -90,6 +98,7 @@ export class WassetteRuntime implements Runtime {
   private readonly grants: Grants;
   private transport: StdioClientTransport | null = null;
   private version: string | null = null;
+  private measured = false;
 
   constructor(private readonly role: "seller" | "judge", private readonly judgePrivateKeyB64?: string, private readonly options: WassetteOptions = {}) {
     if (!fs.existsSync(WASM_SRC)) throw new Error(`runner.wasm not built; run: pnpm build:runner (expected ${WASM_SRC})`);
@@ -151,6 +160,7 @@ export class WassetteRuntime implements Runtime {
         await this.callRaw(client, "grant-environment-variable-permission", { component_id: this.componentId, details: { key } });
       }
       const tools = (await client.listTools()).tools.map((t) => t.name);
+      this.measured = tools.includes("run-cycle-measured");
       console.log(`[wassette] loaded ${this.componentId}; sha256=${this.wasmSha256}; ${this.version}; allow-list=${this.grants.network.join(", ")}`);
       if (this.role === "seller") console.log("[wassette] policy enforces scheme + hostname; Wassette 0.8 does not restrict ports.");
       if (this.role === "seller" && !tools.includes("run-cycle")) throw new Error("Rebuild runner.wasm: run-cycle export missing");
@@ -163,7 +173,7 @@ export class WassetteRuntime implements Runtime {
   }
 
   private async callRaw(client: Client, name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const res = await client.callTool({ name, arguments: args }, undefined, { timeout: name === "run-cycle" || name === "judge-cycle" ? 260_000 : 210_000 });
+    const res = await client.callTool({ name, arguments: args }, undefined, { timeout: ["run-cycle", "run-cycle-measured", "judge-cycle"].includes(name) ? 260_000 : 210_000 });
     const text = (res.content as { type: string; text?: string }[] | undefined)?.find((c) => c.type === "text")?.text ?? "";
     if (res.isError) {
       const code = Object.keys(ERROR_CODES).find((c) => text.includes(c));
@@ -200,12 +210,27 @@ export class WassetteRuntime implements Runtime {
   async prepare() { await this.connect(); }
 
   async runCycle(opts: RunCycleOpts): Promise<RunCycleOutput> {
-    try { return await this.callComponent("run-cycle", { opts: JSON.stringify(opts) }, CycleOutput); }
+    try {
+      await this.connect();
+      if (!this.measured) return await this.callComponent("run-cycle", { opts: JSON.stringify(opts) }, CycleOutput);
+      const out = await this.callComponent("run-cycle-measured", { opts: JSON.stringify(opts) }, MeasuredOutput);
+      if (!out.ok) {
+        const code = safeFailureCode(new Error(out.error_code));
+        const error = code in ERROR_CODES ? new MarketplaceError(code as ErrorCode, code) : new Error(code);
+        throw Object.assign(error, { seller_usage: out.seller_usage });
+      }
+      return { ...out.result, seller_usage: out.seller_usage ?? undefined };
+    }
     catch (error) {
       // Kill a stuck instance before the host recovers its lease; next call reconnects.
       await this.close();
       throw error;
     }
+  }
+
+  async modelCanary(opts: CanaryOpts): Promise<CanaryOutput> {
+    try { return await this.callComponent("model-canary", { opts: JSON.stringify(opts) }, CanaryResult); }
+    catch (error) { await this.close(); throw error; }
   }
 
   async judgeCycle(opts: JudgeCycleOpts): Promise<JudgeCycleOutput> {

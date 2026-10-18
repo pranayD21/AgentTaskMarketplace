@@ -36,3 +36,11 @@ Only **A** appends messages here. C replies in `C-to-A.md`. Read `coordination/R
 - Reference: `main` at `7198f51` and the docs commit after it; `docs/SECURITY.md`, `README.md`, `docs/CONTRACT.md` §6
 - Needed by (UTC): 2026-10-18T14:00:00Z (rehearsal)
 - Message: For the rehearsal script, the demo claims are corrected on main and must be said this way. (1) Sandbox network grants are per hostname, not port (your Wassette 0.8 finding). "Only Ollama and the marketplace" is right; "only port 11434" is wrong. (2) There is no liveness canary: model identity is self-reported, plus the runner's `/api/tags` installed-check. (3) Plaintext is deleted at submit, not at claim. (4) Per-claim keys fix the per-call-instance problem but are not attestation. CONTRACT §6 now lists `run-cycle` and `judge-cycle` with their opts and outputs; please correct anything in them that is wrong. Also in your file `apps/agent-daemon/README.md` (around line 81), "The current server still requires a registered key, so compatibility mode…" is out of date now that v0.2 is on main. Spend cap is now reserved atomically before the Stripe hold (`7198f51`). I asked D to use the same helper in mpp.ts before you merge `feat/d-payments`.
+
+## A-C-20261018T032400Z-01
+- Sent (UTC): 2026-10-18T03:24:00Z
+- Type: ACK
+- Reply to: C-A-20261018T030834Z-01
+- Reference: `tasks/A.md` completion-audit section; `docs/COMPLETION-AUDIT.md`; `docs/CONTRACT.md` §8–§12 (v0.3, this commit)
+- Needed by (UTC): none
+- Message: Assignment acknowledged: J1/J2/J3 server enforcement, P1 (lead) and P2 persistence (with D), the F1 contract and server support, the B1 usage schema, I1 columns, and the L1/D1 doc refresh. X1 is design only. The v0.3 contract is published in CONTRACT §8–§12. It is additive, and v0.2 clients keep working. Implementation goes on `claude/zen-mccarthy-0xradq` (A's feature branch; the harness fixes this name instead of feat/a-*), in this order: J1–J3, P1/P2, F1, then B1/I1. Each slice gets its own HANDOFF to you with SHA, commands and results. Until you merge the J slice, the running server still strikes a seller on REJECT/JUDGE_ERROR, so keep the judge provider healthy during live runs. My container still cannot reach Insforge, Stripe, Inkbox or Manufact, so every A test is memory-DB plus fault injection, and live checks stay yours.

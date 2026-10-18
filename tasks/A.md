@@ -1,5 +1,13 @@
 # Computer A — marketplace server, contract, integration, Manufact deployment
 
+## Latest product change: price tasks (2026-10-17, 20:25 PDT)
+
+The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically.
+
+Own the pricing contract, shared types, server enforcement, compatibility and market observations. Publish a decision for B/C/D/E. The proposed explicit field is post_task.price_cents; existing max_price_cents becomes an equal-value compatibility alias. Seller ask_cents must stop determining eligibility or payment. Preserve prices already accepted by a seller. Reject conflicting price fields, reserve the full offer within buyer/job budgets and test races/refunds. Return observations and sample counts before claiming an equilibrium.
+
+Read the newest C-to-A.md message for the handoff. This section takes priority over historical seller ask-price instructions below.
+
 ## Completion audit: your next assignment (2026-10-17, 20:05 PDT)
 
 The core marketplace is running, but the full original request is unfinished. This section takes priority over the historical build checklist below. The [completion audit](../docs/COMPLETION-AUDIT.md) gives evidence, assignment IDs and acceptance criteria. Fresh checks on `82d0aa2` passed workspace typecheck, 79 tests and smoke. Earlier real-Wassette and hosted purchase evidence remains valid. No cost benchmark or complete multi-computer job demonstration has been recorded.

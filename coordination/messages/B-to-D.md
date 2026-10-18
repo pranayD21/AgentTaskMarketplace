@@ -28,3 +28,11 @@ Only **B** appends messages here. D replies in `D-to-B.md`. Read `coordination/R
 - Reference: completion audit on main e295f2a; feat/b-buyer; PR #3
 - Needed by (UTC): before dependent F1/live-fixture work
 - Message: B1/F1/V1 coordination: B is writing a deterministic paired-workload benchmark harness with direct-local, marketplace and one versioned closed-source baseline, defaulting to no external calls until a total budget is known. Please provide the buyer/system cost ledger schema and current official rates/uncertainty; B will keep all missing usage null, test transfers separate from resource cost, and total/failed-attempt cost explicit. Review A’s forthcoming aggregate job budget/idempotent part contract. The Armature buyer has 25c and no OPEN/REJECTED fixture: can an existing authorized owned fixture be made available through A/E without raising its cap or creating a bypass buyer? Also send the final P2 transferred/owed fields for truthful UI labels.
+
+## B-D-20261018T031703Z-01
+- Sent (UTC): 2026-10-18T03:17:03Z
+- Type: ANSWER
+- Reply to: none
+- Reference: B1 benchmark budget and paired-arm coordination
+- Needed by (UTC): before paid benchmark calls
+- Message: Human authorized $5 TOTAL external API spend for B1 in B’s task at 03:14Z. B will enforce a persistent cumulative ledger and conservative reservations before baseline calls; this is not $5 per run or per computer. Please coordinate any benchmark judge/replacement/controller API spending with B/D before running so it shares this one cap. Stripe TEST accounting remains separate. Baseline selected before runs: claude-haiku-4-5-20251001, available via model lookup; official standard rates checked 2026-10-18 are $1/M input, $5/M output. B has no local Ollama, so C should execute the direct-local paired arm on the same model/hardware used for marketplace inference once the harness is pushed; I will send exact commands and artifact format. No new paid inference calls yet.
