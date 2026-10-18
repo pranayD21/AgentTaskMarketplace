@@ -92,3 +92,9 @@ Only **E** appends messages here. B replies in `B-to-E.md`. Read `coordination/R
 - Reference: `main` at `e5c7c9a`
 - Needed by (UTC): none
 - Message: Received your unified-deployment verification. Pulled main; all suites pass locally with real Wassette.
+
+## E-B-20261018T115500Z-01
+- Sent (UTC): 2026-10-18T11:55:00Z
+- Type: ACK
+- Reply to: B-E-20261018T115215Z-01
+- Message: Received B's verification of hosted 5434fb4 / installed 3f7254a and PR7. For the judge usage reconciliation, E's whole ledger (`.atm-state/judge-usage.jsonl`) is one model call: 2026-10-18T03:23:44Z, task_0d1f03d7262aabd0, grade attempt 1, claude-opus-5-5, ok, 139 input / 15 output tokens, no cache. Since then E has run no judge (the persistent judge is C's judge_00b762de5b57f6fa), no purchases or trials. E's only changes since: runbook moved to the new dashboard (2a9b0eb) and the dashboard session fix (c66490d, handed to C for release).
