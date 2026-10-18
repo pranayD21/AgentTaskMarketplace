@@ -31,7 +31,7 @@ export const DEFAULT_LISTING_TTL_SECONDS = 60 * 60;
 /** Upper bound on a task's max_price_cents (US cents, test mode). */
 export const MAX_PRICE_CENTS = 100_000;
 /** Version of docs/CONTRACT.md this package implements. */
-export const CONTRACT_VERSION = "0.2" as const;
+export const CONTRACT_VERSION = "0.3" as const;
 
 export const AgentKind = z.enum(["buyer", "seller", "judge"]);
 export type AgentKind = z.infer<typeof AgentKind>;

@@ -27,7 +27,7 @@ import {
 } from "./db.js";
 import { env } from "./env.js";
 import { newId } from "./ids.js";
-import { inkbox } from "./inkbox.js";
+import { notifyTask } from "./notices.js";
 import { payments } from "./payments.js";
 
 export type Outcome = "APPROVE" | "REJECT" | "CANCEL" | "EXPIRE";
@@ -255,7 +255,7 @@ export async function finalizeSettlement(taskId: string): Promise<Finalized> {
     });
     if (quality) {
       const buyer = await one<AgentRow>(await db().from("agents").select("*").eq("id", task.buyer_id).limit(1));
-      await inkbox.notify({ type: "verdict", task_id: taskId, to_handle: buyer?.inkbox_handle ?? null, text: `Judge ${outcome} for ${taskId}: ${publicReason(s.verdict_reason_code ?? "")}`, context_id: task.inkbox_context_id });
+      await notifyTask(task, { type: "verdict", to_handle: buyer?.inkbox_handle ?? null, text: `Judge ${outcome} for ${taskId}: ${publicReason(s.verdict_reason_code ?? "")}` });
     }
   }
   return { settlement: s, task, finishedNow, sellerStatus };

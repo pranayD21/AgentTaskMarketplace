@@ -16,7 +16,7 @@ import {
   type ReviewStatus,
 } from "@atm/shared";
 import { db, logEvent, one, unwrap, type AgentRow, type TaskRow, type VerdictRow } from "./db.js";
-import { inkbox } from "./inkbox.js";
+import { notifyTask } from "./notices.js";
 
 /** Replacement work is leased to one judge at a time for this long. */
 export const REPLACEMENT_LEASE_S = 300;
@@ -140,7 +140,7 @@ export async function submitReplacement(judge: AgentRow, input: SubmitReplacemen
     ) as TaskRow[];
     if (!rows.length) return { idempotent: true, replacement_status: "DELIVERED" as const, attempts: t.replacement_attempts ?? 0 };
     await logEvent("replacement.delivered", { task_id: t.id, agent_id: judge.id, meta: { attempts: t.replacement_attempts ?? 0 } });
-    await inkbox.notify({ type: "replacement", task_id: t.id, to_handle: keys.buyer.inkbox_handle ?? null, text: `A judge-produced answer for ${t.id} is ready; call get_result.`, context_id: t.inkbox_context_id });
+    await notifyTask(rows[0]!, { type: "replacement", to_handle: keys.buyer.inkbox_handle ?? null, text: `A judge-produced answer for ${t.id} is ready; call get_result.` });
     return { idempotent: false, replacement_status: "DELIVERED" as const, attempts: t.replacement_attempts ?? 0 };
   }
 
