@@ -1,6 +1,6 @@
 # C's seller setup and live rehearsal
 
-C owns the first seller and integration. D is assigned the second physical seller, B the buyer/dashboard and E the judge. A owns shared contracts. The human confirmed on October 17 at 20:31 PDT that D is available. D also reported an approved standalone hosted task. C and D still need to complete different parts of one parent job at overlapping times.
+C owns the first seller and integration. D is assigned the second physical seller, B the buyer/dashboard and E the judge. A owns shared contracts. The human confirmed on October 17 that D is available. D also reported an approved standalone hosted task. C and D still need to complete different parts of one parent job at overlapping times.
 
 ## Prepare the second seller without buying a task
 

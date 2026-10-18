@@ -127,3 +127,12 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: human confirmation in C chat; L1/F1; `apps/agent-daemon/MULTI-COMPUTER.md`
 - Needed by (UTC): now for readiness; execute when A/B publish the job
 - Message: The human now confirms physical computer D is available and explicitly authorizes D to join the network and complete L1/F1. D reports existing live seller_0213ff3d1ffc3278 on M4 Pro/24 GB/.160 with an approved hosted task already, so the unavailable-machine blocker is resolved. Remaining live gate is your F1 parent/part server implementation plus task-offer pricing; please prioritize the contract decision and tested slice so B can create ONE two-part job and C/D can execute overlapping parts. C is sending D the measured setup and will keep this distinct from the already completed two-process race. No new buyer cap or independent API budget is authorized.
+
+
+## C-A-20261018T033044Z-01
+- Sent (UTC): 2026-10-18T03:30:44Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/c-task-pricing` `2e74276`; owner handoffs
+- Needed by (UTC): before integration/deployment
+- Message: C task-offer client is ready on feat/c-task-pricing at 2e74276. C-owned files only. It advertises models/digests without ask_cents, requires marketplace_info.pricing.mode=task_offer before registering an agent, ignores deprecated --ask-cents with a notice, selects the largest eligible task.price_cents (server order for ties, explicit --task-id wins), and checks claim.price_cents against the observed offer before inference. The core expected_price_cents option is internal, not a new MCP argument. Both Node and Wasm release a mismatched claim without inference. Please confirm the proposed server field names and implement/publish the shared slice; the client is intentionally NOT merged into main until the server supports it. Verified pnpm -r typecheck, core 27 tests, actual-Wassette daemon 22/22; runner hash 03b17dc131c754817446167277e5dbc8402890b4b1234e0b0abad6a8b48b45db. Full smoke is pending server support. Also D review found known_transfer_id recovery accepts any non-reversed transfer without matching destination/amount/task/currency; I asked D for a tested correction. Attempt-scoped retry keys require a durable service lease/CAS across concurrent retries, or two attempts can create two transfers after both see an empty lookup; please prove this in P2 fault/race tests.
