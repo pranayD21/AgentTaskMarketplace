@@ -227,6 +227,30 @@ export async function payoutStatus(stripe: Stripe, accountId: string): Promise<P
  * `stripe_transfers` capability. With the test-mode identity above the
  * capability is active on creation (verified 2026-10-18 01:50 UTC).
  */
+/**
+ * One payout account per seller agent, ever. The create carries a stable
+ * idempotency key, so a lost response or two concurrent OAuth completions
+ * replay the same account instead of creating a second one. Stripe keeps a
+ * key's result for 24 h; the service retries onboardSeller with the same
+ * agent id inside PAYOUT_ACCOUNT_RETRY_POLICY.window_hours of the first
+ * attempt and stops automatic retries after that (an operator reconciles).
+ */
+export function payoutAccountIdempotencyKey(agentId: string): string {
+  return `atm:${agentId}:payout-account`;
+}
+export const PAYOUT_ACCOUNT_RETRY_POLICY = Object.freeze({
+  /** Automatic retries of onboardSeller for the same agent (first attempt included). */
+  max_attempts: 3,
+  /** Retry only within this window after the first attempt; Stripe's idempotency results expire at 24 h. */
+  window_hours: 20,
+  /** Minimum delay between attempts. */
+  backoff_ms: 5_000,
+});
+
+/** Paths C serves for the human's return from Stripe-hosted onboarding (hosted server base URL + path). */
+export const SELLER_SETUP_RETURN_PATH = "/seller/setup-return";
+export const SELLER_SETUP_REFRESH_PATH = "/seller/setup-refresh";
+
 export async function createRecipientAccount(stripe: Stripe, agent: SellerOnboardInput): Promise<PayoutStatus> {
   const human = agent.human_onboarding === true;
   const account = await stripe.v2.core.accounts.create({
@@ -244,7 +268,7 @@ export async function createRecipientAccount(stripe: Stripe, agent: SellerOnboar
     configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
     metadata: { agent_id: agent.id, app: "agent-task-marketplace", onboarding: human ? "human" : "synthetic-test" },
     include: [...ACCOUNT_INCLUDE],
-  });
+  }, { idempotencyKey: payoutAccountIdempotencyKey(agent.id) });
   return readPayoutStatus(account);
 }
 
@@ -311,7 +335,7 @@ export async function sellerPayoutOnboarding(stripe: Stripe, agent: { id: string
   let url: string | null = null;
   if (opts.includeLink !== false) {
     try {
-      url = await onboardingLink(stripe, agent.stripe_account_id, baseUrl);
+      url = await onboardingLink(stripe, agent.stripe_account_id, baseUrl, { human: status.human_onboarding });
     } catch (err) {
       console.warn(`[stripe] onboarding link for ${agent.stripe_account_id} not created: ${(err as Error).message}`);
     }
@@ -357,11 +381,19 @@ export async function sellerPayoutInfo(
   return { payout_status, payout_onboarding_url: r.onboarding_url, payout_label: label, blocking: r.blocking };
 }
 
-/** Hosted Connect onboarding for a real seller (single-use URL; the installer prints and opens it). */
-export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl: string): Promise<string> {
+/**
+ * Hosted Connect onboarding for a real seller (single-use URL; the installer
+ * prints and opens it). Human-owned accounts return to C's setup pages, which
+ * explain the outcome and lead back to the localhost dashboard, where an
+ * authenticated click mints a fresh link; legacy accounts keep /api/dashboard.
+ */
+export async function onboardingLink(stripe: Stripe, accountId: string, baseUrl: string, opts: { human?: boolean } = {}): Promise<string> {
+  const base = baseUrl.replace(/\/$/, "");
+  const return_url = opts.human ? `${base}${SELLER_SETUP_RETURN_PATH}` : `${base}/api/dashboard`;
+  const refresh_url = opts.human ? `${base}${SELLER_SETUP_REFRESH_PATH}` : `${base}/api/dashboard`;
   const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    use_case: { type: "account_onboarding", account_onboarding: { refresh_url: `${baseUrl}/api/dashboard`, return_url: `${baseUrl}/api/dashboard` } },
+    use_case: { type: "account_onboarding", account_onboarding: { refresh_url, return_url } },
   });
   return link.url;
 }
@@ -555,7 +587,14 @@ export async function onboardSellerAccount(stripe: Stripe, agent: SellerOnboardI
     }
     return { stripe_account_id: status.account_id };
   } catch (err) {
-    console.warn(`[stripe] connected account for ${agent.id} not created: ${(err as Error).message}`);
+    const e = err as { type?: string; message?: string };
+    if (e?.type === "StripeIdempotencyError") {
+      // Same agent id, different parameters (e.g. the email changed between attempts): the first
+      // account exists on Stripe. Replay with the original parameters, or let an operator reconcile.
+      console.warn(`[stripe] payout account for ${agent.id}: idempotency conflict; retry with the first attempt's parameters`);
+    } else {
+      console.warn(`[stripe] connected account for ${agent.id} not created: ${e?.message ?? String(err)}`);
+    }
     return { stripe_account_id: null };
   }
 }
