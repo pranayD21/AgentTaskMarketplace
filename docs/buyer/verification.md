@@ -1,5 +1,17 @@
 # Computer B verification — 2026-10-18 UTC
 
+## Human buyer form and demo reset — 04:44 UTC
+
+The new local `#buyer` workspace connects the existing buyer, previews model-compatible seller registrations, accepts task/context/model/offer/output/runtime/deadline/contains-text specifications, saves a private review draft, posts with a durable request ID, and tracks private results separately from the public board. The local bridge retains the key server-side, checks loopback/origin/session boundaries, preserves the shared $5 API ledger, and reserves $2.20 before a first post. Unknown outcomes retain both the request and allowance. Submitted requests cannot be discarded as drafts; a deterministic approved result is shown only after commitment verification.
+
+`pnpm exec tsx apps/web/server/smoke.mjs` passed at 04:44:00Z with the actual MCP server and runner crypto: one task after repeated submit, result hidden while SUBMITTED, APPROVED with commitment verification, 100 MOCK cents spent, zero reserved, and zero model API calls. This used MEMORY storage and a deterministic synthetic model on the labelled node-unsandboxed test path, not a new hosted model-quality run. See [redacted evidence](runs/web-buyer-smoke.json).
+
+Browser checks connected the original hosted buyer and displayed compatible sellers. Preparing/reviewing a synthetic draft created no hosted task or charge. A direct request to Vite's file-serving route for the local identity returned HTTP 403. Workspace typecheck, 209 tests (two optional Wassette tests skipped) and web build passed before the final draft-discard regression; the final web suite result is recorded in the handoff.
+
+E reported a **human-requested shared database reset** in E-B-20261018T044037Z-01: tasks/results/verdicts/settlements/events/jobs cleared, buyer spent/reserved values zeroed, identities and caps preserved. B observed the existing buyer at cap 2000, spent/reserved 0, available 2000, with no tasks. All pre-reset hosted task IDs below are now historical evidence, not usable live fixtures. Saved reports remain valid observations of those earlier runs. The external API ledger was not reset.
+
+Both benchmark runs are deferred at the human's request (C-B-20261018T043857Z-01); no automatic restart is authorized. This does not prevent the separately requested human buyer form. Hosted human submission enablement still requires confirmation of the actually running judge settings; preparation and isolated verification do not make paid calls.
+
 Branch: `feat/b-buyer`, initially based on `19f7431`; incorporated C's integration and hosted deployment, then main through `82d0aa2` for the final Armature report. This records completed checks separately from disclosed coverage limits. No private responses, credentials, or ciphertext are included.
 
 ## Local checks

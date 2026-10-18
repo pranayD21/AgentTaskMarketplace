@@ -1,12 +1,14 @@
 # B1 results — atm-bounded-v1
 
+**Deferred at the human's request, 04:38 UTC.** C-B-20261018T043857Z-01 stops both the bounded-v1 marketplace follow-up and C's separate autonomous comparison until a new human request. The completed baseline/local results below are preserved; no new marketplace run or speedup claim is implied. The central external API ledger remains unchanged at $0.002390 settled of the $5 cap.
+
 Protocol: [benchmark-plan.md](benchmark-plan.md), fixed in commit `d9604ae` before inference. Results are incomplete: the closed-source and direct-local arms are measured; the marketplace arm and full resource ledger remain pending. No savings or quality-matched cost-per-success claim is supported.
 
 | Arm | Attempts | Strict quality successes | Completed-request p50 / p95 | Throughput | Known provider cost |
 | --- | --- | --- | --- | --- | --- |
 | claude-haiku-4-5-20251001 | 12 | 0 / 12 | 737 / 876 ms | 1.304 completed requests/s | $0.002390, rate-based estimate |
 | Direct local qwen3:8b (C) | 12 | 6 / 12 | 587 / 737 ms | 1.705 completed requests/s | Unknown resource cost; no external API call |
-| Marketplace qwen3:8b | Not run; awaiting agreed fixture allocation, judge/replacement cost bound | Unknown | Unknown | Unknown | Unknown |
+| Marketplace qwen3:8b | Not run; deferred by the human | Unknown | Unknown | Unknown | Unknown |
 
 Baseline command: `node scripts/benchmarks/run.mjs --arm baseline --run-id bounded-v1 --execute`. All 12 requests completed, with zero retries and a measured 9,202 ms wall interval. The strict criterion required a JSON value without surrounding Markdown or prose. This result measures output-format compliance as well as correctness.
 

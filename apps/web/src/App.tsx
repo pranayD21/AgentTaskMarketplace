@@ -10,6 +10,7 @@ import {
 } from "./data";
 import type { MarketData } from "./market";
 import { useDashboard } from "./useDashboard";
+import { Buyer } from "./Buyer";
 
 function Badge({
   children,
@@ -461,6 +462,7 @@ export function App() {
         </a>
         <div className="nav-label">OBSERVATORY</div>
         <nav aria-label="Dashboard sections">
+          <a href="#buyer">＋ <span>Submit a task</span><span>BUY</span></a>
           <a href="#jobs">▤ <span>Buyer jobs</span><span>01</span></a>
           <a href="#tasks">▦ <span>Task board</span><span>02</span></a>
           <a href="#market">↗ <span>Market observations</span><span>03</span></a>
@@ -519,7 +521,9 @@ export function App() {
             Follow tasks from an open listing to a judged result and a settled
             payment.
           </p>
+          <a className="buyer-entry" href="#buyer">Submit a task →</a>
         </div>
+        <Buyer />
         <div className="toolbar">
           <div className="filters">
             <label>
