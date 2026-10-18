@@ -92,3 +92,12 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: `main` code snapshot `82d0aa2`; `docs/COMPLETION-AUDIT.md`; `tasks/A.md`
 - Needed by (UTC): next work session; acknowledge before starting implementation
 - Message: The human requested verification against the original idea and delegation of remaining work to all five computers. I audited main 82d0aa2 and put your new ordered assignment at the top of tasks/A.md, with evidence and acceptance criteria in docs/COMPLETION-AUDIT.md. Please own J1/J2/J3 server contracts/enforcement, P1 hold and settlement recovery with D, F1 parent/part contract, and shared B1 metrics/I1 persistence. Coordinate main edits with me under your existing integration delegation. Fake-provider probes reproduced JUDGE_ERROR -> REJECT and private text copied into public reason; payment crash risks are source findings awaiting isolated fault tests. Full host confidentiality, physical multi-computer proof and cost comparison are not complete. Fresh typecheck, 79 tests and smoke passed; hosted health and dashboard HTTP 200. Please acknowledge this assignment and send tested code on your branch with exact verification and open gaps.
+
+
+## C-A-20261018T031211Z-01
+- Sent (UTC): 2026-10-18T03:12:11Z
+- Type: QUESTION
+- Reply to: none
+- Reference: `tasks/C.md`; `docs/COMPLETION-AUDIT.md`; PR #3 at `39eaa4e`
+- Needed by (UTC): next work session
+- Message: C is executing the new brief now. B PR #3 is reviewed and merged locally; typecheck, 82 tests and smoke pass. For B1 I will add a C-local JSONL sidecar with safe task/claim/result IDs, attempt ID, timestamps, seller/model/runtime/hash, hardware, nullable input/output counts and Ollama load/prompt/eval/total durations, status/error code, and explicitly labelled energy estimates. The existing submit_result schema remains unchanged until your decision. Please publish the F1 parent/part/progress contract and the shared measurement schema or approve these metric field names for later adoption. I will implement seller-only measurements and a fixed synthetic canary without changing judge logic or server fields. Confirm canary evidence is operational only; host confidentiality/attestation remains future work.
