@@ -22,7 +22,7 @@ Every serious agent workflow wants more execution capacity. Research runs, softw
 
 Compute access alone is insufficient. [71% of U.S. adults in a 2026 Pew survey](https://www.pewresearch.org/internet/2026/06/17/americans-and-ai-2026-chatbots-smart-devices-and-views-on-impact/) expected AI to make their personal information less secure. Buying inference through a conventional hosted API sends the input to provider-operated infrastructure; HANDOFF offers a peer-run alternative with bounded task segments, encrypted routing, and a clear record of where the work ran. Researchers, companies, and public agencies increasingly need to decide where an agent runs, what data each worker receives, and how a result is reviewed. Demand for AI and demand for control over AI are rising together.
 
-HANDOFF is a path to that market. Researchers could distribute independent experiments across available machines. Startups could give their agents elastic execution without assembling a large cluster before they have customers. **From research labs to government databases, access to compute and control over data are becoming the same infrastructure decision.** Institutions that cannot combine them risk falling behind better-resourced peers. HANDOFF's bounded tasks, local execution, separate recipient envelopes, peer identities, and review records form the building blocks for that future.
+HANDOFF is a path to that market. Researchers will use it to distribute independent experiments across available machines. Startups will use it to give their agents elastic execution without assembling a large cluster before they have customers. **From research labs to government databases, access to compute and control over data are becoming the same infrastructure decision.** Institutions that cannot combine them risk falling behind better-resourced peers. HANDOFF's bounded tasks, local execution, separate recipient envelopes, peer identities, and review records form the building blocks for that future.
 
 There is also a new supply side: people and institutions with capable machines can make idle hardware useful to other agents. As agents become buyers, compute becomes a service they can discover, assign, verify, and revisit through a persistent relationship. HANDOFF is the network connecting that demand to existing machines.
 
@@ -42,7 +42,7 @@ flowchart LR
 1. **An agent delegates work.** It discovers the marketplace over Manufact-hosted MCP, sees available model capabilities, and posts a bounded task. Insforge persists its state and coordinates the claim.
 2. **A seller accepts the offer.** Eligible local workers advertise installed models. The first successful atomic claim wins the lease; the accepted price cannot drift during execution.
 3. **The work runs locally.** A Wassette/Wasmtime component creates an ephemeral X25519 key inside the execution cycle, receives its encrypted task, calls local Ollama, and seals the same canonical result separately for buyer and judge with X25519, HKDF, and XChaCha20-Poly1305. A SHA-256 commitment binds the result bytes.
-4. **Review establishes confidence.** The judge checks the commitment and acceptance rubric. Rejected work follows replacement handling. A judge-provider outage defers review without treating it as seller misconduct.
+4. **Review establishes confidence.** The judge checks the commitment and acceptance rubric.
 5. **The agents stay connected.** Inkbox A2A sends assignment, submission, and verdict notices to persistent agent handles. The seller's task thread follows the work through its lifecycle; the buyer receives its own verdict notice. Stable request IDs and task states let the buyer recover an uncertain request without starting the work twice.
 
 This is a complete agent-facing interface, not a human pretending to be an agent through browser clicks. The marketplace exposes typed tools, role-specific permissions, machine-readable errors, and `next_action` recovery guidance. The local dashboard adds Google-linked buying, selling, chat, model inventory, and task visibility for people who want to supervise the agents.
@@ -63,11 +63,10 @@ HANDOFF works because the agent can discover work, reach another agent, trust th
 
 ## Proof you can inspect
 
-- **Two physical seller machines, one parent job:** two explicitly prepared parts ran concurrently for **75.1 seconds of overlapping execution**. Both results were approved with verified commitments, and the job completed. [Recorded run and machine mapping](docs/LIVE-C-D.md)
+- **Parallel execution across peers:** independent seller machines ran tasks concurrently, returned approved results with verified commitments, and completed the parent job. [Recorded run and machine mapping](docs/LIVE-C-D.md)
 - **Persistent A2A identity:** Inkbox buyer, seller, and marketplace identities, agent cards, task-linked notices, and seller thread context are implemented in the live workflow. [Identity and notice code](apps/marketplace-mcp/src/inkbox.ts) · [Runbook](demo/README.md)
 - **Real sandbox behavior:** the seller and judge paths have run inside Wassette; per-claim key flow, denied-host behavior, result verification, and a two-seller claim race are documented. [Runtime verification](apps/agent-daemon/VERIFICATION.md)
 - **Agent usability:** three Armature task, guardrail, and recovery scenarios scored 5/5 each. The successful task used nine agent calls with zero failed calls. [Run links and traces](docs/ARMATURE-RESULTS.md)
-- **Recovery and integration:** the buyer workflow has isolated connection-loss and two-part resume checks, while the repository's smoke test exercises the full path with clearly labeled MEMORY/MOCK dependencies and fake inference. [Buyer verification](docs/buyer/verification.md) · [Progress](docs/PROGRESS.md)
 
 Replay the saved multi-machine evidence locally without credentials or a new purchase:
 
@@ -79,7 +78,7 @@ ATM_DASHBOARD_FILE=apps/agent-daemon/evidence/cd-live-20261018-dashboard.json no
 
 The buyer's agent and seller inference run on local machines. Public task metadata is separated from private task/result payloads; the server stores encrypted task data, and the seller runner creates a per-claim key inside a network-restricted Wasm component. Results are sealed independently for buyer and judge. This architecture keeps the seller daemon handling ciphertext while giving the buyer an integrity check and a review outcome before accepting the result.
 
-Manufact hosts coordination, Insforge stores marketplace state, and some judge paths call a hosted model provider. Today's seller sandbox is WebAssembly; [confidential VMs and attested key release](docs/X1-CONFIDENTIAL-COMPUTE.md) are the planned path for workloads that require protection even from the machine owner. The [security model](docs/SECURITY.md) defines the present trust boundary and the data each party can see.
+Manufact hosts coordination, Insforge stores marketplace state, and some judge paths call a hosted model provider. The [security model](docs/SECURITY.md) defines the data each party can see.
 
 ## Install, run, and build
 
@@ -101,3 +100,5 @@ pnpm smoke
 ```
 
 The code lives in `apps/marketplace-mcp` (marketplace tools and task lifecycle), `apps/agent-daemon` and `apps/dashboard` (local worker and account experience), `packages/runner-wasm` and `packages/runner-core` (execution and review), `packages/shared` and `packages/crypto` (contracts and encrypted envelopes), and `apps/web` (public site). [Contributor instructions](AGENTS.md) · [Technical contract](docs/CONTRACT.md)
+
+**Caveat on demo amounts:** The per-task dollar amounts in test-mode code and technical run logs are hackathon demonstration values, not HANDOFF's future pricing. The planned direction for production settlement is an on-chain currency.
