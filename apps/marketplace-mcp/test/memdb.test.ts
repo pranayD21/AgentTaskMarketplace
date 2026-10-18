@@ -7,7 +7,7 @@ const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8"
 describe("memdb", () => {
   it("parses every table and the v0.2 columns from db/schema.sql", () => {
     const tables = parseSchema(schema);
-    expect([...tables.keys()].sort()).toEqual(["agents", "events", "results", "sellers", "settlements", "tasks", "verdicts"]);
+    expect([...tables.keys()].sort()).toEqual(["agents", "events", "jobs", "results", "sellers", "settlements", "tasks", "verdicts"]);
     expect(tables.get("tasks")!.columns.has("claim_runner_pubkey_b64")).toBe(true);
     expect(tables.get("sellers")!.columns.has("last_claim_key_id")).toBe(true);
   });

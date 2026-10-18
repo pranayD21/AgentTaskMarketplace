@@ -11,6 +11,7 @@
  * and fixed reason-code text only, never prompts, answers or judge output.
  */
 import fs from "node:fs";
+import { publicReason } from "@atm/shared";
 import path from "node:path";
 import { Inkbox, type A2AClient, type A2AResolvedTarget, type A2ASkill } from "@inkbox/sdk";
 import { db, one, unwrap, type AgentRow, type TaskRow, type VerdictRow } from "./db.js";
@@ -132,18 +133,6 @@ async function target(s: Sender, handle: string): Promise<A2AResolvedTarget> {
 // Recipients are rebuilt from the database on every notice, so a server
 // restart between claim and verdict loses nothing (I1).
 
-// Same text as PUBLIC_REASON in @atm/runner-core (proposed for @atm/shared).
-// Verdict notices are built from the stored reason code only, never from a
-// judge-supplied string (J1).
-const PUBLIC_REASON: Record<string, string> = {
-  RUBRIC_MATCH: "The answer contains the buyer's expected text.",
-  RUBRIC_MISMATCH: "The answer does not contain the buyer's expected text.",
-  COMMITMENT_MISMATCH: "The result does not match the seller's commitment or task.",
-  EMPTY_ANSWER: "The seller returned an empty answer.",
-  LLM_RUBRIC_PASS: "The judge model found that the answer meets the buyer's criteria.",
-  LLM_RUBRIC_FAIL: "The judge model found that the answer does not meet the buyer's criteria.",
-  JUDGE_ERROR: "The judge could not complete the review.",
-};
 
 interface TaskRecipients { seller: string | null; buyer: string | null; verdict: { verdict: string; reason_code: string } | null }
 
@@ -209,7 +198,7 @@ export const inkbox = {
           let sends: { handle: string; context: string | null; main: boolean }[];
           if (event.type === "verdict") {
             if (!r.verdict) return stored;
-            text = `Judge ${r.verdict.verdict} for ${event.task_id}: ${PUBLIC_REASON[r.verdict.reason_code] ?? PUBLIC_REASON.JUDGE_ERROR}`;
+            text = `Judge ${r.verdict.verdict} for ${event.task_id}: ${publicReason(r.verdict.reason_code)}`;
             sends = [
               ...(r.seller ? [{ handle: r.seller, context: stored, main: true }] : []),
               ...(r.buyer && r.buyer !== r.seller ? [{ handle: r.buyer, context: null, main: false }] : []),

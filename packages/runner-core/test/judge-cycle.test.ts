@@ -116,7 +116,7 @@ describe("J1: public reasons are fixed per reason code", () => {
   });
 
   it("uses only fixed text for every reason code", () => {
-    for (const text of Object.values(PUBLIC_REASON)) expect(text).toMatch(/^[A-Za-z' ,.]+$/);
+    for (const text of Object.values(PUBLIC_REASON)) expect(text).toMatch(/^[A-Za-z' ,.;]+$/);
   });
 });
 

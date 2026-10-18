@@ -130,3 +130,58 @@ alter table tasks add column if not exists claim_runner_key_id text;
 alter table tasks add column if not exists claim_runner_pubkey_b64 text;
 alter table sellers add column if not exists last_claim_key_id text;
 alter table sellers add column if not exists last_claim_pubkey_b64 text;
+
+-- ---------------------------------------------------------------------------
+-- Contract v0.3 (docs/CONTRACT.md §8-§12). Mirrored in src/db.ts SCHEMA_PATCHES,
+-- which also backfills rows written before v0.3.
+-- ---------------------------------------------------------------------------
+-- §8 review deferral and replacement delivery
+alter table tasks add column if not exists review_status text;
+alter table tasks add column if not exists review_attempts integer not null default 0;
+alter table tasks add column if not exists review_retry_at timestamptz;
+alter table tasks add column if not exists replacement_status text;
+alter table tasks add column if not exists replacement_attempts integer not null default 0;
+alter table tasks add column if not exists replacement_retry_at timestamptz;
+-- §9 durable settlement: a CANCELLED/EXPIRED task whose settlement is not finished
+alter table tasks add column if not exists settle_pending boolean not null default false;
+alter table verdicts add column if not exists seller_id text;
+alter table settlements add column if not exists outcome text;
+alter table settlements add column if not exists result_id text;
+alter table settlements add column if not exists verdict_reason_code text;
+alter table settlements add column if not exists decision jsonb;
+alter table settlements add column if not exists payment_state text;
+alter table settlements add column if not exists finalized_at timestamptz;
+alter table settlements add column if not exists updated_at timestamptz;
+alter table settlements add column if not exists payout_owed_cents integer;
+alter table settlements add column if not exists payout_transferred_cents integer;
+alter table settlements add column if not exists transfer_state text;
+alter table settlements add column if not exists transfer_attempts integer not null default 0;
+alter table settlements add column if not exists transfer_retry_at timestamptz;
+alter table agents add column if not exists balance_keys text[] not null default '{}';
+-- §10 jobs and parts
+create table if not exists jobs (
+  id text primary key,
+  buyer_id text not null references agents(id),
+  label_public text,
+  budget_cents integer not null,
+  reserved_cents integer not null default 0,
+  spent_cents integer not null default 0,
+  balance_keys text[] not null default '{}',
+  client_job_key text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists jobs_buyer_idx on jobs(buyer_id);
+alter table tasks add column if not exists job_id text;
+alter table tasks add column if not exists part_key text;
+alter table tasks add column if not exists part_label text;
+alter table tasks add column if not exists attempt integer;
+alter table tasks add column if not exists client_request_id text;
+create index if not exists tasks_job_idx on tasks(job_id);
+-- §12 Inkbox continuity
+alter table tasks add column if not exists inkbox_thread_owner text;
+alter table tasks add column if not exists inkbox_buyer_context_id text;
+-- §10 idempotent posting: one live attempt per part, one task per client request id
+create unique index if not exists tasks_job_part_attempt_uniq on tasks(job_id, part_key, attempt);
+create unique index if not exists tasks_buyer_request_uniq on tasks(buyer_id, client_request_id);
+create unique index if not exists jobs_buyer_key_uniq on jobs(buyer_id, client_job_key);

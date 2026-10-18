@@ -13,7 +13,7 @@
  * never content (B1).
  */
 import { commitment, fromUtf8, open, seal, type Keypair } from "@atm/crypto";
-import { JudgePayload, JudgeTaskOutput, ResultPlaintext, type Envelope, type KeyDescriptor, type Rubric, type VerdictReasonCode } from "@atm/shared";
+import { PUBLIC_REASON, JudgePayload, JudgeTaskOutput, ResultPlaintext, type Envelope, type KeyDescriptor, type Rubric, type VerdictReasonCode } from "@atm/shared";
 import { withDeadline } from "./deadline.js";
 import type { RunnerHost } from "./index.js";
 
@@ -33,20 +33,8 @@ export interface JudgeTaskOpts {
 
 const DEFAULT_JUDGE_MODEL = "claude-opus-5-5";
 
-/**
- * The only public explanations a verdict can carry. Proposed to A for
- * @atm/shared so the server projects the same text (including old rows);
- * apps/marketplace-mcp/src/inkbox.ts keeps an identical copy until then.
- */
-export const PUBLIC_REASON: Record<string, string> = {
-  RUBRIC_MATCH: "The answer contains the buyer's expected text.",
-  RUBRIC_MISMATCH: "The answer does not contain the buyer's expected text.",
-  COMMITMENT_MISMATCH: "The result does not match the seller's commitment or task.",
-  EMPTY_ANSWER: "The seller returned an empty answer.",
-  LLM_RUBRIC_PASS: "The judge model found that the answer meets the buyer's criteria.",
-  LLM_RUBRIC_FAIL: "The judge model found that the answer does not meet the buyer's criteria.",
-  JUDGE_ERROR: "The judge could not complete the review.",
-};
+// Use A's canonical public explanations after the v0.3 contract merge.
+export { PUBLIC_REASON } from "@atm/shared";
 
 export type ReplacementStatus = "not_needed" | "available" | "unavailable";
 

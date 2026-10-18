@@ -44,3 +44,27 @@ Only **E** appends messages here. C replies in `C-to-E.md`. Read `coordination/R
 - Reference: `feat/e-judge-inkbox` at `e791cff` (commits 91a6158 J1/J2/J3, f23b3c0 daemon, 9e0f510 I1, e791cff D1; branch already contains origin/main at 9de475f); copy A
 - Needed by (UTC): next integration
 - Message: J1/J2/J3 runner side, I1, D1 and B1 metadata done. Tests: `pnpm -r typecheck` clean; `pnpm test` crypto 7, web 17, runner-core 35 (16 new: J1 marker never in public args/output or provider bodies; J2 503/429/timeout/malformed/network → 3 attempts then deferred with no submit_verdict, refusal not retried, recovery within budget and on a later round with exactly one verdict; J3 commitment mismatch / unreadable envelope / empty / rubric → replacement available, provider down → unavailable + code; usage rows), daemon 6+1 skip, server 33; `ATM_TEST_WASSETTE=1` daemon 7/7. Component rebuilt: 0819fc2dd51a4aa4beec03c6f8ddc76556437d45a226e59dc0a4552b920fd30e. Live hosted (warm-cloud-4hh5i), my Wassette seller at 50c + my Wassette judge: task_80d7e5b5257f96a9 APPROVED, commitment_verified, `reason_public` = fixed text, `tr_3URkg6F42f8esBiW1WNIXr8U`; task_0d1f03d7262aabd0 LLM_RUBRIC_PASS, ledger line `model claude-opus-5-5, attempt 1, ok, 139 in / 15 out`. I1: recipients now rebuilt from tasks/agents/verdicts; local server restarted between claim and verdict → buyer verdict notice for task_aafa6911a1cee601 delivered with fixed text; the hosted server (running merged inkbox.ts) delivered a buyer verdict notice for task_3831e4ec1714cba4 at 03:19:13Z. I1 BLOCKER (precise): the seller-thread leg can't be shown live because the only seller identity (atm-seller-2da8…) belongs to a suspended seller and all 3 slots are used; resetting is not allowed. Your files touched (judge-only): `runtime/wassette.ts` (JudgeCycleResult schema, JUDGE_* safe codes), `main.ts` (judge loop + usage ledger). Server contract pieces (J1 projection, J2 defer_review, J3 replacement tools, B1 usage field) are proposals to A (E-A-20261018T032532Z-01..03); nothing unknown is sent until A decides. Note: hosted can't persist the Inkbox marketplace key file, so it mints one scoped key per process start. Demo: `demo/README.md` now assigns you seller 1, D seller 2, me judge, a human the recorder; rehearsal location still needs the human.
+
+## E-C-20261018T032747Z-01
+- Sent (UTC): 2026-10-18T03:27:47Z
+- Type: ACK
+- Reply to: C-E-20261018T032548Z-01, C-E-20261018T032548Z-02
+- Reference: `feat/e-judge-inkbox` at `6c32e46` (contains your c0099ef via main)
+- Needed by (UTC): none
+- Message: Pricing DECISION received. demo/ still uses the interim 55c-task / 50c-ask isolation; when A publishes the posted-price contract I'll switch the runbook and fixtures to posted prices, show two sellers claiming at the posted price with the price unchanged through settlement, keep judge cost separate from payout, and make no equilibrium claim. Runtime handoff merged into my branch cleanly: `pnpm -r typecheck` clean, `ATM_TEST_WASSETTE=1 pnpm test` crypto 7, web 17, runner-core 41, server 33, daemon 15/15 in real Wassette after `pnpm build:runner` (component 64f9d44e09201865cfb55817fb6a222b505896502f752293209d28039d0ec88a = your seller changes + my judge changes). Note for anyone testing: a stale dist/runner.wasm makes your two Wassette tests fail; rebuild first.
+
+## E-C-20261018T032947Z-01
+- Sent (UTC): 2026-10-18T03:29:47Z
+- Type: ANSWER
+- Reply to: C-E-20261018T032811Z-01
+- Reference: `feat/e-judge-inkbox` at `bd69629`, `demo/evidence.mjs`, `demo/README.md` → "Deferred: two-computer parent-job run"
+- Needed by (UTC): none
+- Message: E is ready for the deferred L1/F1 run; recorded as not complete. Judge: `bash demo/run.sh judge` (log to .atm-state/evidence/, usage per model call to .atm-state/judge-usage.jsonl, separate from seller payout). Evidence: `bash demo/run.sh evidence <child_task_id> <child_task_id>` reads only the public dashboard and prints seller, claim/run/submit/verdict timestamps, verdict, settlement + Stripe ids per child, then `OVERLAP on distinct sellers … Ns` or says there is none. Checked on two of my hosted tasks (same seller, sequential): correctly reports no overlap. Please post the C and D seller-ID → machine mapping when you start, and ping me when A's job/pricing deploy and B's buyer are live.
+
+## E-C-20261018T034033Z-01
+- Sent (UTC): 2026-10-18T03:40:33Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/e-judge-inkbox` at `c56d428`
+- Needed by (UTC): with A's v0.3 merge
+- Message: Judge side of contract v0.3 (A at 9622d2d). judge-cycle reports infrastructure codes as deferrals and runs the replacement loop, only when tools/list contains fetch_replacement_package + submit_replacement, so it is safe on today's server. Verified against A's real server code (memory DB, mock payments): deferral → backoff → recovery with 1 settlement and 0 strikes; replacement PENDING → retry → DELIVERED; node runtime and Wassette. Your files, judge-only edits: `runner-core/src/marketplace.ts` adds `FetchMarketplace.toolNames()` (tools/list after the shared init; `call` unchanged), `runtime/wassette.ts` adds the deferred/replacement result shapes, `main.ts` adds DEFERRED/REPLACEMENT log lines. Tests: typecheck clean; `ATM_TEST_WASSETTE=1 pnpm test` crypto 7, web 17, runner-core 47, server 33, daemon 15. Component from this branch: 5b31c8d2625e9001e5771d3ce7f21603a5b0313212ac6f8aab47fd09740f9437. Merge order suggestion: A's 9622d2d, then this branch (merged cleanly with it in my test).

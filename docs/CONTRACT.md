@@ -112,7 +112,9 @@ When A merges a contract change: A commits `docs/CONTRACT.md` + `packages/shared
 
 # v0.3 additions — ADOPTED 2026-10-17 20:30 PDT (audit items J1–J3, P1/P2, F1, B1, I1)
 
-Every v0.3 change is additive. A v0.2 client keeps working; the differences it can observe are listed under each item. Server implementation lands on `main` in the commits named in A's HANDOFF to C. Until then the sections below are the contract to build against, not a description of the running service.
+Every v0.3 change is additive. A v0.2 client keeps working; the differences it can observe are listed under each item. **Implemented** on `claude/zen-mccarthy-0xradq`: §8–§9 at `9622d2d`, and §10–§12 at `62b0e46` (`CONTRACT_VERSION` 0.3). The deployed service runs it only after C merges and redeploys; check `/api/health.contract`.
+
+New tools in v0.3: `fetch_replacement_package` and `submit_replacement` (judge); `create_job`, `get_job` and `list_my_jobs` (buyer). `post_task` adds `client_request_id`, `job_id`, `part_key` and `part_label`, and returns `idempotent`. `submit_verdict.reason_public` is optional and ignored. `expire_stale` also returns `resumed` and `transfers_retried`.
 
 ## 8. Judge outcomes (J1, J2, J3)
 
@@ -194,3 +196,15 @@ Every quantity that was not measured is **`null`, never 0**. `cost_usd` is a res
 ## 12. Inkbox continuity (I1)
 
 `tasks.inkbox_thread_owner` (the handle whose A2A context is `inkbox_context_id`) and `tasks.inkbox_buyer_context_id` persist what `inkbox.ts` held in memory. `inkbox.notify` receives and returns them, so a server restart between claim and verdict keeps both threads. E wires `inkbox.ts`; A adds the columns and passes them through.
+
+
+## 13. Task offers (adopted; deployment pending)
+
+The human assigned A and C work to C on October 17. This decision replaces seller ask pricing.
+
+- `marketplace_info.pricing.mode` is `task_offer` when the implementation is available. Clients check the capability before registering a quote-free seller.
+- `post_task.price_cents` is the posted offer in integer US cents. The deprecated `max_price_cents` alias accepts the same value; sending conflicting values is a validation error. The offer must fit the buyer and parent-job budgets. Posting reserves the full offer.
+- `ModelInfo.ask_cents` is optional and deprecated. It has no effect on eligibility, claim price or settlement. Sellers advertise installed models and accept a task's offer by claiming it.
+- `TaskPublic.price_cents` is populated before claim. Legacy unclaimed rows with a null price use their stored `max_price_cents`. Claims already accepted keep their stored price. Releasing a task preserves its offer. An approved task pays the accepted offer; a rejection releases the hold.
+- `ClaimPublic.price_cents` is the price accepted by the claim. C's `expected_price_cents` is a local runtime check against this field, never a new MCP argument.
+- Market observations group comparable model sets and runtime limits and include bounded sample counts, recent accepted prices, fill times and claim/expiry rates. Small samples are labelled insufficient. They are descriptive, do not establish an equilibrium and do not raise an offer or spending cap automatically.

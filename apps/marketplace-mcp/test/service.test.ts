@@ -53,6 +53,10 @@ async function post(buyer: AgentRow, expected = "Lima") {
   return task;
 }
 
+async function settlementRow(taskId: string) {
+  return (unwrap(await db().from("settlements").select("*").eq("task_id", taskId).limit(1)) as { finalized_at: string | null; state: string }[])[0]!;
+}
+
 async function taskRow(id: string): Promise<TaskRow> {
   return (await svc.getTask(id))!;
 }
@@ -216,7 +220,7 @@ describe("full cycle", () => {
     expect((await taskRow(task.task_id)).status).toBe("APPROVED");
   });
 
-  it("a failed capture publishes no verdict or settlement, and the same verdict can be retried", async () => {
+  it("a failed capture publishes no verdict, keeps the decision pending, and the same verdict can be retried", async () => {
     const buyer = await agent("buyer");
     const judge = await agent("judge");
     const s = await seller();
@@ -229,7 +233,8 @@ describe("full cycle", () => {
       expect(err.retryable).toBe(true);
       expect(err.next_action).toBeTruthy();
       const pending = await svc.getTaskForActor(buyer, task.task_id);
-      expect(pending).toMatchObject({ task: { status: "SUBMITTED" }, verdict: null, settlement: null });
+      // v0.3 §9: the decision is recorded before money moves; it is final only once finalized_at is set.
+      expect(pending).toMatchObject({ task: { status: "SUBMITTED" }, verdict: null, settlement: { state: "PENDING", outcome: "APPROVE", finalized_at: null } });
       expect(await svc.getAgent(buyer.id)).toMatchObject({ reserved_cents: 100, spent_cents: 0 });
       const retry = await svc.submitVerdict(judge, input);
       expect(retry.task.status).toBe("APPROVED");
@@ -291,15 +296,21 @@ describe("expiry and hardening", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
       const tasks = await svc.listTasksForBuyer((await svc.getAgent(buyer.id))!);
-      expect(tasks.find((t) => t.task_id === task.task_id)?.status).toBe("OPEN");
+      // v0.3: the listing closes first (no claim can win), the release is recorded and retried.
+      expect(tasks.find((t) => t.task_id === task.task_id)?.status).toBe("EXPIRED");
       expect(warn).toHaveBeenCalledTimes(1);
+      expect(await svc.getTaskForActor(buyer, task.task_id)).toMatchObject({ settlement: { outcome: "EXPIRE", state: "PENDING", finalized_at: null } });
+      expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(100);
     } finally {
       spy.mockRestore();
       warn.mockRestore();
     }
-    // the next sweep retries and succeeds
-    await svc.expireStale();
-    expect((await taskRow(task.task_id)).status).toBe("EXPIRED");
+    // a later sweep resumes the recorded decision and finishes it once
+    unwrap(await db().from("settlements").update({ created_at: new Date(Date.now() - 600_000).toISOString() }).eq("task_id", task.task_id));
+    expect((await svc.expireStale()).resumed).toBeGreaterThanOrEqual(1);
+    expect(await svc.getTaskForActor(buyer, task.task_id)).toMatchObject({ task: { status: "EXPIRED", payment: { state: "MOCK" } }, settlement: { state: "RECORDED" } });
+    expect((await settlementRow(task.task_id)).finalized_at).toBeTruthy();
+    expect((await svc.getAgent(buyer.id))!.reserved_cents).toBe(0);
   });
 
   it("expiry refunds PAID MPP tasks and records their own rail", async () => {
