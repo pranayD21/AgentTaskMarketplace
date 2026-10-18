@@ -3,7 +3,7 @@
 From the repository root:
 
 ```sh
-export MARKETPLACE_URL='http://localhost:3000/mcp' # or A's reachable endpoint
+export MARKETPLACE_URL='http://192.168.4.163:3000/mcp' # C's interim LAN endpoint
 node scripts/buyer.mjs info
 node scripts/buyer.mjs sellers
 node scripts/buyer.mjs whoami
@@ -14,7 +14,7 @@ codex
 
 `whoami` registers a buyer only if no `ATM_API_KEY` or endpoint-matched state exists. Keep the configured spend cap; never register another buyer to bypass it. Launch Codex from the same shell so it receives `ATM_API_KEY`. The MCP entry stores the environment variable name, not the credential. A desktop app launched elsewhere may not inherit this shell environment.
 
-Hosted Manufact URL: **pending A** (`<MANUFACT_MCP_URL_PENDING_A>`). Check A's announcement and substitute the real URL. The local server may choose another port when 3000 is occupied; use the endpoint it prints. Existing state from another endpoint is deliberately rejected by the buyer CLI; use an explicitly supplied existing key or a separate `ATM_BUYER_STATE` path.
+Hosted Manufact URL: **pending acting integrator C**, delegated by A (`<MANUFACT_MCP_URL_PENDING_A>`). Check C's announcement in `coordination/messages/C-to-B.md` and substitute the real URL. The local server may choose another port when 3000 is occupied; use the endpoint it prints. Existing state from another endpoint is deliberately rejected by the buyer CLI; use an explicitly supplied existing key or a separate `ATM_BUYER_STATE` path.
 
 Ask Codex: “Use atm to delegate one task: return the capital of Japan in one word, with contains_text Tokyo grading and a maximum of 100 US test cents. Discover available models and sellers, reuse my buyer identity, post once, wait up to three minutes, then fetch the result. Report the task ID, verdict, commitment verification, and payment state. If still pending, return its ID rather than posting again.”
 
@@ -24,7 +24,7 @@ For a one-off evaluation without changing persistent config:
 
 ```sh
 codex exec --ephemeral \
-  -c 'mcp_servers.atm.url="http://localhost:3000/mcp"' \
+  -c 'mcp_servers.atm.url="http://192.168.4.163:3000/mcp"' \
   -c 'mcp_servers.atm.bearer_token_env_var="ATM_API_KEY"' \
   'Use atm to get the capital of Japan in one word; grade contains_text Tokyo; max 100 US test cents; reuse my buyer; post once, wait for review, and fetch the verified result. Stop after three minutes and report the task ID if pending.'
 ```

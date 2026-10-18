@@ -5,7 +5,7 @@
 ## Connect
 
 - Local MCP: http://localhost:3000/mcp (use the actual port printed by the server).
-- Hosted Manufact MCP: <MANUFACT_MCP_URL_PENDING_A>. No hosted URL has been announced; this is a placeholder, not a working endpoint.
+- Hosted Manufact MCP: <MANUFACT_MCP_URL_PENDING_A>. A delegated deployment to acting integrator C; no hosted URL has been announced; this is a placeholder, not a working endpoint.
 - Transport: Streamable HTTP. Public discovery and registration need no key. Authenticated tools accept Authorization: Bearer <atm_sk_...>; api_key is a fallback tool argument.
 - Register a buyer once, save its one-time key privately, then reuse it. Never expose provider keys to the dashboard.
 

@@ -29,6 +29,13 @@ const eventTypes = [
 export const Dashboard = z.object({
   generated_at: z.iso.datetime(),
   payments: z.object({ mode: z.enum(["card", "mpp", "mock"]) }),
+  db: z.unknown().transform((value) =>
+    typeof value === "string" && value.startsWith("MEMORY")
+      ? "memory"
+      : value === "Insforge Postgres"
+        ? "insforge"
+        : "unknown",
+  ),
   counts: z.object(
     Object.fromEntries(
       TASK_STATUSES.map((s) => [s, z.number().int().nonnegative().optional()]),
@@ -51,7 +58,9 @@ export const Dashboard = z.object({
       .object({
         id: z.string(),
         task_id: z.string(),
-        kind: z.enum(["STRIPE_TEST", "MOCK"]),
+        kind: z.string().transform((kind) =>
+          kind === "STRIPE_TEST" || kind === "MOCK" ? kind : "UNRECOGNIZED PAYMENT RAIL",
+        ),
         state: z.string(),
         seller_payout_cents: z.number().int().nonnegative(),
         buyer_refund_cents: z.number().int().nonnegative(),
