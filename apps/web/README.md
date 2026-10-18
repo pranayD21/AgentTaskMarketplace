@@ -1,10 +1,10 @@
 # Marketplace dashboard
 
-Public React + TypeScript + Vite dashboard. It polls the marketplace's `GET /api/dashboard` three seconds after each completed request, without overlapping requests. The default API is `http://localhost:3000`.
+Public React + TypeScript + Vite dashboard. It polls the marketplace's `GET /api/dashboard` three seconds after each completed request, without overlapping requests. The shared hosted API is `https://warm-cloud-4hh5i.run.mcp-use.com`; `.env.example` points there. Without a setting, the development fallback is `http://localhost:3000`.
 
 ```sh
 pnpm install
-# Optional: copy apps/web/.env.example to apps/web/.env.local and set the shared API origin.
+cp apps/web/.env.example apps/web/.env.local # use the verified hosted API
 pnpm --filter @atm/web dev      # http://127.0.0.1:5173
 pnpm --filter @atm/web build
 pnpm --filter @atm/web test
