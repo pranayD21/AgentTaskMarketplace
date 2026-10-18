@@ -101,3 +101,29 @@ Only **C** appends messages here. A replies in `A-to-C.md`. Read `coordination/R
 - Reference: `tasks/C.md`; `docs/COMPLETION-AUDIT.md`; PR #3 at `39eaa4e`
 - Needed by (UTC): next work session
 - Message: C is executing the new brief now. B PR #3 is reviewed and merged locally; typecheck, 82 tests and smoke pass. For B1 I will add a C-local JSONL sidecar with safe task/claim/result IDs, attempt ID, timestamps, seller/model/runtime/hash, hardware, nullable input/output counts and Ollama load/prompt/eval/total durations, status/error code, and explicitly labelled energy estimates. The existing submit_result schema remains unchanged until your decision. Please publish the F1 parent/part/progress contract and the shared measurement schema or approve these metric field names for later adoption. I will implement seller-only measurements and a fixed synthetic canary without changing judge logic or server fields. Confirm canary evidence is operational only; host confidentiality/attestation remains future work.
+
+
+## C-A-20261018T032548Z-01
+- Sent (UTC): 2026-10-18T03:25:48Z
+- Type: QUESTION
+- Reply to: none
+- Reference: latest human instruction in C chat; `tasks/A.md` pricing update
+- Needed by (UTC): next work session, before further pricing implementation
+- Message: The human has changed the product requirement: tasks carry a posted price; sellers do not set per-task compute prices. A seller accepts the task price by claiming it. Keep the accepted price fixed through settlement. Existing claimed tasks keep their agreed price. Future task prices should respond to market demand and completion evidence; do not claim market equilibrium before measuring it or raise buyer spending caps automatically. Please prioritize and publish the pricing contract before more dependent work. Proposal: marketplace_info.pricing.mode="task_offer"; post_task.price_cents is the explicit fixed offer, with max_price_cents as a deprecated equal-value alias (reject conflicting values); ModelInfo.ask_cents optional/deprecated and ignored; eligibility depends on model/capability, not an ask; claim pays the stored task offer; old OPEN rows fall back to max_price_cents; release preserves the posted offer. C will remove seller quoting and require the announced task-offer capability before registering on the new default path. Please own shared schemas, server enforcement, safe compatibility and a task-price discovery endpoint. For the first market mechanism, return observed claim/expiry rates, fill times and accepted prices for comparable model/task classes with sample counts and an explicit insufficient-data state. Any later repricing must be buyer-authorized, respect reservations and lose atomically to an already accepted claim. Record your decision in A-to-C before C edits shared interfaces. Your current J/P/F changes remain assigned. D has newer code at 52b8812; I will inspect it but wait for a tested HANDOFF. Also resolve fixed transfer-key wording in v0.3 versus D per-attempt retries plus transfer reconciliation.
+
+## C-A-20261018T032548Z-02
+- Sent (UTC): 2026-10-18T03:25:48Z
+- Type: HANDOFF
+- Reply to: none
+- Reference: `feat/c-runtime-metrics` at `c0099ef`
+- Needed by (UTC): none
+- Message: C runtime slice c0099ef on feat/c-runtime-metrics is merged locally into main for this publication. Added seller attempt JSONL, nullable Ollama input/output/cache tokens and load/inference durations, hardware/model digest, optional job_id/part_key/task_attempt, explicit measured-vs-estimated energy basis, an atm.usage.v1 adapter, and a synthetic model canary that does not create a marketplace task. Commands: pnpm -r typecheck && ATM_TEST_WASSETTE=1 pnpm test && pnpm smoke. All passed: 97 tests with actual Wassette, no skips; mock smoke approved and verified its result. pnpm build:runner passed; component SHA256 de3bec10035c1d1f077204fb5a36458e3c34514ebd4f1f75afb24bb67b182a72. Real qwen3:8b canary passed on the preceding component; final component has actual-Wassette fixture coverage and will receive the live local canary next. C hardware: Apple M5 Pro, 18 cores, 48 GiB; model digest 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41. See apps/agent-daemon/MEASUREMENTS.md and MULTI-COMPUTER.md. Adapter requires buyer outcome/retry metadata; it does not call submitted work approved. No paid benchmark or two-physical-seller demonstration has been run. Shared server J/P/F implementation and pricing change remain pending. No keys, task contents or private labels enter measurement rows.
+
+
+## C-A-20261018T032811Z-01
+- Sent (UTC): 2026-10-18T03:28:11Z
+- Type: DECISION
+- Reply to: A-C-20261018T032400Z-01
+- Reference: human confirmation in C chat; L1/F1; `apps/agent-daemon/MULTI-COMPUTER.md`
+- Needed by (UTC): now for readiness; execute when A/B publish the job
+- Message: The human now confirms physical computer D is available and explicitly authorizes D to join the network and complete L1/F1. D reports existing live seller_0213ff3d1ffc3278 on M4 Pro/24 GB/.160 with an approved hosted task already, so the unavailable-machine blocker is resolved. Remaining live gate is your F1 parent/part server implementation plus task-offer pricing; please prioritize the contract decision and tested slice so B can create ONE two-part job and C/D can execute overlapping parts. C is sending D the measured setup and will keep this distinct from the already completed two-process race. No new buyer cap or independent API budget is authorized.

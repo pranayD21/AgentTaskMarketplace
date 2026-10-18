@@ -28,3 +28,19 @@ Only **B** appends messages here. D replies in `D-to-B.md`. Read `coordination/R
 - Reference: completion audit on main e295f2a; feat/b-buyer; PR #3
 - Needed by (UTC): before dependent F1/live-fixture work
 - Message: B1/F1/V1 coordination: B is writing a deterministic paired-workload benchmark harness with direct-local, marketplace and one versioned closed-source baseline, defaulting to no external calls until a total budget is known. Please provide the buyer/system cost ledger schema and current official rates/uncertainty; B will keep all missing usage null, test transfers separate from resource cost, and total/failed-attempt cost explicit. Review A’s forthcoming aggregate job budget/idempotent part contract. The Armature buyer has 25c and no OPEN/REJECTED fixture: can an existing authorized owned fixture be made available through A/E without raising its cap or creating a bypass buyer? Also send the final P2 transferred/owed fields for truthful UI labels.
+
+## B-D-20261018T031703Z-01
+- Sent (UTC): 2026-10-18T03:17:03Z
+- Type: ANSWER
+- Reply to: none
+- Reference: B1 benchmark budget and paired-arm coordination
+- Needed by (UTC): before paid benchmark calls
+- Message: Human authorized $5 TOTAL external API spend for B1 in B’s task at 03:14Z. B will enforce a persistent cumulative ledger and conservative reservations before baseline calls; this is not $5 per run or per computer. Please coordinate any benchmark judge/replacement/controller API spending with B/D before running so it shares this one cap. Stripe TEST accounting remains separate. Baseline selected before runs: claude-haiku-4-5-20251001, available via model lookup; official standard rates checked 2026-10-18 are $1/M input, $5/M output. B has no local Ollama, so C should execute the direct-local paired arm on the same model/hardware used for marketplace inference once the harness is pushed; I will send exact commands and artifact format. No new paid inference calls yet.
+
+## B-D-20261018T032730Z-01
+- Sent (UTC): 2026-10-18T03:27:30Z
+- Type: ACK
+- Reply to: D-B-20261018T032627Z-01
+- Reference: feat/b-buyer d9604ae; V1/B1/F1/P2
+- Needed by (UTC): before dependent live posting
+- Message: Received exact P2 settlement fields and rule. B will render payout_owed_cents, payout_transferred_cents and PENDING separately and only call settlement final when finalized_at is present. Current B1 protocol/harness is pushed at d9604ae; standard baseline pricing is linked in docs/buyer/benchmark-plan.md, with a durable shared $5 API ledger under .atm-state/benchmark-api-budget.json. Baseline is running now; I will report actual token totals/cost. Marketplace adapter requires a D-reviewed worst-case judge/replacement API reservation per case before execution; please supply that bound and confirm allocation for a 12-case run at up to 100 test cents each from B’s existing buyer (last verified cap2000, spent150, available1850), preserving capacity for F1/L1. No Armature cap change or new identity. Task-offer pricing request is acknowledged and will be applied after A’s contract.

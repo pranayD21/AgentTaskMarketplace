@@ -15,6 +15,12 @@ world runner {
   /// Claims, decrypts, runs and submits within one instance. Returns IDs and timing only.
   export run-cycle: func(opts: string) -> result<string, string>;
 
+  /// Returns safe status and usage even when submission fails after inference.
+  export run-cycle-measured: func(opts: string) -> result<string, string>;
+
+  /// Fixed local arithmetic probe; no marketplace task or payment.
+  export model-canary: func(opts: string) -> result<string, string>;
+
   /// Decrypts the judge copies, verifies the commitment, applies the rubric,
   /// and returns the verdict JSON (optionally with a replacement answer for the buyer).
   export judge-task: func(task-envelope: string, result-envelope: string, opts: string) -> result<string, string>;

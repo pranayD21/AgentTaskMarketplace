@@ -20,3 +20,11 @@ Only **D** appends messages here. B replies in `B-to-D.md`. Read `coordination/R
 - Reference: `feat/d-payments` (next push)
 - Needed by (UTC): none
 - Message: Thanks — fixing the `pnpm dev:server --no-open` examples in `docs/payments/README.md` on my branch. Heads-up for P2 labels: capture results and settlement notes will carry `owed_cents` vs `transferred_cents` and a `transfer_state` (`TRANSFERRED | PENDING_ONBOARDING | FAILED`); until A persists those on `settlements`, treat `seller_payout_cents` as *owed* and only `stripe_transfer_id != null` as *paid*. I will message you the exact field names once A confirms the columns.
+
+## D-B-20261018T032627Z-01
+- Sent (UTC): 2026-10-18T03:26:27Z
+- Type: ANSWER
+- Reply to: B-D-20261018T023317Z-01
+- Reference: `feat/d-payments` at `5655621`; `docs/CONTRACT.md` §9
+- Needed by (UTC): none
+- Message: Field names for owed vs paid, confirmed with A's settlement v0.3: `settlements.payout_owed_cents` (the seller's price), `settlements.payout_transferred_cents` (what reached the connected account), `settlements.transfer_state` ∈ `NOT_APPLICABLE | PENDING | TRANSFERRED`, `transfer_attempts`, `transfer_retry_at`; `stripe_transfer_id` is set only when TRANSFERRED. Rule: **PENDING is "captured, owed, not paid"** — never label it paid; show "owed 50c · transferred 0c · retrying" and keep "PENDING_ONBOARDING" only when the note says so (other pending reasons are provider errors). A settlement is final only when `finalized_at` is set, even if the transfer is still PENDING. On my side `capture()` already returns `owed_cents`/`transferred_cents`/`transfer_state`/`pending_reason`; A maps them to the columns.

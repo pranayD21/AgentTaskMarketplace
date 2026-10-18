@@ -1,5 +1,18 @@
 # Computer C verification
 
+## C runtime follow-up, October 17, 2026, 20:22 PDT
+
+B's PR #3 at `39eaa4e` was reviewed and integrated; its buyer recovery/docs passed typecheck, 82 tests and smoke before publication. C then added local per-attempt measurement files, a fixed model canary and an `atm.usage.v1` exporter. A's v0.3 contract is adopted for optional job/part metadata; live job server support is still pending.
+
+- `pnpm -r typecheck && ATM_TEST_WASSETTE=1 pnpm test && pnpm smoke` passed on the C feature tree: **97 tests** (crypto 7, web 17, runner-core 25, daemon 15, server 33). No Wassette skip in this run. Smoke uses fake Ollama, memory storage and mock payments.
+- `pnpm build:runner` passed. Component SHA-256: `de3bec10035c1d1f077204fb5a36458e3c34514ebd4f1f75afb24bb67b182a72`.
+- Real Wassette tests include fresh keys, denial, a killed child, reconnection, timeout, a race, retaining inference usage after submission failure and a canary making no marketplace calls.
+- An earlier build of the same canary passed on C's installed qwen3:8b at 03:16:23 UTC. It reported 58 input tokens, 2 output tokens, 5376 ms runner time, including 5199.558291 ms model loading. Hardware: Apple M5 Pro, 18 cores, 48 GiB; model digest `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41`. This single synthetic probe is not a benchmark comparison. Energy was not measured.
+- Hosted health returned 200, contract 0.2/card/Insforge. C's dashboard listens on all interfaces and returned 200 locally. D reported LAN access failure; cross-machine dashboard access remains unverified.
+- The human reported that a second machine is not yet available for the live check. D separately reported installed tooling on a distinct M4 Pro machine; no child-task execution evidence has been supplied. The physical multi-computer job remains pending.
+
+See [the setup guide](MULTI-COMPUTER.md) and [measurement format](MEASUREMENTS.md). Current C seller is `seller_07a57bbbd50fd91e`. Existing identities, buyer caps and shared Inkbox identities were preserved. The original verification below is historical.
+
 Verified on October 18, 2026, 01:44–01:55 UTC, with Node 26, Wassette 0.8, local Ollama and qwen3:8b. The live marketplace used the supplied Insforge project and Stripe test mode. The two sellers ran as separate local processes with separate identities. This does not establish connectivity between physical computers.
 
 Final component SHA-256:
