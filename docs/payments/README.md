@@ -179,6 +179,32 @@ node scripts/buyer.mjs task <task_id>        # settlement.stripe_transfer_id is 
 | Shared Payment Tokens, `test_helpers/shared_payment/granted_tokens`, Machine Payments Protocol, mppx `stripe/charge` | **preview** — needs machine payments enabled on the Stripe account; the test helper works in test mode without the Link app |
 | Link CLI / Link agent wallet | preview; requires a US Link account on a phone |
 
+## Never real money — where the hard stops are
+
+| layer | guarantee |
+|---|---|
+| server start | `createStripe()` throws unless `STRIPE_SECRET_KEY` starts with `sk_test_`; both rails share it |
+| MPP methods | only `stripe/charge` with `paymentMethodTypes: ["card","link"]` is offered; no stablecoin or crypto rails are configured |
+| every MPP payment | `assertTestMoney()` re-reads the PaymentIntent: `livemode` must be false and the amount ≤ the task's max, else the payment is refunded and the task stays unpaid |
+| Stripe itself | a live-mode token cannot be charged with a test key; the SPT test helper only exists in test mode |
+| CLI side | every documented `link-cli` command carries `--test`; `pay-task.mjs` and `simulate-spt.mjs` refuse non-test keys and live tokens |
+| seller side | connected accounts never get an `external_account`, so nothing can be paid out to a bank |
+
+## Removing the human from the loop (test money)
+
+Two different gates exist, and only one is ours:
+
+1. **Marketplace cap** (`spend_cap_cents`): ours, server-side, always on.
+2. **Link wallet approval**: Stripe Link's. Findings on 2026-10-18 with a real Link account: `approval-policy retrieve` → `403 This feature is not enabled on your account`; `spend-request create --approve --approval-detail {…programmatic…}` → `409 This automatically approved Spend Request is not allowed because no approval policy is configured`. So with the Link wallet **every spend needs a tap in the app** until Stripe enables approval policies for the account (then `spend-request create --use-approval-policy …` and `mpp pay --spend-request-id …` run unattended within the owner's limits).
+
+For an agent that must pay **autonomously with test money today**, use the test-helper token instead of a wallet:
+
+```sh
+node docs/payments/pay-task.mjs <payment_link>     # probes the 402, mints a test SPT, pays, prints the receipt
+```
+
+It is the same protocol and the same server path as the Link wallet (`pi_…` with `machine_payment=true`, refund + transfer at settlement); the only difference is who mints the token. Give a buyer agent that one command (or wire it into `scripts/buyer.mjs`) and the whole buy → run → judge → settle loop runs with no human.
+
 ## Where the money is, honestly
 
 Card mode moves test money from a Stripe test card into the platform's test balance and on to a test connected account. MPP mode moves it from a test Shared Payment Token. Nothing here is real money, nothing is a payout to a bank account (`external_account` is never attached), and the seller identity is synthetic. The human-control story is real: the cap is enforced server-side on every `post_task`, and in MPP mode no charge happens until a person approves the wallet's spend request.
