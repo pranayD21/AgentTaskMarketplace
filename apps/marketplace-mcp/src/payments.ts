@@ -107,7 +107,7 @@ export interface PaymentProvider {
   /** Money assertions for fault tests and reconciliation; never mutates. */
   inspect(task: TaskRow): Promise<MoneyState>;
   /** Seller payout status and, when pending, a hosted onboarding link (register_seller / whoami). */
-  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }): Promise<PayoutOnboarding>;
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts?: { includeLink?: boolean }): Promise<PayoutOnboarding>;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ export interface PayoutOnboarding {
  * to finish identity verification. Never throws: a link that cannot be created
  * just comes back null with the blocking list, so registration keeps working.
  */
-export async function sellerPayoutOnboarding(stripe: Stripe, agent: { id: string; stripe_account_id: string | null }, baseUrl: string): Promise<PayoutOnboarding> {
+export async function sellerPayoutOnboarding(stripe: Stripe, agent: { id: string; stripe_account_id: string | null }, baseUrl: string, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
   if (!agent.stripe_account_id) return { payout_status: "none", onboarding_url: null, blocking: ["no connected account; re-run register_seller"] };
   let status: PayoutStatus;
   try {
@@ -288,12 +288,41 @@ export async function sellerPayoutOnboarding(stripe: Stripe, agent: { id: string
   }
   if (status.transfers === "active") return { payout_status: "active", onboarding_url: null, blocking: [] };
   let url: string | null = null;
-  try {
-    url = await onboardingLink(stripe, agent.stripe_account_id, baseUrl);
-  } catch (err) {
-    console.warn(`[stripe] onboarding link for ${agent.stripe_account_id} not created: ${(err as Error).message}`);
+  if (opts.includeLink !== false) {
+    try {
+      url = await onboardingLink(stripe, agent.stripe_account_id, baseUrl);
+    } catch (err) {
+      console.warn(`[stripe] onboarding link for ${agent.stripe_account_id} not created: ${(err as Error).message}`);
+    }
   }
   return { payout_status: "pending", onboarding_url: url, blocking: status.blocking };
+}
+
+/** The shape C exposes through authenticated `whoami` / `get_seller_onboarding` (C-D-20261018T045049Z-01). */
+export type SellerPayoutStatus = "ACTIVE" | "PENDING_ONBOARDING" | "UNAVAILABLE" | "MOCK";
+export interface SellerPayoutInfo {
+  /** ACTIVE = the transfer capability is active on the connected account; never a claim that a real payout happened. */
+  payout_status: SellerPayoutStatus;
+  /** Hosted Stripe Connect onboarding URL, only with includeLink and only while PENDING_ONBOARDING. */
+  payout_onboarding_url: string | null;
+  /** Human-readable rail label; always says TEST MODE or MOCK. */
+  payout_label: string;
+  /** Requirement descriptions still blocking transfers, empty unless pending. */
+  blocking: string[];
+}
+
+/**
+ * Payout status for one seller on the configured rail. Reads only; creates a
+ * single-use onboarding link only when `includeLink` is true and the account
+ * is still restricted. Never registers, resets or mutates the seller.
+ */
+export async function sellerPayoutInfo(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<SellerPayoutInfo> {
+  const p = payments();
+  const label = `${p.label}; ACTIVE means the Stripe transfer capability is active, not a verified real payout`;
+  if (p.mode === "mock") return { payout_status: "MOCK", payout_onboarding_url: null, payout_label: label, blocking: [] };
+  const r = await p.payoutOnboarding(agent, { includeLink: opts.includeLink === true });
+  const payout_status: SellerPayoutStatus = r.payout_status === "active" ? "ACTIVE" : r.payout_status === "pending" ? "PENDING_ONBOARDING" : "UNAVAILABLE";
+  return { payout_status, payout_onboarding_url: r.onboarding_url, payout_label: label, blocking: r.blocking };
 }
 
 /** Hosted Connect onboarding for a real seller (single-use URL; the installer prints and opens it). */
@@ -748,8 +777,8 @@ export class StripeCardProvider implements PaymentProvider {
     return inspectStripeMoney(this.stripe, task);
   }
 
-  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }): Promise<PayoutOnboarding> {
-    return sellerPayoutOnboarding(this.stripe, agent, env().baseUrl);
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
+    return sellerPayoutOnboarding(this.stripe, agent, env().baseUrl, opts);
   }
 
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {
@@ -791,7 +820,7 @@ class RoutingProvider implements PaymentProvider {
     return p.retryTransfer(task, seller, amountCents, opts);
   }
   inspect(task: TaskRow) { return this.for(task.payment_mode).inspect(task); }
-  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }) { return this.configured.payoutOnboarding(agent); }
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts?: { includeLink?: boolean }) { return this.configured.payoutOnboarding(agent, opts); }
 
   /** Settlement must use the stored rail; configuration errors must not select a different rail. */
   for(mode: PaymentMode): PaymentProvider {

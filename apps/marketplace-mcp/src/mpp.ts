@@ -135,8 +135,8 @@ export class StripeMppProvider implements PaymentProvider {
     return inspectStripeMoney(this.stripe, task);
   }
 
-  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }): Promise<PayoutOnboarding> {
-    return sellerPayoutOnboarding(this.stripe, agent, this.baseUrl);
+  payoutOnboarding(agent: { id: string; stripe_account_id: string | null }, opts: { includeLink?: boolean } = {}): Promise<PayoutOnboarding> {
+    return sellerPayoutOnboarding(this.stripe, agent, this.baseUrl, opts);
   }
 
   async release(task: TaskRow, reason: string): Promise<ReleaseResult> {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import type { AgentRow, TaskRow } from "./db.js";
-import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
+import { StripeCardProvider, compensateStripeHold, holdIdempotencyKey, holdOutcomeOf, inspectStripeMoney, sellerPayoutInfo, sellerPayoutOnboarding, mockLedgerFor, payments, reconcileSellerTransfer, setMockFaults, stripeDefinitivelyRejected, transferIdempotencyKey, transferMatches } from "./payments.js";
 
 // ---------------------------------------------------------------- fakes
 const seller = { id: "seller_1", stripe_account_id: "acct_test" } as AgentRow;
@@ -294,7 +294,16 @@ describe("sellerPayoutOnboarding", () => {
     expect((await sellerPayoutOnboarding(stripe, { id: "s", stripe_account_id: null }, "http://x")).payout_status).toBe("none");
     expect(await sellerPayoutOnboarding(stripe, agent, "http://x")).toMatchObject({ payout_status: "pending", onboarding_url: null });
   });
-  it("is exposed on the configured provider", async () => {
+  it("includeLink=false only reads status and mints no link", async () => {
+    const { stripe, links } = fakeAccounts({ status: "restricted", blocking: ["identity.entity_type"] });
+    expect(await sellerPayoutOnboarding(stripe, agent, "http://x", { includeLink: false })).toMatchObject({ payout_status: "pending", onboarding_url: null, blocking: ["identity.entity_type"] });
+    expect(links).toHaveLength(0);
+  });
+  it("is exposed on the configured provider, and sellerPayoutInfo maps the mock rail to MOCK with a TEST/MOCK label", async () => {
     expect(await payments().payoutOnboarding({ id: "s", stripe_account_id: null })).toMatchObject({ payout_status: "active" });
+    const info = await sellerPayoutInfo({ id: "s", stripe_account_id: null }, { includeLink: true });
+    expect(info).toMatchObject({ payout_status: "MOCK", payout_onboarding_url: null, blocking: [] });
+    expect(info.payout_label).toMatch(/MOCK/);
+    expect(info.payout_label).toMatch(/not a verified real payout/);
   });
 });
