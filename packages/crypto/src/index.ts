@@ -154,3 +154,22 @@ export function commitment(result: unknown): { bytes: Uint8Array; sha256_hex: st
 export function randomB64(n = 32): string {
   return toB64(randomBytes(n));
 }
+
+// ---------------------------------------------------------------------------
+// Symmetric at-rest encryption under a server-held key (XChaCha20-Poly1305)
+// ---------------------------------------------------------------------------
+
+export function sealSymmetric(key: Uint8Array, plaintext: Uint8Array): string {
+  if (key.length !== 32) throw new Error("symmetric key must be 32 bytes");
+  const nonce = randomBytes(NONCE_BYTES);
+  const ct = xchacha20poly1305(key, nonce).encrypt(plaintext);
+  return `${toB64(nonce)}.${toB64(ct)}`;
+}
+
+export function openSymmetric(key: Uint8Array, blob: string): Uint8Array {
+  const dot = blob.indexOf(".");
+  if (dot < 0) throw new Error("malformed symmetric blob");
+  const nonce = fromB64(blob.slice(0, dot));
+  const ct = fromB64(blob.slice(dot + 1));
+  return xchacha20poly1305(key, nonce).decrypt(ct);
+}
