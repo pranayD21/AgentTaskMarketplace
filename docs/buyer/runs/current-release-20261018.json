@@ -249,5 +249,41 @@
       "new_purchases": 0,
       "hosted_browser_reverified": false
     }
-  }
+  },
+  "hosted_availability_followups": [
+    {
+      "checked_at": "2026-11-08T02:58:42.922Z",
+      "source_commit": "3b64f322cac23347b02f589c1aa58cb99648fc29",
+      "verification_branch_commit_before_recording": "1d27207fb872456d9e9654cbe03f93636a5fa020",
+      "http_observations": [
+        {
+          "checked_at": "2026-11-08T02:58:24.620Z",
+          "path": "/api/health",
+          "status": 402
+        },
+        {
+          "checked_at": "2026-11-08T02:58:42.898Z",
+          "path": "/api/health",
+          "status": 402
+        },
+        {
+          "checked_at": "2026-11-08T02:58:42.922Z",
+          "path": "/marketplace/",
+          "status": 402
+        }
+      ],
+      "current_deployed_revision": null,
+      "last_successful_health_observation": {
+        "checked_at": "2026-10-22T06:58:31.376Z",
+        "status": 200,
+        "revision": "5434fb48012de695cfc542a30130401aadae5ef9"
+      },
+      "interpretation": "Both public routes returned HTTP 402 during this check. The underlying cause, onset time and current deployed revision were not established. Earlier successful release and browser observations remain historical evidence.",
+      "hosted_browser_reverified": false,
+      "response_bodies_recorded": false,
+      "new_purchases": 0,
+      "external_model_calls": 0,
+      "deployment_or_worker_changes": false
+    }
+  ]
 }
